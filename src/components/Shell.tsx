@@ -33,14 +33,32 @@ const PORTALS: {
 export function Shell({
   children,
   signedInAs,
+  signedInRole,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
+  /** Absent when signed out, which is when every portal is browsable. */
+  signedInRole?: ActorRole;
 }) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
 
   const active = PORTALS.find((p) => pathname.startsWith(p.href));
+
+  /**
+   * Which portals this session can open.
+   *
+   * Signed out, all of them — the switcher is how a demonstration gets walked
+   * through, and every screen has to be reachable from a bare link.
+   *
+   * Signed in, only your own. An administrator signing in used to be handed
+   * any portal they clicked, which crashed all four of the others: every
+   * portal reads an organization and a market off the membership, and an
+   * administrator holds neither. Beyond the crash, an administrator inhabiting
+   * a student's portal is not oversight — the admin console is the read path
+   * built for that, and it is the one that redacts.
+   */
+  const reachable = (portal: ActorRole) => !signedInRole || signedInRole === portal;
 
   return (
     <ToastProvider>
@@ -69,6 +87,26 @@ export function Shell({
               {PORTALS.map((portal) => {
                 const Icon = portal.icon;
                 const isActive = active?.role === portal.role;
+                const open = reachable(portal.role);
+
+                // Rendered as a disabled button rather than a dimmed link, so
+                // it is genuinely unclickable and announces itself as
+                // unavailable instead of looking like a link that does nothing.
+                if (!open) {
+                  return (
+                    <button
+                      key={portal.role}
+                      type="button"
+                      disabled
+                      title={`Sign out to view the ${portal.label} portal. You are signed in as ${signedInAs}.`}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold text-ink-400 cursor-not-allowed"
+                    >
+                      <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                      {portal.label}
+                    </button>
+                  );
+                }
+
                 return (
                   <Link
                     key={portal.role}
@@ -124,6 +162,19 @@ export function Shell({
             <div className="flex gap-1 px-4 py-2 min-w-max">
               {PORTALS.map((portal) => {
                 const isActive = active?.role === portal.role;
+                if (!reachable(portal.role)) {
+                  return (
+                    <button
+                      key={portal.role}
+                      type="button"
+                      disabled
+                      title={`Sign out to view the ${portal.label} portal.`}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-ink-400 cursor-not-allowed"
+                    >
+                      {portal.label}
+                    </button>
+                  );
+                }
                 return (
                   <Link
                     key={portal.role}
