@@ -17,6 +17,7 @@ npm test        # domain layer unit tests
 ## Start here
 
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
+- [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
 
 ## Decisions made so far
 
