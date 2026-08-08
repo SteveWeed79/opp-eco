@@ -390,12 +390,23 @@ export default async function AdminPage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/admin/audit"
-            className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
-          >
-            View audit log <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-5">
+            <Link
+              href="/admin/audit"
+              className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
+            >
+              View audit log <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+            {/* The audit log says what changed; the outbox says whether anyone
+                was told. A placement stalls on the second, not the first. */}
+            <Link
+              href="/admin/outbox"
+              className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
+            >
+              Notification outbox{" "}
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </Card>
     </div>

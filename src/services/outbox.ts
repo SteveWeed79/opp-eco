@@ -87,6 +87,18 @@ export function recordingChannel(marketId: string, kind: string): NotificationCh
  * successful transition as a failure.
  */
 export async function drainPending(): Promise<{ sent: number; failed: number }> {
+  try {
+    return await drain();
+  } catch {
+    // The outer guard exists because "never throws" has to hold for the whole
+    // function, not just the loop. An earlier version left the closing log
+    // call outside the try, so a failure there would have propagated out of a
+    // successful transition and reported it as a failure to the user.
+    return { sent: 0, failed: 0 };
+  }
+}
+
+async function drain(): Promise<{ sent: number; failed: number }> {
   // One at a time, because the channel needs each intent's kind and market to
   // record it and `NotificationChannel.send` only receives the rendered form.
   let sent = 0;
