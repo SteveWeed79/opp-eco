@@ -42,6 +42,7 @@ function application(over: Partial<Application> = {}): Application {
     submittedOn: "2026-01-10T00:00:00Z",
     statusSince: "2026-01-10T00:00:00Z",
     matchScore: { score: 90, algorithmVersion: "match-v1", factors: [] },
+    version: 1,
     ...over,
   };
 }

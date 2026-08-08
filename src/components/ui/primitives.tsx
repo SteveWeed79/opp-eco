@@ -254,7 +254,7 @@ export function Button({
   title,
 }: {
   children: ReactNode;
-  variant?: "primary" | "dark" | "ghost" | "quiet";
+  variant?: "primary" | "dark" | "ghost" | "quiet" | "danger";
   size?: "sm" | "md";
   onClick?: () => void;
   type?: "button" | "submit";
@@ -267,6 +267,8 @@ export function Button({
     dark: "bg-ink-950 text-white hover:bg-brand-500 shadow-sm",
     ghost: "bg-white text-ink-950 border border-ink-200 hover:bg-ink-50",
     quiet: "bg-transparent text-brand-600 hover:text-ink-950 hover:underline",
+    // Reserved for irreversible actions, so the colour keeps its meaning.
+    danger: "bg-crit-600 text-white hover:bg-crit-700 shadow-sm",
   };
   const sizes = {
     sm: "px-3 py-1.5 text-xs",

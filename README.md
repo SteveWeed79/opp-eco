@@ -17,6 +17,7 @@ npm test        # domain layer unit tests
 ## Start here
 
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
+- [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
 
 ## Decisions made so far
 
@@ -41,20 +42,27 @@ The five portals are five views onto **one workflow state machine**, not five in
 
 ```
 src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
-                 profiles per track, credit accumulation, match scoring.
-                 No UI, no database. 50 unit tests.
-src/data/        Repository interfaces + in-memory seeded implementation,
-                 plus fake sign-on. Swap for Postgres and real auth without
-                 touching anything above.
+                 profiles per track, credit accumulation, match scoring,
+                 PII disclosure. No UI, no database.
+src/auth/        Session resolution behind a provider interface. Replacing
+                 simulated sign-on touches this and nothing else.
+src/data/        Repository contracts + in-memory seeded implementation;
+                 Store/UnitOfWork for writes; Postgres schema and SQL
+                 scoping alongside, not connected.
+src/services/    Write path (executeTransition), input validation,
+                 notification dispatch.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
+src/components/  Component library, rendered at /design.
 src/app/         Route segments per portal over a shared shell.
 ```
 
-Three properties worth knowing:
+Properties worth knowing:
 
-- **No database.** Everything runs off seeded fixtures. Repository interfaces exist so the Postgres swap is a new class, not a rewrite.
-- **Sign-on is faked, sessions are not.** Picking a demo account mints a real session → membership → permission chain. Only the credential check is simulated.
+- **No database.** Everything runs off seeded fixtures. The Postgres schema and its scoping SQL are written and tested; connecting is an adapter swap.
+- **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
+- **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces.
+- **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

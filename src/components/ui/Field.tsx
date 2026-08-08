@@ -1,0 +1,208 @@
+"use client";
+
+import { useId, type ReactNode, type SelectHTMLAttributes } from "react";
+import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
+
+/**
+ * Form controls.
+ *
+ * Every control is wired to its label by a generated id rather than relying on
+ * placeholder text, and errors are announced. A placeholder is not a label —
+ * it disappears exactly when the user needs it and is invisible to some
+ * assistive technology.
+ */
+
+interface FieldShellProps {
+  label: string;
+  hint?: string;
+  error?: string;
+  required?: boolean;
+  children: (ids: { id: string; describedBy?: string }) => ReactNode;
+}
+
+function FieldShell({ label, hint, error, required, children }: FieldShellProps) {
+  const id = useId();
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const describedBy =
+    [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
+
+  return (
+    <div className="space-y-1.5">
+      <label
+        htmlFor={id}
+        className="block text-xs font-bold text-ink-700 uppercase tracking-wider"
+      >
+        {label}
+        {required && (
+          <span className="text-crit-600 ml-1" aria-hidden="true">
+            *
+          </span>
+        )}
+      </label>
+      {hint && (
+        <p id={hintId} className="text-xs text-ink-500">
+          {hint}
+        </p>
+      )}
+      {children({ id, describedBy })}
+      {error && (
+        <p id={errorId} role="alert" className="text-xs font-semibold text-crit-700">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const CONTROL =
+  "w-full px-4 py-2.5 rounded-xl border border-ink-200 text-sm text-ink-950 bg-white " +
+  "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent " +
+  "disabled:bg-ink-50 disabled:text-ink-400";
+
+export function TextField({
+  label,
+  hint,
+  error,
+  required,
+  ...props
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+} & InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <FieldShell label={label} hint={hint} error={error} required={required}>
+      {({ id, describedBy }) => (
+        <input
+          {...props}
+          id={id}
+          required={required}
+          aria-describedby={describedBy}
+          aria-invalid={error ? true : undefined}
+          className={`${CONTROL} ${error ? "border-crit-600" : ""}`}
+        />
+      )}
+    </FieldShell>
+  );
+}
+
+export function TextAreaField({
+  label,
+  hint,
+  error,
+  required,
+  ...props
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+} & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <FieldShell label={label} hint={hint} error={error} required={required}>
+      {({ id, describedBy }) => (
+        <textarea
+          {...props}
+          id={id}
+          required={required}
+          aria-describedby={describedBy}
+          aria-invalid={error ? true : undefined}
+          className={`${CONTROL} min-h-24 resize-y ${error ? "border-crit-600" : ""}`}
+        />
+      )}
+    </FieldShell>
+  );
+}
+
+export function SelectField({
+  label,
+  hint,
+  error,
+  required,
+  options,
+  ...props
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  options: { value: string; label: string }[];
+} & SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <FieldShell label={label} hint={hint} error={error} required={required}>
+      {({ id, describedBy }) => (
+        <select
+          {...props}
+          id={id}
+          required={required}
+          aria-describedby={describedBy}
+          aria-invalid={error ? true : undefined}
+          className={`${CONTROL} ${error ? "border-crit-600" : ""}`}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </FieldShell>
+  );
+}
+
+/**
+ * A set of mutually exclusive choices rendered as cards.
+ *
+ * Used where the choice carries enough context that a native select would hide
+ * it — picking a demo account, picking an interview slot.
+ */
+export function ChoiceGroup<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  columns = 1,
+}: {
+  label: string;
+  value: T | null;
+  onChange: (value: T) => void;
+  options: { value: T; label: string; description?: string; meta?: string }[];
+  columns?: 1 | 2;
+}) {
+  return (
+    <fieldset>
+      <legend className="block text-xs font-bold text-ink-700 uppercase tracking-wider mb-2">
+        {label}
+      </legend>
+      <div className={`grid gap-2 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>
+        {options.map((option) => {
+          const selected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              aria-pressed={selected}
+              className={`text-left p-3.5 rounded-xl border transition-colors ${
+                selected
+                  ? "border-brand-500 bg-brand-50"
+                  : "border-ink-200 hover:bg-ink-50"
+              }`}
+            >
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="font-bold text-sm text-ink-950">{option.label}</span>
+                {option.meta && (
+                  <span className="text-xs text-ink-500">{option.meta}</span>
+                )}
+              </span>
+              {option.description && (
+                <span className="block text-xs text-ink-500 mt-1">
+                  {option.description}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}

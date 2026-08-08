@@ -20,20 +20,20 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { DEMO_NOW, studentForUser } from "@/data/seed";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
+import { BookInterview } from "./BookInterview";
 
-const actor = contextFor("student");
+export default async function StudentPage() {
+  const actor = await actorForPortal("student");
+  // Resolved from the session rather than hardcoded.
+  const student = studentForUser(actor.user.id)!;
+  const STUDENT_ID = student.id;
 
-/** The signed-in student, resolved from the session rather than hardcoded. */
-const student = studentForUser(actor.user.id)!;
-const STUDENT_ID = student.id;
-
-export default function StudentPage() {
   const applications = repositories.applications
     .forStudent(actor, STUDENT_ID)
     .filter((a) => !isTerminal(a.status));
@@ -145,36 +145,12 @@ export default function StudentPage() {
                   </div>
 
                   {needsBoard && (
-                    <div className="mt-4 bg-warn-50 border border-warn-100 rounded-xl p-4">
-                      <p className="text-sm font-semibold text-ink-950">
-                        Book your workforce board interview to unlock the $
-                        {market.subsidyRatePerHour}/hr wage reimbursement
-                      </p>
-                      <p className="text-xs text-ink-600 mt-1">
-                        {boardName} needs a short conversation before this placement
-                        can be funded. Nothing moves until it&rsquo;s booked.
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {openSlots.slice(0, 4).map((slot) => (
-                          <button
-                            key={slot.id}
-                            type="button"
-                            className="px-3 py-2 rounded-lg bg-white border border-warn-100 text-xs font-semibold text-ink-950 hover:border-brand-500 hover:text-brand-600 transition-colors"
-                          >
-                            {new Date(slot.startsAt).toLocaleDateString("en-US", {
-                              weekday: "short",
-                              month: "short",
-                              day: "numeric",
-                            })}
-                            {" · "}
-                            {new Date(slot.startsAt).toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <BookInterview
+                      applicationId={application.id}
+                      slots={openSlots}
+                      boardName={boardName}
+                      ratePerHour={market.subsidyRatePerHour}
+                    />
                   )}
 
                   {options.length > 0 && !needsBoard && (

@@ -17,7 +17,7 @@ import {
   Th,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { DEMO_NOW } from "@/data/seed";
 import {
   availableTransitions,
@@ -27,9 +27,8 @@ import {
 } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 
-const actor = contextFor("board");
-
-export default function BoardPage() {
+export default async function BoardPage() {
+  const actor = await actorForPortal("board");
   const board = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
 

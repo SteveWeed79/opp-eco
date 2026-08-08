@@ -1094,6 +1094,7 @@ export const applications: Application[] = appSeeds.map((a) => {
     deliverableSubmitted: a.deliverableSubmitted,
     deliverableAccepted: a.deliverableAccepted,
     creditAwardId: a.creditAwardId,
+    version: 1,
   };
 });
 
@@ -1134,11 +1135,21 @@ const slotSeeds: SlotSeed[] = [
  * interview for a date that has already passed undermines the exact screen it
  * exists to show. Everything else stays anchored so the numbers hold still.
  */
+/**
+ * Bookings made during the session.
+ *
+ * Slots are regenerated per call so their times stay in the future, which
+ * means a booking cannot live on the generated object — it would be discarded
+ * on the next render. Overrides are keyed by slot id and applied on the way
+ * out.
+ */
+export const slotOverrides = new Map<string, InterviewSlot>();
+
 export function interviewSlotsAt(now: Date = new Date()): InterviewSlot[] {
   return slotSeeds.map((s) => {
     const startsAt = new Date(now.getTime() + s.inDays * 86_400_000);
     startsAt.setUTCHours(s.hour, 0, 0, 0);
-    return {
+    const base: InterviewSlot = {
       id: s.id,
       marketId: "mkt-pittsburg",
       boardId: "org-sekwp",
@@ -1146,8 +1157,13 @@ export function interviewSlotsAt(now: Date = new Date()): InterviewSlot[] {
       durationMinutes: 30,
       officerName: s.officerName,
       bookedByStudentId: s.bookedByStudentId,
+      bookedAt: s.bookedByStudentId ? startsAt.toISOString() : null,
       meetingUrl: s.meetingUrl,
+      version: 1,
     };
+    const override = slotOverrides.get(s.id);
+    // The override carries the booking; the time always comes from the clock.
+    return override ? { ...override, startsAt: base.startsAt } : base;
   });
 }
 

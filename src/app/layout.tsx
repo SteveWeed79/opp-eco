@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
+import { getActor } from "@/auth/session";
 
 export const metadata: Metadata = {
   // "Demo" leads the title and description because these are what a link
@@ -20,13 +21,14 @@ export const metadata: Metadata = {
  */
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const actor = await getActor();
   return (
     <html lang="en">
       <body>
-        <Shell>{children}</Shell>
+        <Shell signedInAs={actor?.user.name}>{children}</Shell>
       </body>
     </html>
   );
