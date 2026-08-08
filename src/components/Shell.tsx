@@ -42,9 +42,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 Opportunity
               </span>
               <span className="text-lg font-extrabold text-brand-500 ml-1">Ecosystem</span>
-              <span className="block text-[10px] tracking-widest text-ink-500 font-semibold uppercase">
-                Kansas Workforce Initiative
-              </span>
             </span>
           </Link>
 
