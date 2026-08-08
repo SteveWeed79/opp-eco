@@ -29,7 +29,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const active = PORTALS.find((p) => pathname.startsWith(p.href));
 
   return (
-    <div className="min-h-screen bg-ink-50 text-ink-950 antialiased selection:bg-brand-200">
+    <div className="min-h-screen bg-ink-50 text-ink-950 antialiased selection:bg-brand-200 flex flex-col">
+      <DemoNotice />
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-brand-100">
         <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-3 group shrink-0">
@@ -106,10 +107,60 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="pb-20">{children}</main>
+      <main className="pb-20 flex-1">{children}</main>
+
+      <DemoFooter />
 
       {signOnOpen && <SignOnDialog onClose={() => setSignOnOpen(false)} />}
     </div>
+  );
+}
+
+/**
+ * Persistent on every page, deliberately not dismissible.
+ *
+ * An interstitial on `/` would guard the one page most viewers never see —
+ * every portal is directly linkable and the switcher jumps between them. The
+ * notice has to travel with the pages themselves, including when a link to
+ * `/admin` is forwarded to someone with no context for what they're looking at.
+ */
+function DemoNotice() {
+  return (
+    <div className="bg-ink-950 text-white">
+      <p className="max-w-7xl mx-auto px-6 py-2 text-xs sm:text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-bold uppercase tracking-widest text-brand-400">
+          Demonstration
+        </span>
+        <span className="text-ink-400">
+          Concept prototype. Every organization, student, and figure shown is
+          fictional — this is not a live program and nothing here can be applied
+          for.
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function DemoFooter() {
+  return (
+    <footer className="border-t border-ink-200 bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-8 text-sm text-ink-500 space-y-2">
+        <p className="font-bold text-ink-950">
+          Opportunity Ecosystem — demonstration prototype
+        </p>
+        <p className="max-w-3xl">
+          Built to illustrate a proposed workforce-development program. The
+          colleges, workforce boards, employers, students, placements, and
+          dollar figures are invented for this demonstration. Kansas city and
+          county names are real; no institution or organization named here has
+          reviewed, endorsed, or agreed to participate.
+        </p>
+        <p className="max-w-3xl">
+          Nothing on this site is an offer of employment, funding, academic
+          credit, or wage reimbursement.
+        </p>
+      </div>
+    </footer>
   );
 }
 

@@ -3,9 +3,12 @@ import "./globals.css";
 import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "Opportunity Ecosystem — Kansas Workforce Initiative",
+  // "Demo" leads the title and description because these are what a link
+  // preview shows when the URL is pasted into Slack or forwarded by email —
+  // often the only context a second-hand recipient ever gets.
+  title: "[Demo] Opportunity Ecosystem — Kansas Workforce Initiative",
   description:
-    "Connecting Kansas students, employers, colleges, and workforce boards around paid internships that earn academic credit.",
+    "Demonstration prototype using fictional organizations. Illustrates a proposed program connecting Kansas students, employers, colleges, and workforce boards around paid internships that earn academic credit.",
   // This is a demo built on fictional organizations. Keeping it out of search
   // results avoids anyone finding it and taking it for a live program.
   robots: { index: false, follow: false },
