@@ -1,0 +1,76 @@
+name: Auto-merge Dependabot
+
+# Patch and minor dependency bumps merge themselves once CI is green. Majors
+# never do.
+#
+# The distinction is not caution for its own sake. A major bump can change
+# behaviour *without failing* — when the actions were moved off the deprecated
+# Node 20 runtime, the workflow branched on `actions/cache`'s `cache-hit`
+# output, and had that output been renamed the condition would have silently
+# evaluated against an empty string. CI would have stayed green while the
+# browser cache quietly stopped working. No amount of automation catches that
+# shape of change; reading the release notes does. So majors wait for a person.
+#
+# Without this file, the alternative is not "careful review" — it is a queue of
+# unreviewed dependency PRs, which is its own supply-chain risk.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    # `pull_request_target` runs with repository context, so this must be
+    # fenced to Dependabot's own PRs. The actor check is the fence: without it
+    # anyone could open a PR that this job would act on.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      # Labels live under the issues API, so creating one needs this even
+      # though it is being applied to a pull request.
+      issues: write
+
+    steps:
+      # Reads the update type out of the PR's branch/metadata rather than
+      # parsing the title, which is formatting and can change.
+      - name: Fetch update metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # `--auto` queues the merge behind the branch's required checks rather
+      # than merging immediately, so a red run stops it. This does nothing
+      # unless the repository has auto-merge enabled and `dev` requires CI to
+      # pass — without those two settings the step is a no-op, not a bypass.
+      - name: Enable auto-merge for patch and minor
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A major bump gets a label and is left alone, so it shows up in a filter
+      # rather than sitting indistinguishable from the routine ones.
+      - name: Flag majors for review
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          # The label is created on first use rather than assumed to exist —
+          # `gh pr edit --add-label` fails outright on an unknown label, which
+          # would fail the job for a cosmetic reason. `|| true` covers the
+          # already-exists case.
+          gh label create needs-review \
+            --description "Major dependency bump: verify the release notes before merging" \
+            --color D93F0B || true
+          gh pr edit "$PR_URL" --add-label needs-review
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

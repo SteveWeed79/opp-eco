@@ -15,11 +15,25 @@ on:
     branches: [dev, main]
   pull_request:
 
-# The actions below are pinned to their current majors, which differ (v7 for
-# most, v6 for cache) simply because they release independently — it is not a
-# mistake. All four now run on node24; the v4 line targeted node20, which the
-# runners have deprecated and were force-upgrading with a warning on every job.
-# Dependabot watches `github-actions` weekly, so these stay current.
+# Read-only by default. A workflow with no `permissions` block inherits the
+# repository default, which may be read/write — meaning any action running here
+# holds a token that can push branches and edit releases. Nothing in this
+# workflow writes to the repository, so nothing here needs more than read.
+permissions:
+  contents: read
+
+# The actions below are pinned to a **commit SHA**, not a tag.
+#
+# `actions/checkout@v7` is a moving target: a major tag is repointed with every
+# release, by design, so `@v7` means "whatever that tag names at the moment the
+# job starts". That is a supply-chain path into a workflow holding a token — and
+# it exists whether or not anyone is upgrading. A SHA is immutable, so the code
+# that runs is the code that was reviewed.
+#
+# The trailing comment is the only human-readable part, and Dependabot rewrites
+# both it and the hash together, so the automation survives the pinning. Version
+# majors differ (v6 for cache, v7 for the rest) because they release
+# independently — that is not an oversight.
 
 # A new push supersedes an in-flight run on the same ref.
 concurrency:
@@ -32,9 +46,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -78,9 +92,9 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -97,7 +111,7 @@ jobs:
 
       - name: Cache browsers
         id: browser-cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -124,7 +138,7 @@ jobs:
       # nothing on a green run.
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
