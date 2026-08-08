@@ -65,6 +65,7 @@ function completedMicro(id: string, accepted = true): Application {
     matchScore: { score: 88, algorithmVersion: "match-v1", factors: [] },
     deliverableSubmitted: true,
     deliverableAccepted: accepted,
+    version: 1,
   };
 }
 

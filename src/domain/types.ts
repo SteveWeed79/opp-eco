@@ -247,6 +247,12 @@ export interface Application {
   deliverableSubmitted?: boolean;
   deliverableAccepted?: boolean;
   creditAwardId?: string;
+  /**
+   * Optimistic concurrency token, incremented on every write. Two actors
+   * moving one application at once is routine, and the loser must be told to
+   * reload rather than silently overwriting the winner.
+   */
+  version: number;
 }
 
 /**
@@ -278,7 +284,10 @@ export interface InterviewSlot {
   durationMinutes: number;
   officerName: string;
   bookedByStudentId: string | null;
+  bookedAt?: string | null;
   meetingUrl: string | null;
+  /** Two students racing for the last slot is the likeliest write conflict. */
+  version: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,4 +338,9 @@ export interface AuditEvent {
   from: string | null;
   to: string;
   reason?: string;
+  /**
+   * True when an administrator overrode a role or guard check. Overrides are
+   * legitimate — unsticking stalled work is the job — but never silent.
+   */
+  viaOverride?: boolean;
 }
