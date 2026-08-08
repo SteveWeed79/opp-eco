@@ -72,18 +72,22 @@ Three consequences fall out immediately.
 
 **[Q4] is answered by this.** The gate sits *after* mutual interest and *before* the placement starts. Not before shortlisting.
 
-### Two approvals, not one
+### Clearance is per applicant, per job — **resolved**
 
-Reconciling "once per applicant" with a process triggered by a specific match: these are almost certainly **two different approvals** that both need modeling.
+Not a portable credential. Every standard application gets its own board interview, because the board is assessing *this placement*, not certifying the person once and letting it travel.
 
-| | **Participant eligibility** | **Placement approval** |
+| | **This application's clearance** | **Funding authorization** |
 |---|---|---|
-| About | The student | This specific internship |
-| Determined by | The interview | The board reviewing the arrangement |
-| Frequency | Once — travels with the student | Every placement |
-| Answers | "Does this person qualify for workforce funding?" | "Will we fund *this* one, at what rate, for how many hours?" |
+| About | This student, for this job | What to actually commit |
+| Determined by | An interview, every time | The board, against its allocation |
+| Frequency | Every standard application | Every funded placement |
+| Answers | "Do we back this pairing?" | "At what rate, for how many hours?" |
 
-That fits both what you said earlier and what you described here: the student is interviewed once and becomes a determined-eligible participant, then each placement gets its own funding authorization. **[Q17]** — confirm this is the real split.
+**The consequence to plan for:** board interview volume tracks *applications*, not students. A student pursuing three standard roles books three interviews. At 10 students × 3 applications that's 30 interviews a term, and slot supply becomes the program's binding constraint well before employer or student supply does.
+
+Two mitigations exist inside this model if volume becomes a problem: cap concurrent standard applications per student, or move the gate later so the board only interviews candidates an employer has committed to hiring — the Q4 conversation you're writing up.
+
+One sub-decision made in code and easy to flip: a student the board has determined **not eligible** is blocked from booking again, on the reasoning that WIOA participant eligibility is about the person's circumstances rather than the job. Their placements continue on the unsubsidized path. If a fresh determination should be allowed for each employer, that's a one-line change to the guard.
 
 ### The budget is finite, and that changes everything
 
@@ -214,7 +218,7 @@ That makes **micro → standard a designed funnel**, not two disconnected produc
 | Actor | Who they are | What they own |
 |---|---|---|
 | **Admin** | The platform operator. The customer this is built for. | Launching markets, orchestration, unsticking handoffs, reporting |
-| **Workforce Board** | Local KANSASWORKS board | Eligibility interviews, funding decisions, the budget |
+| **Workforce Board** | The local workforce board | Clearance interviews, funding decisions, the budget |
 | **College** | Local institution, the market's operator | Student verification, business assistance, credit policy, credit awards |
 | **Business** | Approved local employer | Postings, candidate decisions, supervision, hour approval |
 | **Student** | Degree-seeking college student | Master profile, applications, hour logging |
@@ -352,7 +356,6 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 | # | Question | Why it matters |
 |---|---|---|
-| **Q17** | Is it two approvals — participant eligibility once, placement funding each time? | Determines whether clearance is on the student, the placement, or both |
 | **Q18** | Is the program open to all students with subsidy for those who qualify, or only to eligible students? | If subsidy is scarce or restricted, unsubsidized placements need a real path, not a dead end |
 | **Q19** | Is the platform the system of record for reimbursement hours? | Raises hour logging from academic record to funding claim, with the rigor that implies |
 | **Q20** | Does the board have a fixed annual budget the program draws down? | If yes, the market has capacity limits and Admin's job includes allocating scarce subsidy |
@@ -370,13 +373,13 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q9** | Can one posting produce multiple placements? | Open. Near-certainly yes for micro |
 | **Q10** | Does a profile follow a student between institutions? | Open |
 | **Q11** | Institution-configurable minimum hours per credit | Open |
-| **Q12** | How long does participant eligibility last? | Open |
+| **Q12** | How long does participant eligibility last? | **Moot** under per-job clearance |
 | **Q14** | Per-project or blanket institutional approval for micro? | Open |
 | **Q15** | Do micro-internships stack toward credit? | **Superseded by Q21** — stacking is likely required, not optional |
 
 ### Resolved
 
-**Q2** eligibility once per applicant · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers · **Q13** micro-internships are unsubsidized — a fixed project fee has no hours for an hourly reimbursement to attach to
+**Q2** clearance is per applicant per job, not portable · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers · **Q13** micro-internships are unsubsidized — a fixed project fee has no hours for an hourly reimbursement to attach to
 
 ---
 

@@ -93,6 +93,11 @@ export const TRANSITIONS: Transition[] = [
   // --- The pause: board clearance (standard track only) --------------------
   // Micro-internships are a fixed project fee with no hours for an hourly
   // reimbursement to attach to, so they skip the board entirely.
+  //
+  // Clearance is per applicant *per job*: every standard application gets its
+  // own interview, because the board is assessing this specific placement, not
+  // issuing a portable credential. Board workload therefore scales with
+  // applications rather than with students.
   {
     from: "mutual_interest",
     to: "interview_scheduled",
@@ -133,23 +138,10 @@ export const TRANSITIONS: Transition[] = [
     label: "Determine not eligible for funding",
   },
 
-  // A student already determined eligible in this market skips straight
-  // through — eligibility is per participant, not per application.
-  {
-    from: "mutual_interest",
-    to: "cleared",
-    roles: ["board", "college"],
-    tracks: ["standard"],
-    label: "Apply existing clearance",
-    guard: ({ student }) =>
-      student.eligibility === "eligible"
-        ? null
-        : "Student has no current participant eligibility on file",
-  },
-
   // --- Funding authorization ----------------------------------------------
-  // Separate from eligibility: the board decides whether to fund *this*
-  // placement, at a rate and hour cap, against a finite annual allocation.
+  // Separate from the interview: having cleared this candidate for this job,
+  // the board decides what to actually commit, at a rate and hour cap, against
+  // a finite annual allocation.
   {
     from: "cleared",
     to: "funding_authorized",

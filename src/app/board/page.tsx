@@ -176,7 +176,7 @@ export default function BoardPage() {
       <Card>
         <CardHeader
           title="On your desk"
-          subtitle="Eligibility is determined once per participant; funding is authorized per placement"
+          subtitle="Every standard application gets its own interview and its own funding decision"
         />
         {[...awaitingInterview, ...awaitingDetermination, ...awaitingFunding].length ===
         0 ? (
@@ -218,8 +218,8 @@ export default function BoardPage() {
                           </span>
                           <span className="block text-xs text-ink-500">
                             {student.eligibility === "eligible"
-                              ? "Already determined eligible"
-                              : "Not yet determined"}
+                              ? "Cleared previously — needs clearing for this job"
+                              : "No prior determination"}
                           </span>
                         </Td>
                         <Td>
@@ -278,9 +278,10 @@ export default function BoardPage() {
         )}
         <div className="px-6 pb-5 pt-4">
           <Assumption>
-            Two approvals, not one (Q17): participant eligibility is determined once and
-            travels with the student, while funding is authorized per placement against a
-            finite allocation.
+            Clearance is per applicant per job (Q2), so your interview volume tracks
+            applications rather than students — a student pursuing three roles books three
+            interviews. Funding is then authorized per placement against a finite
+            allocation (Q20).
           </Assumption>
         </div>
       </Card>

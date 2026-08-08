@@ -336,7 +336,7 @@ export default function AdminPage() {
           <CardHeader
             icon={<TrendingUp className="w-5 h-5" />}
             title="Funnel"
-            subtitle={`Average ${averagePauseDays()} days from application to a funded start`}
+            subtitle={`Applications in the pause have been waiting ${averagePauseDays()} days on average`}
           />
           <div className="px-6 py-5 space-y-3">
             {stages.map((stage, i) => {

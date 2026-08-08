@@ -144,18 +144,21 @@ describe("guards", () => {
     expect(result.error).toContain("ineligible");
   });
 
-  it("lets an already-eligible student skip straight to cleared", () => {
+  it("still requires an interview for a student cleared on a previous job", () => {
+    // Clearance is per applicant per job, so a prior determination does not
+    // let this application skip the board.
     const app = application({ status: "mutual_interest" });
     const stu = student({ eligibility: "eligible" });
     const result = attemptTransition(actor("board"), ctx(app, stu), "cleared");
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("No transition");
   });
 
-  it("refuses to apply clearance a student does not have", () => {
+  it("routes an already-cleared student to a fresh interview", () => {
     const app = application({ status: "mutual_interest" });
-    const result = attemptTransition(actor("board"), ctx(app, student()), "cleared");
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("no current participant eligibility");
+    const stu = student({ eligibility: "eligible" });
+    const result = attemptTransition(actor("student"), ctx(app, stu), "interview_scheduled");
+    expect(result.ok).toBe(true);
   });
 
   it("refuses a funding authorization that exceeds the remaining budget", () => {
@@ -267,8 +270,14 @@ describe("availableTransitions", () => {
 
   it("hides guard-failing transitions from the actor's options", () => {
     const app = application({ status: "mutual_interest" });
-    const options = availableTransitions(actor("board"), ctx(app, student()));
-    expect(options.map((t) => t.to)).not.toContain("cleared");
+    const stu = student({ eligibility: "not_eligible" });
+    const options = availableTransitions(actor("student"), ctx(app, stu));
+    expect(options.map((t) => t.to)).not.toContain("interview_scheduled");
+  });
+
+  it("offers the board nothing until a student books an interview", () => {
+    const app = application({ status: "mutual_interest" });
+    expect(availableTransitions(actor("board"), ctx(app))).toHaveLength(0);
   });
 
   it("shows the admin everything defined from a status", () => {

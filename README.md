@@ -30,7 +30,8 @@ npm test        # domain layer unit tests
 | Scope | College-level credit only | High school modeled in the schema but dark |
 | Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
-| Workforce clearance | Once per applicant | Clearance travels with the student, not the application |
+| Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
+| Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
 | Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 

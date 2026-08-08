@@ -22,7 +22,7 @@ import {
 import { repositories, organizationName } from "@/data/memory";
 import { contextFor } from "@/data/session";
 import { DEMO_NOW } from "@/data/seed";
-import { studentCreditProgress } from "@/lib/queries";
+import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
@@ -37,7 +37,9 @@ export default function StudentPage() {
     .filter((a) => !isTerminal(a.status));
   const openSlots = repositories.interviewSlots.open(actor);
   const college = repositories.organizations.find(actor, student.collegeId);
+  const market = repositories.markets.find(actor, student.marketId)!;
   const progress = studentCreditProgress(STUDENT_ID, college?.hoursPerCredit ?? 45);
+  const remainingBudget = marketRemainingBudget(market);
 
   // Opportunities the student hasn't applied to yet, best match first
   const applied = new Set(
@@ -57,14 +59,12 @@ export default function StudentPage() {
   // business belongs in the list below, not in a card called "Needs you".
   const needsAction = applications.filter((application) => {
     const needsBoardBooking =
-      application.status === "mutual_interest" &&
-      application.track === "standard" &&
-      student.eligibility !== "eligible";
+      application.status === "mutual_interest" && application.track === "standard";
     const hasOwnAction =
       availableTransitions(actor, {
         application,
         student,
-        remainingBudget: 100_000,
+        remainingBudget,
       }).length > 0;
     return needsBoardBooking || hasOwnAction;
   });
@@ -82,13 +82,20 @@ export default function StudentPage() {
         <Badge tone="good" icon={<BadgeCheck className="w-3.5 h-3.5" />}>
           Verified by {college?.name}
         </Badge>
+        {/* Clearance is per job, so a prior determination is history rather
+            than a credential the student carries into a new application. */}
         {student.eligibility === "eligible" && (
-          <Badge tone="good" icon={<BadgeCheck className="w-3.5 h-3.5" />}>
-            Workforce eligible — cleared{" "}
+          <Badge tone="neutral" icon={<BadgeCheck className="w-3.5 h-3.5" />}>
+            Last board determination: eligible ·{" "}
             {new Date(student.eligibilityDeterminedOn!).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
             })}
+          </Badge>
+        )}
+        {student.eligibility === "not_eligible" && (
+          <Badge tone="warn">
+            Not eligible for workforce funding — placements proceed unsubsidised
           </Badge>
         )}
       </div>
@@ -110,7 +117,7 @@ export default function StudentPage() {
               const options = availableTransitions(actor, {
                 application,
                 student,
-                remainingBudget: 100_000,
+                remainingBudget,
               });
               const needsBoard =
                 application.status === "mutual_interest" &&
@@ -146,7 +153,7 @@ export default function StudentPage() {
                         {posting.wagePerHour ? 20 : 20}/hr wage reimbursement
                       </p>
                       <p className="text-xs text-ink-600 mt-1">
-                        Southeast KANSASWORKS needs a short conversation before this
+                        Southeast Kansas Workforce Partnership needs a short conversation before this
                         placement can be funded. Nothing moves until it's booked.
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">

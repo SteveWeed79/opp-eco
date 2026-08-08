@@ -139,22 +139,29 @@ export function allMarketHealth(): MarketHealth[] {
   return repositories.markets.list(admin).map(marketHealth);
 }
 
-/** Average days spent in the pause, across applications that got through it. */
+/** Uncommitted allocation left in a market's program year. */
+export function marketRemainingBudget(market: Market): number {
+  const committed = repositories.applications
+    .list(admin)
+    .filter((a) => a.marketId === market.id && !isTerminal(a.status))
+    .reduce((sum, a) => sum + fundingCommitment(a), 0);
+  return market.subsidyBudget - committed;
+}
+
+/**
+ * Average days applications *currently* sitting in the pause have been there.
+ *
+ * Deliberately measures the live backlog rather than historical throughput —
+ * the fixtures carry no per-transition history, and a number derived from
+ * submission dates would look precise while meaning nothing.
+ */
 export function averagePauseDays(): number {
-  const applications = repositories.applications.list(admin);
-  const throughPause = applications.filter((a) =>
-    ["funding_authorized", "unsubsidized", "placement_active", "placement_completed", "credit_pending", "credit_granted"].includes(
-      a.status,
-    ),
-  );
-  if (throughPause.length === 0) return 0;
-  // Approximated from time between submission and current status for the demo.
-  const total = throughPause.reduce((sum, a) => {
-    const submitted = new Date(a.submittedOn).getTime();
-    const since = new Date(a.statusSince).getTime();
-    return sum + Math.max(0, (since - submitted) / 86_400_000);
-  }, 0);
-  return Math.round(total / throughPause.length);
+  const inPause = repositories.applications
+    .list(admin)
+    .filter((a) => PAUSE_STATUSES.includes(a.status));
+  if (inPause.length === 0) return 0;
+  const total = inPause.reduce((sum, a) => sum + daysInStatus(a, DEMO_NOW), 0);
+  return Math.round(total / inPause.length);
 }
 
 export interface FunnelStage {

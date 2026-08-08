@@ -6,8 +6,9 @@
  * business waiting on drafting help, a student the board found ineligible, and
  * a market whose subsidy allocation is running down.
  *
- * Institution and workforce board names are real Kansas entities, since this is
- * a pitch aimed at them. Businesses are fictional.
+ * Every organization is fictional. City and county names are real Kansas
+ * places, but no institution, workforce board, or business here corresponds to
+ * a real entity — nothing in the demo implies anyone has signed on.
  */
 
 import type {
@@ -49,8 +50,8 @@ export const markets: Market[] = [
     city: "Pittsburg",
     counties: ["Crawford", "Cherokee", "Labette", "Neosho"],
     stage: "live",
-    boardId: "org-sek-works",
-    collegeIds: ["org-psu"],
+    boardId: "org-sekwp",
+    collegeIds: ["org-verdigris"],
     launchedOn: daysAgo(214),
     subsidyBudget: 240_000,
     subsidyRatePerHour: 20,
@@ -62,8 +63,8 @@ export const markets: Market[] = [
     city: "Emporia",
     counties: ["Lyon", "Chase", "Coffey"],
     stage: "configuring",
-    boardId: "org-flinthills-works",
-    collegeIds: ["org-esu"],
+    boardId: "org-fhwp",
+    collegeIds: ["org-cottonwood"],
     launchedOn: null,
     subsidyBudget: 120_000,
     subsidyRatePerHour: 20,
@@ -75,7 +76,7 @@ export const markets: Market[] = [
     city: "Garden City",
     counties: ["Finney", "Ford", "Seward"],
     stage: "board_committed",
-    boardId: "org-westks-works",
+    boardId: "org-wkwp",
     collegeIds: [],
     launchedOn: null,
     subsidyBudget: 90_000,
@@ -117,25 +118,25 @@ export const markets: Market[] = [
 export const organizations: Organization[] = [
   // --- Southeast Kansas, live ---
   {
-    id: "org-sek-works",
+    id: "org-sekwp",
     marketId: "mkt-pittsburg",
     kind: "board",
-    name: "Southeast KANSASWORKS",
+    name: "Southeast Kansas Workforce Partnership",
     county: "Crawford",
     status: "active",
     contactName: "Marcia Delgado",
-    contactEmail: "mdelgado@sekworks.example.gov",
+    contactEmail: "mdelgado@sekwp.example.org",
     appliedOn: daysAgo(260),
   },
   {
-    id: "org-psu",
+    id: "org-verdigris",
     marketId: "mkt-pittsburg",
     kind: "college",
-    name: "Pittsburg State University",
+    name: "Verdigris State University",
     county: "Crawford",
     status: "active",
     contactName: "Dr. Ellen Vance",
-    contactEmail: "evance@pittstate.example.edu",
+    contactEmail: "evance@verdigris.example.edu",
     appliedOn: daysAgo(240),
     hoursPerCredit: 45,
   },
@@ -184,14 +185,14 @@ export const organizations: Organization[] = [
     appliedOn: daysAgo(96),
   },
   {
-    id: "org-cityofpittsburg",
+    id: "org-prairieridge",
     marketId: "mkt-pittsburg",
     kind: "business",
-    name: "City of Pittsburg",
+    name: "Prairie Ridge Municipal Utilities",
     county: "Crawford",
     status: "active",
     contactName: "Janet Whitfield",
-    contactEmail: "jwhitfield@pittsburgks.example.gov",
+    contactEmail: "jwhitfield@prairieridgeutilities.example.com",
     appliedOn: daysAgo(120),
   },
   {
@@ -242,39 +243,39 @@ export const organizations: Organization[] = [
 
   // --- Flint Hills, configuring ---
   {
-    id: "org-flinthills-works",
+    id: "org-fhwp",
     marketId: "mkt-emporia",
     kind: "board",
-    name: "Flint Hills Workforce Center",
+    name: "Flint Hills Workforce Partnership",
     county: "Lyon",
     status: "active",
     contactName: "Alan Cheng",
-    contactEmail: "acheng@fhworks.example.gov",
+    contactEmail: "acheng@fhwp.example.org",
     appliedOn: daysAgo(64),
   },
   {
-    id: "org-esu",
+    id: "org-cottonwood",
     marketId: "mkt-emporia",
     kind: "college",
-    name: "Emporia State University",
+    name: "Cottonwood State University",
     county: "Lyon",
     status: "approved",
     contactName: "Dr. Renee Boyd",
-    contactEmail: "rboyd@emporia.example.edu",
+    contactEmail: "rboyd@cottonwood.example.edu",
     appliedOn: daysAgo(31),
     hoursPerCredit: 40,
   },
 
   // --- Western Kansas, board committed ---
   {
-    id: "org-westks-works",
+    id: "org-wkwp",
     marketId: "mkt-gardencity",
     kind: "board",
-    name: "Western Kansas Workforce Alliance",
+    name: "Western Kansas Workforce Partnership",
     county: "Finney",
     status: "active",
     contactName: "Sofia Marquez",
-    contactEmail: "smarquez@wkworks.example.gov",
+    contactEmail: "smarquez@wkwp.example.org",
     appliedOn: daysAgo(45),
   },
 ];
@@ -285,11 +286,11 @@ export const organizations: Organization[] = [
 
 export const users: User[] = [
   { id: "u-admin", name: "Steve Weed", email: "admin@opportunityecosystem.example" },
-  { id: "u-omar", name: "Omar Haddad", email: "haddado@gus.pittstate.example.edu" },
-  { id: "u-alex", name: "Alex Miller", email: "amiller@gus.pittstate.example.edu" },
+  { id: "u-omar", name: "Omar Haddad", email: "haddado@students.verdigris.example.edu" },
+  { id: "u-alex", name: "Alex Miller", email: "amiller@students.verdigris.example.edu" },
   { id: "u-dana", name: "Dana Reyes", email: "dreyes@apexrobotics.example.com" },
-  { id: "u-ellen", name: "Dr. Ellen Vance", email: "evance@pittstate.example.edu" },
-  { id: "u-marcia", name: "Marcia Delgado", email: "mdelgado@sekworks.example.gov" },
+  { id: "u-ellen", name: "Dr. Ellen Vance", email: "evance@verdigris.example.edu" },
+  { id: "u-marcia", name: "Marcia Delgado", email: "mdelgado@sekwp.example.org" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -492,9 +493,9 @@ export const students: Student[] = studentSeeds.map((s) => ({
   id: s.id,
   marketId: "mkt-pittsburg",
   userId: s.id === "stu-alex" ? "u-alex" : `u-${s.id}`,
-  collegeId: "org-psu",
+  collegeId: "org-verdigris",
   name: s.name,
-  email: `${s.name.split(" ")[0].toLowerCase()}${s.name.split(" ")[1].toLowerCase()[0]}@gus.pittstate.example.edu`,
+  email: `${s.name.split(" ")[0].toLowerCase()}${s.name.split(" ")[1].toLowerCase()[0]}@students.verdigris.example.edu`,
   programOfStudy: s.program,
   classStanding: s.standing,
   expectedGraduation: s.grad,
@@ -631,9 +632,9 @@ export const postings: Posting[] = [
     dueWithinDays: 10,
   },
   {
-    id: "post-city-webdev",
+    id: "post-utilities-webdev",
     marketId: "mkt-pittsburg",
-    businessId: "org-cityofpittsburg",
+    businessId: "org-prairieridge",
     track: "standard",
     title: "Web Developer Trainee",
     description:
@@ -671,9 +672,9 @@ export const postings: Posting[] = [
     supervisorName: "Curtis Ballard",
   },
   {
-    id: "post-city-finance",
+    id: "post-utilities-billing",
     marketId: "mkt-pittsburg",
-    businessId: "org-cityofpittsburg",
+    businessId: "org-prairieridge",
     track: "micro",
     title: "Utility billing reconciliation",
     description:
@@ -805,7 +806,7 @@ const appSeeds: AppSeed[] = [
   // --- Stuck in the pause: the administrator's exception queue ---
   {
     id: "app-4",
-    postingId: "post-city-webdev",
+    postingId: "post-utilities-webdev",
     studentId: "stu-omar",
     status: "mutual_interest",
     submittedDaysAgo: 32,
@@ -848,7 +849,7 @@ const appSeeds: AppSeed[] = [
   // --- Business sitting on a review ---
   {
     id: "app-9",
-    postingId: "post-city-webdev",
+    postingId: "post-utilities-webdev",
     studentId: "stu-tasha",
     status: "under_review",
     submittedDaysAgo: 17,
@@ -874,7 +875,7 @@ const appSeeds: AppSeed[] = [
   // --- Unsubsidized path: board declined, placement went ahead anyway ---
   {
     id: "app-12",
-    postingId: "post-city-webdev",
+    postingId: "post-utilities-webdev",
     studentId: "stu-tasha",
     status: "unsubsidized",
     submittedDaysAgo: 44,
@@ -911,7 +912,7 @@ const appSeeds: AppSeed[] = [
   },
   {
     id: "app-16",
-    postingId: "post-city-finance",
+    postingId: "post-utilities-billing",
     studentId: "stu-derek",
     status: "submitted",
     submittedDaysAgo: 2,
@@ -931,7 +932,7 @@ const appSeeds: AppSeed[] = [
   },
   {
     id: "app-18",
-    postingId: "post-city-finance",
+    postingId: "post-utilities-billing",
     studentId: "stu-hana",
     status: "credit_pending",
     submittedDaysAgo: 55,
@@ -990,7 +991,7 @@ const appSeeds: AppSeed[] = [
   },
   {
     id: "app-25",
-    postingId: "post-city-finance",
+    postingId: "post-utilities-billing",
     studentId: "stu-omar",
     status: "placement_completed",
     submittedDaysAgo: 33,
@@ -1054,7 +1055,7 @@ export const interviewSlots: InterviewSlot[] = [
   {
     id: "slot-1",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(1, 14),
     durationMinutes: 30,
     officerName: "Marcia Delgado",
@@ -1064,7 +1065,7 @@ export const interviewSlots: InterviewSlot[] = [
   {
     id: "slot-2",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(1, 16),
     durationMinutes: 30,
     officerName: "Marcia Delgado",
@@ -1074,17 +1075,17 @@ export const interviewSlots: InterviewSlot[] = [
   {
     id: "slot-3",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(2, 15),
     durationMinutes: 30,
     officerName: "Wes Trumbull",
     bookedByStudentId: "stu-nina",
-    meetingUrl: "https://meet.example.gov/sek-nina",
+    meetingUrl: "https://meet.example.org/sekwp-nina",
   },
   {
     id: "slot-4",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(3, 14),
     durationMinutes: 30,
     officerName: "Wes Trumbull",
@@ -1094,7 +1095,7 @@ export const interviewSlots: InterviewSlot[] = [
   {
     id: "slot-5",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(3, 15),
     durationMinutes: 30,
     officerName: "Marcia Delgado",
@@ -1104,7 +1105,7 @@ export const interviewSlots: InterviewSlot[] = [
   {
     id: "slot-6",
     marketId: "mkt-pittsburg",
-    boardId: "org-sek-works",
+    boardId: "org-sekwp",
     startsAt: daysAhead(7, 14),
     durationMinutes: 30,
     officerName: "Wes Trumbull",
@@ -1122,7 +1123,7 @@ export const creditAwards: CreditAward[] = [
     id: "credit-1",
     marketId: "mkt-pittsburg",
     studentId: "stu-jordan",
-    collegeId: "org-psu",
+    collegeId: "org-verdigris",
     applicationIds: ["app-19"],
     creditHours: 3,
     totalWorkHours: 268,
@@ -1134,7 +1135,7 @@ export const creditAwards: CreditAward[] = [
     id: "credit-2",
     marketId: "mkt-pittsburg",
     studentId: "stu-priya",
-    collegeId: "org-psu",
+    collegeId: "org-verdigris",
     applicationIds: ["app-20"],
     creditHours: 3,
     totalWorkHours: 205,

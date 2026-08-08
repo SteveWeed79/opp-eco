@@ -23,6 +23,16 @@ import { postingTotalHours } from "@/domain/types";
 
 const actor = contextFor("business");
 
+/**
+ * Surnames stay hidden until board clearance, along with the rest of a
+ * candidate's contact detail. Handles single-word names without exploding.
+ */
+function maskName(name: string): string {
+  const [first, ...rest] = name.trim().split(/\s+/);
+  const last = rest.at(-1);
+  return last ? `${first} ${last[0]}.` : first;
+}
+
 export default function BusinessPage() {
   const org = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const postings = repositories.postings.list(actor);
@@ -63,7 +73,7 @@ export default function BusinessPage() {
             </span>
             <div>
               <h2 className="text-lg font-black text-ink-950">
-                Southeast KANSASWORKS reimburses you $20/hour
+                Southeast Kansas Workforce Partnership reimburses you $20/hour
               </h2>
               <p className="text-sm text-ink-600 mt-1 max-w-xl">
                 For every standard internship hour your intern works after board
@@ -109,7 +119,7 @@ export default function BusinessPage() {
           <CardHeader
             icon={<HelpCircle className="w-5 h-5 text-warn-600" />}
             title="Drafts you asked the college to help with"
-            subtitle="Pittsburg State will scope these into postings students can actually apply to"
+            subtitle="Verdigris State will scope these into postings students can actually apply to"
           />
           <ul className="divide-y divide-ink-100">
             {needsHelp.map((posting) => (
@@ -178,7 +188,7 @@ export default function BusinessPage() {
                     <tr key={application.id}>
                       <Td className="whitespace-nowrap">
                         <span className="font-semibold text-ink-950">
-                          {cleared ? student.name : student.name.split(" ")[0] + " " + student.name.split(" ")[1][0] + "."}
+                          {cleared ? student.name : maskName(student.name)}
                         </span>
                         <span className="block text-xs text-ink-500">
                           {student.programOfStudy} · {student.classStanding}
