@@ -26,8 +26,14 @@ import type {
 import { attemptTransition, isTerminal } from "@/domain/workflow";
 import { repositories } from "@/data/memory";
 import { marketRemainingBudget } from "@/lib/queries";
-import { ConcurrencyError, type Store, type UnitOfWork } from "@/data/store";
+import {
+  ConcurrencyError,
+  type NotificationIntent,
+  type Store,
+  type UnitOfWork,
+} from "@/data/store";
 import { memoryStore } from "@/data/memory-store";
+import { notificationsFor } from "./notification-policy";
 
 export interface TransitionCommand {
   applicationId: string;
@@ -42,11 +48,33 @@ export interface TransitionCommand {
   patch?: Partial<Application>;
   /** Extra writes belonging to the same transaction, e.g. claiming a slot. */
   sideEffects?: (uow: UnitOfWork, application: Application) => void;
-  notifications?: (application: Application) => {
-    recipientUserId: string;
-    kind: string;
+  /**
+   * Extra messages beyond what the notification policy already sends.
+   *
+   * Most transitions need none: `notificationsFor` decides who hears about a
+   * status from one table, so a caller does not repeat it. This is for the
+   * rare message that depends on something only the caller knows — a booked
+   * slot's start time, say.
+   *
+   * `marketId` is filled in from the application rather than accepted, so a
+   * notification cannot be addressed into another market. Everything else is
+   * passed through — an earlier version rebuilt the intent field by field
+   * here, which silently dropped `recipientOrganizationId` and made every
+   * message to an employer or board undeliverable.
+   */
+  notifications?: (
+    application: Application,
+  ) => (Omit<NotificationIntent, "marketId" | "payload"> & {
     payload?: Record<string, unknown>;
-  }[];
+  })[];
+  /**
+   * Extra payload fields merged into the policy's messages — an interview
+   * time, a reason. Templates read them; policy does not need to know they
+   * exist.
+   */
+  payload?: Record<string, unknown>;
+  /** Escape hatch for a transition that must not notify. Rare; say why. */
+  suppressPolicyNotifications?: boolean;
 }
 
 export type TransitionResult =
@@ -137,12 +165,35 @@ export async function executeTransition(
       uow.saveApplication(updated, existing.version);
       uow.appendAuditEvent(event);
       command.sideEffects?.(uow, updated);
-      for (const intent of command.notifications?.(updated) ?? []) {
+
+      // Policy first, caller second, deduplicated on recipient and kind so a
+      // caller adding a message the table already covers cannot send it twice.
+      const policyIntents = command.suppressPolicyNotifications
+        ? []
+        : notificationsFor(command.to, {
+            application: updated,
+            posting,
+            student,
+            market,
+            college: repositories.organizations.find(actor, student.collegeId),
+            employer: repositories.organizations.find(actor, posting.businessId),
+            board: market.boardId
+              ? repositories.organizations.find(actor, market.boardId)
+              : null,
+          });
+
+      const seen = new Set<string>();
+      for (const intent of [...policyIntents, ...(command.notifications?.(updated) ?? [])]) {
+        const key = `${intent.recipientUserId}:${intent.kind}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
         uow.enqueueNotification({
+          ...intent,
+          // Not from the caller: a message belongs to the market of the thing
+          // that caused it.
           marketId: existing.marketId,
-          recipientUserId: intent.recipientUserId,
-          kind: intent.kind,
-          payload: intent.payload ?? {},
+          payload: { ...intent.payload, ...command.payload },
         });
       }
     });

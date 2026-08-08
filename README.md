@@ -73,8 +73,9 @@ src/auth/        Session resolution behind a provider interface. Replacing
 src/data/        Repository contracts + in-memory seeded implementation;
                  Store/UnitOfWork for writes; Postgres schema and SQL
                  scoping alongside, not connected.
-src/services/    Write path (executeTransition), input validation,
-                 notification dispatch.
+src/services/    Write paths (executeTransition for existing records,
+                 creation for new ones), input validation, notification
+                 dispatch and the outbox that records it.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
 src/components/  Component library, rendered at /design.
@@ -86,7 +87,37 @@ Properties worth knowing:
 - **No database.** Everything runs off seeded fixtures. The Postgres schema and its scoping SQL are written and tested; connecting is an adapter swap.
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
 - **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
-- **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces.
+- **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
+- **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
+- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
+- **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
+
+## Email
+
+Messages send through [Resend](https://resend.com) when configured, and are recorded either way.
+
+```bash
+cp .env.example .env.local   # then fill in RESEND_API_KEY
+```
+
+**Sending is off unless `RESEND_API_KEY` is set.** With it unset, every message is still rendered, recorded, and shown at `/admin/outbox` — nothing leaves the process. That is the opposite of how this codebase treats its other secrets, and deliberately: a missing upload key means broken security, while a missing email key means silence, and silence is the safe direction for a demonstration whose organizations are invented.
+
+Three guards, in the order they matter:
+
+| Guard | Variable | Effect |
+|---|---|---|
+| Off by default | `RESEND_API_KEY` | No key, no sending. The outbox records what would have gone out. |
+| Redirect | `EMAIL_REDIRECT_TO` | Every message goes to one address instead of its real recipient, which is stated in the body. **Set this anywhere that is not production.** |
+| Reserved domains | — | Addresses on `.example`, `.test`, `.invalid` are refused, not sent. |
+
+That last one is not a nicety. Every seeded organization uses a `.example` address, which RFC 2606 reserves precisely so it cannot be delivered — so a configured deployment without this guard would bounce every message it sent, and a bounce rate like that is how a sending domain's reputation is destroyed. Refused messages appear in the outbox as undeliverable with the reason, rather than being retried forever.
+
+The outbox states plainly whether "delivered" means an email left the building or a line hit a log. Conflating those would let an administrator believe a board was told when nothing was sent.
+
+### Not wired, on purpose
+
+- **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
+- **Student verification and posting publication.** These are workflows over `Student` and `Posting`, not application transitions. They need their own state machines rather than buttons that guess.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

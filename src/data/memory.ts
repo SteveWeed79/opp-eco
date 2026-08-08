@@ -61,6 +61,8 @@ export const repositories: Repositories = {
       inScope(actor, seed.students).filter(
         (s) => s.status === "pending_verification" || s.status === "profile_complete",
       ),
+    forUser: (actor, userId) =>
+      inScope(actor, seed.students).find((s) => s.userId === userId) ?? null,
     forApplication: (actor, application) => {
       const student =
         inScope(actor, seed.students).find((s) => s.id === application.studentId) ?? null;

@@ -1,4 +1,4 @@
-import { CircleDollarSign, HelpCircle, Plus, Users, Zap } from "lucide-react";
+import { CircleDollarSign, HelpCircle, Users, Zap } from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -16,10 +16,14 @@ import {
   Th,
   TrackBadge,
 } from "@/components/ui";
+import { TransitionActions } from "@/components/TransitionActions";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
-import { fundingCommitment, isTerminal } from "@/domain/workflow";
+import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
+import { marketRemainingBudget } from "@/lib/queries";
+import { businessTransition } from "./actions";
+import { NewPosting } from "./NewPosting";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
@@ -36,6 +40,21 @@ export default async function BusinessPage() {
   );
   const reimbursed = active.reduce((sum, a) => sum + fundingCommitment(a), 0);
   const needsHelp = postings.filter((p) => p.status === "help_requested");
+  // Part of the transition context every row needs. No employer transition is
+  // budget-guarded today, but the state machine asks for it, and computing it
+  // once here keeps it out of the row loop.
+  const remainingBudget = marketRemainingBudget(actor, market);
+
+  // Skills already in use across this market's postings, offered as the
+  // vocabulary for a new one. Free-text tags sprawl into "JS", "Javascript",
+  // and "JavaScript", and match scoring compares them literally.
+  const skillVocabulary = Array.from(
+    new Set(postings.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
+  ).sort();
+  const college = repositories.organizations
+    .list(actor, { kind: "college" })
+    .find((o) => o.marketId === market.id);
+  const hoursPerCredit = college?.hoursPerCredit ?? 45;
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
@@ -45,11 +64,11 @@ export default async function BusinessPage() {
         title={org.name}
         subtitle={`${org.county} County · ${postings.filter((p) => p.status === "published").length} live postings`}
         action={
-          <Button variant="primary">
-            <span className="flex items-center gap-1.5">
-              <Plus className="w-4 h-4" aria-hidden="true" /> Post an opportunity
-            </span>
-          </Button>
+          <NewPosting
+            county={org.county}
+            skillVocabulary={skillVocabulary}
+            hoursPerCredit={hoursPerCredit}
+          />
         }
       />
 
@@ -208,22 +227,21 @@ export default async function BusinessPage() {
                         )}
                       </Td>
                       <Td>
-                        {application.status === "submitted" && (
-                          <Button size="sm" variant="dark">
-                            Review
-                          </Button>
-                        )}
-                        {application.status === "under_review" && (
-                          <Button size="sm" variant="primary">
-                            Shortlist
-                          </Button>
-                        )}
-                        {application.status === "placement_active" &&
-                          application.track === "standard" && (
-                            <Button size="sm" variant="ghost">
-                              Approve hours
-                            </Button>
-                          )}
+                        {/* Rendered from the state machine rather than from a
+                            list of statuses maintained here. Adding a
+                            transition to the table makes its button appear;
+                            a guard failing makes it disappear. */}
+                        <TransitionActions
+                          applicationId={application.id}
+                          action={businessTransition}
+                          subject={`${student.name} — ${posting.title}`}
+                          transitions={availableTransitions(actor, {
+                            application,
+                            student,
+                            remainingBudget,
+                            postingOwnerId: posting.businessId,
+                          }).map((t) => ({ to: t.to, label: t.label }))}
+                        />
                       </Td>
                     </tr>
                   );

@@ -137,10 +137,71 @@ describe("a successful transition writes everything together", () => {
     await executeTransition(student, {
       applicationId: "app-4",
       to: "interview_scheduled",
-      notifications: () => [{ recipientUserId: "u-marcia", kind: "interview.booked" }],
+      notifications: () => [{ recipientUserId: "u-marcia", kind: "custom.extra" }],
     });
-    expect(pendingNotifications).toHaveLength(1);
-    expect(pendingNotifications[0].kind).toBe("interview.booked");
+    // Nothing was sent during the transaction; everything is queued for the
+    // drain that runs after it commits.
+    expect(pendingNotifications.length).toBeGreaterThan(0);
+    expect(pendingNotifications.some((n) => n.kind === "custom.extra")).toBe(true);
+  });
+
+  it("applies the notification policy without the caller asking", async () => {
+    // The point of the policy table: booking an interview tells the student,
+    // the board, and the employer, and the action that triggered it does not
+    // have to know that. Before this, a transition notified whoever its call
+    // site remembered to list — so the interesting steps had messages and the
+    // rest had silence.
+    await executeTransition(student, { applicationId: "app-4", to: "interview_scheduled" });
+
+    const kinds = pendingNotifications.map((n) => n.kind);
+    expect(kinds).toContain("interview.booked.student");
+    expect(kinds).toContain("interview.booked.board");
+    expect(kinds).toContain("interview.booked.employer");
+  });
+
+  it("does not send the same message twice when a caller repeats the policy", async () => {
+    await executeTransition(student, {
+      applicationId: "app-4",
+      to: "interview_scheduled",
+      notifications: () => [
+        {
+          recipientUserId: "contact:org-prairieridge",
+          recipientOrganizationId: "org-prairieridge",
+          kind: "interview.booked.employer",
+        },
+      ],
+    });
+
+    const employerMessages = pendingNotifications.filter(
+      (n) => n.kind === "interview.booked.employer",
+    );
+    expect(employerMessages).toHaveLength(1);
+  });
+
+  it("passes the whole intent through rather than rebuilding it", async () => {
+    // This rebuilt the intent field by field, which silently dropped
+    // `recipientOrganizationId` — so every message addressed to an employer or
+    // board rendered without an address and was recorded undeliverable. The
+    // transition still succeeded, which is what made it invisible: the state
+    // moved and nobody was told.
+    await executeTransition(student, { applicationId: "app-4", to: "interview_scheduled" });
+
+    const employer = pendingNotifications.find(
+      (n) => n.kind === "interview.booked.employer",
+    );
+    expect(employer?.recipientOrganizationId).toBeTruthy();
+  });
+
+  it("stamps the market from the application, not the caller", async () => {
+    await executeTransition(student, {
+      applicationId: "app-4",
+      to: "interview_scheduled",
+      notifications: () => [{ recipientUserId: "u-marcia", kind: "custom.extra" }],
+    });
+    // A notification belongs to the market of the thing that caused it, so a
+    // caller cannot address one into someone else's market.
+    const marketId = find("app-4").marketId;
+    expect(pendingNotifications.every((n) => n.marketId === marketId)).toBe(true);
   });
 
   it("records how far a closed application got", async () => {

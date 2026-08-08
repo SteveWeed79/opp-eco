@@ -39,6 +39,14 @@ export interface StudentRepository {
   find(actor: ActorContext, id: string): Student | null;
   pendingVerification(actor: ActorContext): Student[];
   /**
+   * The student record behind a signed-in user, scoped like everything else.
+   *
+   * Actions that act *as* a student need this — "who am I" is a repository
+   * question, not something a call site should answer by reaching into the
+   * fixtures and filtering by `userId`.
+   */
+  forUser(actor: ActorContext, userId: string): Student | null;
+  /**
    * The student behind an application, redacted to what the actor's
    * relationship at this stage permits. Businesses must use this rather than
    * `find`, so withheld fields never reach the page at all.

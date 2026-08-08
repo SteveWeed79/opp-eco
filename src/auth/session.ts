@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import type { ActorContext, ActorRole } from "@/domain/types";
 import { contextFor, demoAccounts } from "@/data/session";
 
@@ -59,29 +60,59 @@ export async function getActor(): Promise<ActorContext | null> {
   return provider.resolve();
 }
 
+/** Where each role's own portal lives. */
+export const PORTAL_PATH: Record<ActorRole, string> = {
+  admin: "/admin",
+  student: "/student",
+  business: "/business",
+  college: "/college",
+  board: "/board",
+};
+
 /**
  * The actor for a portal page.
  *
- * Falls back to the portal's own role when nothing is signed in, because this
- * is a demonstration where every screen must be reachable from a bare link.
- * A real deployment replaces the fallback with `unauthorized()` — the call
- * site does not change, which is the point of routing through here.
+ * Three cases, in order:
+ *
+ *  - **Signed in, and this is your portal.** You get your own session.
+ *  - **Signed in as somebody else.** Redirected to your own portal. Previously
+ *    an administrator's session was handed to any portal it asked for, on the
+ *    theory that unsticking work means seeing what others see. It does not:
+ *    every portal reads `membership.organizationId` and `membership.marketId`,
+ *    and an administrator holds neither, so all four non-admin portals threw
+ *    on a null dereference and rendered the error boundary. The administrator
+ *    already sees every market through the admin console, which is the read
+ *    path built for the purpose and the one that redacts.
+ *  - **Signed out.** Falls back to the portal's own demo account, because this
+ *    is a demonstration where every screen must be reachable from a bare link.
+ *    A real deployment replaces that fallback with `unauthorized()`.
  */
 export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
   const session = await getActor();
-  if (session && canView(session, portal)) return session;
+  if (session) {
+    if (canView(session, portal)) return session;
+    // Not `contextFor(portal)`: silently rendering someone else's portal under
+    // a header that still says "Signed in as Steve Weed" is worse than the
+    // crash it replaces.
+    redirect(PORTAL_PATH[session.membership.role]);
+  }
   return contextFor(portal);
 }
 
 /**
- * Whether an actor may view a portal. A person can hold several memberships,
- * so this is a membership question rather than an equality check — and it is
- * the seam where multi-role users plug in.
+ * Whether an actor may view a portal.
+ *
+ * A person can hold several memberships, so this is a membership question
+ * rather than an equality check — and it is the seam where multi-role users
+ * plug in.
+ *
+ * Administrators are deliberately **not** exempt. Cross-market oversight is a
+ * property of the admin console's queries, not a licence to inhabit a
+ * student's session; the difference matters for a system holding education
+ * records, where "who can see this" has to survive being asked by a regulator.
  */
 export function canView(actor: ActorContext, portal: ActorRole): boolean {
-  // Administrators are the only cross-market role and may view any portal,
-  // which is how they unstick work on someone else's behalf.
-  return actor.membership.role === portal || actor.membership.role === "admin";
+  return actor.membership.role === portal;
 }
 
 export function isActorRole(value: string): value is ActorRole {

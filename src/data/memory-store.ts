@@ -34,6 +34,26 @@ class MemoryUnitOfWork implements UnitOfWork {
   /** Staged so nothing is visible until the whole unit succeeds. */
   private readonly effects: (() => void)[] = [];
 
+  createApplication(application: import("@/domain/types").Application) {
+    // Refuses rather than upserts. A create that quietly overwrote an existing
+    // row would turn a duplicate submission into silent data loss.
+    if (seed.applications.some((a) => a.id === application.id)) {
+      throw new Error(`Application ${application.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.applications.push(application);
+    });
+  }
+
+  createPosting(posting: import("@/domain/types").Posting) {
+    if (seed.postings.some((p) => p.id === posting.id)) {
+      throw new Error(`Posting ${posting.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.postings.push(posting);
+    });
+  }
+
   saveApplication(application: import("@/domain/types").Application, expectedVersion: number) {
     const index = seed.applications.findIndex((a) => a.id === application.id);
     if (index === -1) throw new Error(`Unknown application ${application.id}`);

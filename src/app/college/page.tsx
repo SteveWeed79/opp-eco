@@ -13,14 +13,21 @@ import {
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
-import { studentCreditProgress } from "@/lib/queries";
+import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
+import { availableTransitions } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
+import { TransitionActions } from "@/components/TransitionActions";
+import { collegeTransition } from "./actions";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
+  const market = repositories.markets.find(actor, actor.membership.marketId!)!;
+  // Part of the transition context. No college transition is budget-guarded,
+  // but the state machine takes one context shape for every caller.
+  const remainingBudget = marketRemainingBudget(actor, market);
 
   const pendingVerification = repositories.students.pendingVerification(actor);
   const needsDrafting = repositories.postings.awaitingCollegeHelp(actor);
@@ -246,9 +253,19 @@ export default async function CollegePage() {
                             : `${apps.length} completed micro-internships`}
                         </p>
                       </div>
-                      <Button size="sm" variant={ready ? "primary" : "ghost"} disabled={!ready}>
+                      {/* The aggregate award is deliberately not wired. It has
+                          to decide which completed projects an award consumes
+                          and where leftover hours go — the open stacking
+                          question (Q21). Granting credit per placement below
+                          works today and does not prejudge it. */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled
+                        title="Awarding across several placements at once depends on the credit-stacking rule (Q21), which is still open. Grant per placement below."
+                      >
                         {ready
-                          ? `Grant ${progress.creditsAvailable} credit`
+                          ? `${progress.creditsAvailable} credit available`
                           : "Below threshold"}
                       </Button>
                     </div>
@@ -262,16 +279,33 @@ export default async function CollegePage() {
                         return (
                           <li
                             key={application.id}
-                            className="flex items-center justify-between text-xs text-ink-600"
+                            className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-600"
                           >
                             <span className="flex items-center gap-2">
                               <TrackBadge track={application.track} posting={posting} hoursPerCredit={hoursPerCredit} />
                               {posting.title}
                             </span>
-                            <span className="tabular">
-                              {application.track === "standard"
-                                ? `${application.hoursApproved} hrs approved`
-                                : `${postingTotalHours(posting)} hrs`}
+                            <span className="flex items-center gap-3">
+                              <span className="tabular">
+                                {application.track === "standard"
+                                  ? `${application.hoursApproved} hrs approved`
+                                  : `${postingTotalHours(posting)} hrs`}
+                              </span>
+                              {/* Per application, because that is what the
+                                  domain models. The aggregate award across
+                                  several placements is the open stacking
+                                  question — see the note below the list. */}
+                              <TransitionActions
+                                applicationId={application.id}
+                                action={collegeTransition}
+                                subject={`${student.name} — ${posting.title}`}
+                                transitions={availableTransitions(actor, {
+                                  application,
+                                  student,
+                                  remainingBudget,
+                                  postingOwnerId: posting.businessId,
+                                }).map((t) => ({ to: t.to, label: t.label }))}
+                              />
                             </span>
                           </li>
                         );

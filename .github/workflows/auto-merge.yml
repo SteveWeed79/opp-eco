@@ -57,6 +57,11 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job does not check out the repository, so `gh` has no git
+          # remote to infer from and fails with "not a git repository". Naming
+          # it explicitly is cheaper than a checkout that would only exist to
+          # give the CLI its bearings.
+          GH_REPO: ${{ github.repository }}
 
       # A major bump gets a label and is left alone, so it shows up in a filter
       # rather than sitting indistinguishable from the routine ones.
@@ -64,9 +69,13 @@ jobs:
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
           # The label is created on first use rather than assumed to exist —
-          # `gh pr edit --add-label` fails outright on an unknown label, which
-          # would fail the job for a cosmetic reason. `|| true` covers the
-          # already-exists case.
+          # `gh pr edit --add-label` fails outright on an unknown label.
+          #
+          # `|| true` covers the already-exists case, and it also hid the bug
+          # this step shipped with: without GH_REPO the create failed with
+          # "not a git repository", the `|| true` swallowed it, and the edit
+          # then failed with "'needs-review' not found" — so every Dependabot
+          # major bump got a red check for a labelling step.
           gh label create needs-review \
             --description "Major dependency bump: verify the release notes before merging" \
             --color D93F0B || true
@@ -74,3 +83,4 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
