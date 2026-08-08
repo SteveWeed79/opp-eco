@@ -104,7 +104,12 @@ const ACCOUNTS: AccountDefinition[] = [
   },
 ];
 
-export const demoAccounts: DemoAccount[] = ACCOUNTS.map(({ membership: _m, ...rest }) => rest);
+/** Public account list, with the membership stripped so it cannot leak. */
+export const demoAccounts: DemoAccount[] = ACCOUNTS.map((account) => {
+  const { membership, ...rest } = account;
+  void membership;
+  return rest;
+});
 
 /** Resolve an account into the actor context every repository read requires. */
 export function contextFor(role: ActorRole): ActorContext {

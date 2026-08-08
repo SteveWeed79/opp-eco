@@ -45,3 +45,14 @@ export {
   Money,
   ProgressBar,
 } from "./primitives";
+
+export { ConfirmDialog } from "./ConfirmDialog";
+export { DataTable, type Column } from "./DataTable";
+export { Tabs, type TabDefinition } from "./Tabs";
+export { Combobox } from "./Combobox";
+export { SlotPicker, type Slot } from "./SlotPicker";
+export { FileUpload, type AttachedFile } from "./FileUpload";
+export { Avatar, PersonChip } from "./Person";
+export { Timeline, type TimelineEntry } from "./Timeline";
+export { Pagination, paginate } from "./Pagination";
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonRows } from "./Skeleton";
