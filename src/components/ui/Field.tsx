@@ -57,7 +57,7 @@ function FieldShell({ label, hint, error, required, children }: FieldShellProps)
 
 const CONTROL =
   "w-full px-4 py-2.5 rounded-xl border border-ink-200 text-sm text-ink-950 bg-white " +
-  "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent " +
+  "focus:outline-none focus:ring-2 focus:ring-brand-700 focus:border-transparent " +
   "disabled:bg-ink-50 disabled:text-ink-400";
 
 export function TextField({
@@ -184,7 +184,7 @@ export function ChoiceGroup<T extends string>({
               aria-pressed={selected}
               className={`text-left p-3.5 rounded-xl border transition-colors ${
                 selected
-                  ? "border-brand-500 bg-brand-50"
+                  ? "border-brand-700 bg-brand-50"
                   : "border-ink-200 hover:bg-ink-50"
               }`}
             >

@@ -75,7 +75,7 @@ export default async function BoardPage() {
       <Card className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex items-start gap-4">
-            <span className="w-11 h-11 rounded-2xl bg-brand-500 text-white flex items-center justify-center shrink-0">
+            <span className="w-11 h-11 rounded-2xl bg-brand-700 text-white flex items-center justify-center shrink-0">
               <Wallet className="w-5 h-5" aria-hidden="true" />
             </span>
             <div>
@@ -100,6 +100,7 @@ export default async function BoardPage() {
           <ProgressBar
             value={committed}
             max={market.subsidyBudget}
+                      label="Subsidy allocation committed"
             tone={burnPct > 80 ? "crit" : burnPct > 60 ? "warn" : "brand"}
           />
           <div className="flex justify-between text-xs text-ink-500 mt-1.5">

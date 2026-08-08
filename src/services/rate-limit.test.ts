@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   callerKey,
   checkRateLimit,
@@ -47,18 +47,45 @@ describe("rate limiting", () => {
   });
 
   it("resets once the window elapses", () => {
-    const store = createMemoryStore();
-    const limit = { limit: 1, windowMs: 1 };
-    expect(checkRateLimit("k", limit, store).ok).toBe(true);
-    expect(checkRateLimit("k", limit, store).ok).toBe(false);
-
-    const later = Date.now() + 10;
-    const original = Date.now;
-    Date.now = () => later;
+    // The clock is controlled for the whole test, not just the last third.
+    //
+    // This previously used `windowMs: 1` and let the first two calls run on
+    // the real clock, which quietly assumed both landed inside the same
+    // millisecond. They did locally and did not on a loaded CI runner: the
+    // bucket expired between them, the limiter correctly allowed the second
+    // request, and the test failed for being wrong rather than the code being
+    // broken. A window measured in milliseconds is not a realistic limit
+    // anyway — the real ones are a minute.
+    vi.useFakeTimers();
     try {
+      const store = createMemoryStore();
+      const limit = { limit: 1, windowMs: 60_000 };
+
+      expect(checkRateLimit("k", limit, store).ok).toBe(true);
+      expect(checkRateLimit("k", limit, store).ok).toBe(false);
+
+      // Just past the window, so the next request opens a fresh bucket.
+      vi.advanceTimersByTime(60_001);
       expect(checkRateLimit("k", limit, store).ok).toBe(true);
     } finally {
-      Date.now = original;
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds the limit for the whole window, not just the first moment", () => {
+    // The complement of the test above: advancing partway through must *not*
+    // reset the bucket. Without this, a limiter that reset on any clock
+    // movement would still pass the reset test.
+    vi.useFakeTimers();
+    try {
+      const store = createMemoryStore();
+      const limit = { limit: 1, windowMs: 60_000 };
+
+      expect(checkRateLimit("k", limit, store).ok).toBe(true);
+      vi.advanceTimersByTime(59_000);
+      expect(checkRateLimit("k", limit, store).ok).toBe(false);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

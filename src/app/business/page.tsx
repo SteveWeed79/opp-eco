@@ -275,10 +275,11 @@ export default async function BusinessPage() {
                       value={
                         repositories.applications.forPosting(actor, posting.id).length
                       }
+                      label={`Interest in ${posting.title}`}
                       max={Math.max(3, repositories.applications.forPosting(actor, posting.id).length)}
                       tone="brand"
                     />
-                    <p className="text-xs text-ink-500 mt-1">
+                    <p className="text-xs text-ink-600 mt-1">
                       {repositories.applications.forPosting(actor, posting.id).length}{" "}
                       interested
                     </p>

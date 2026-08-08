@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { CalendarClock } from "lucide-react";
 import { Button, ChoiceGroup, Modal, useToast } from "@/components/ui";
 import type { InterviewSlot } from "@/domain/types";
@@ -28,6 +28,7 @@ export function BookInterview({
   const [selected, setSelected] = useState<string | null>(slots[0]?.id ?? null);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const headingId = useId();
 
   function confirm() {
     if (!selected) return;
@@ -55,11 +56,17 @@ export function BookInterview({
   };
 
   return (
-    <div className="mt-4 bg-warn-50 border border-warn-100 rounded-xl p-4">
-      <p className="text-sm font-semibold text-ink-950">
+    // A named region, not an anonymous div: this is the one action on the page
+    // that matters, and a screen reader user navigating by landmark should be
+    // able to reach it without reading the whole application card.
+    <section
+      aria-labelledby={headingId}
+      className="mt-4 bg-warn-50 border border-warn-100 rounded-xl p-4"
+    >
+      <h4 id={headingId} className="text-sm font-semibold text-ink-950">
         Book your workforce board interview to unlock the ${ratePerHour}/hr wage
         reimbursement
-      </p>
+      </h4>
       <p className="text-xs text-ink-600 mt-1">
         {boardName} needs a short conversation before this placement can be funded.
         Nothing moves until it&rsquo;s booked.
@@ -76,7 +83,7 @@ export function BookInterview({
                 setSelected(slot.id);
                 setOpen(true);
               }}
-              className="px-3 py-2 rounded-lg bg-white border border-warn-100 text-xs font-semibold text-ink-950 hover:border-brand-500 hover:text-brand-600 transition-colors"
+              className="px-3 py-2 rounded-lg bg-white border border-warn-100 text-xs font-semibold text-ink-950 hover:border-brand-700 hover:text-brand-700 transition-colors"
             >
               {day} · {time}
             </button>
@@ -125,6 +132,6 @@ export function BookInterview({
           application out of the queue it is currently stuck in.
         </p>
       </Modal>
-    </div>
+    </section>
   );
 }

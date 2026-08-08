@@ -74,7 +74,7 @@ export function Tabs({
               onClick={() => setActive(tab.id)}
               className={`px-4 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${
                 selected
-                  ? "border-brand-500 text-ink-950"
+                  ? "border-brand-700 text-ink-950"
                   : "border-transparent text-ink-500 hover:text-ink-950"
               }`}
             >
