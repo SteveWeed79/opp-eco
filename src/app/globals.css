@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/**
+ * Design tokens.
+ *
+ * Extracted from the original mockup rather than repeated as literals, so the
+ * palette is a system: sky for action and identity, slate-950 for weight and
+ * authority, white cards on a light ground. Semantic colors are separate from
+ * the accent and carry state meaning, never decoration.
+ */
+@theme {
+  /* Brand */
+  --color-brand-50: #f0f9ff;
+  --color-brand-100: #e0f2fe;
+  --color-brand-200: #bae6fd;
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #0ea5e9;
+  --color-brand-600: #0284c7;
+  --color-brand-700: #0369a1;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Ink — slate with a faint blue bias so neutrals sit with the accent */
+  --color-ink-50: #f8fafc;
+  --color-ink-100: #f1f5f9;
+  --color-ink-200: #e2e8f0;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-950: #020617;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* State — meaning, not decoration */
+  --color-good-50: #ecfdf5;
+  --color-good-100: #d1fae5;
+  --color-good-600: #059669;
+  --color-good-700: #047857;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-100: #fef3c7;
+  --color-warn-600: #d97706;
+  --color-warn-700: #b45309;
+
+  --color-crit-50: #fef2f2;
+  --color-crit-100: #fee2e2;
+  --color-crit-600: #dc2626;
+  --color-crit-700: #b91c1c;
+
+  /* Track identity — micro reads as a distinct product, not a variant */
+  --color-micro-50: #f5f3ff;
+  --color-micro-100: #ede9fe;
+  --color-micro-600: #7c3aed;
+  --color-micro-700: #6d28d9;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink-50);
+  color: var(--color-ink-950);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Digits that line up in columns should stay lined up */
+table,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus must always be visible */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

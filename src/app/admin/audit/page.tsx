@@ -1,0 +1,103 @@
+import Link from "next/link";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  Empty,
+  PageHeader,
+  TableWrap,
+  Td,
+  Th,
+} from "@/components/ui";
+import { repositories } from "@/data/memory";
+import { contextFor } from "@/data/session";
+
+const admin = contextFor("admin");
+
+export default function AuditPage() {
+  const events = repositories.auditEvents.list(admin);
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 pt-8 space-y-6">
+      <Link
+        href="/admin"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-600 hover:text-ink-950"
+      >
+        <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to operations
+      </Link>
+
+      <PageHeader
+        eyebrow="Program administrator"
+        title="Audit log"
+        subtitle="Append-only. Every state change records who, what, when, and why."
+      />
+
+      <Card>
+        <CardHeader
+          icon={<ShieldCheck className="w-5 h-5" />}
+          title="Recorded transitions"
+          subtitle="Overrides and reasons are captured alongside ordinary moves"
+        />
+        {events.length === 0 ? (
+          <Empty>No events recorded.</Empty>
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead className="border-b border-ink-100">
+                <tr>
+                  <Th>When</Th>
+                  <Th>Actor</Th>
+                  <Th>Entity</Th>
+                  <Th>Transition</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {events.map((event) => {
+                  const user = repositories.users.find(event.actorUserId);
+                  return (
+                    <tr key={event.id}>
+                      <Td className="whitespace-nowrap text-xs">
+                        {new Date(event.at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </Td>
+                      <Td>
+                        <span className="font-semibold text-ink-950">
+                          {user?.name ?? event.actorUserId}
+                        </span>
+                        <span className="block text-xs text-ink-500 capitalize">
+                          {event.actorRole}
+                        </span>
+                      </Td>
+                      <Td className="text-xs">
+                        <span className="capitalize">{event.entityType}</span>{" "}
+                        <code className="text-ink-500">{event.entityId}</code>
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {event.from && <Badge>{event.from}</Badge>}
+                          <span className="text-ink-400" aria-hidden="true">
+                            →
+                          </span>
+                          <Badge tone="brand">{event.to}</Badge>
+                        </div>
+                        {event.reason && (
+                          <p className="text-xs text-ink-500 mt-1.5 max-w-md">
+                            {event.reason}
+                          </p>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}

@@ -40,10 +40,20 @@ The five portals are five views onto **one workflow state machine**, not five in
 
 ```
 src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
-                 profiles per track, permission matrix. No UI, no database.
-src/data/        Repository interfaces + in-memory seeded implementation.
-                 Swap for Postgres without touching anything above.
+                 profiles per track, credit accumulation, match scoring.
+                 No UI, no database. 50 unit tests.
+src/data/        Repository interfaces + in-memory seeded implementation,
+                 plus fake sign-on. Swap for Postgres and real auth without
+                 touching anything above.
+src/lib/         Derived views (what's stuck, market health, funnel) so no
+                 portal computes its own answer.
 src/app/         Route segments per portal over a shared shell.
 ```
 
-Assumptions currently stamped in place of unanswered questions are marked in the UI and tracked in the user story doc.
+Three properties worth knowing:
+
+- **No database.** Everything runs off seeded fixtures. Repository interfaces exist so the Postgres swap is a new class, not a rewrite.
+- **Sign-on is faked, sessions are not.** Picking a demo account mints a real session → membership → permission chain. Only the credential check is simulated.
+- **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces.
+
+Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

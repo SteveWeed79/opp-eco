@@ -285,6 +285,7 @@ export const organizations: Organization[] = [
 
 export const users: User[] = [
   { id: "u-admin", name: "Steve Weed", email: "admin@opportunityecosystem.example" },
+  { id: "u-omar", name: "Omar Haddad", email: "haddado@gus.pittstate.example.edu" },
   { id: "u-alex", name: "Alex Miller", email: "amiller@gus.pittstate.example.edu" },
   { id: "u-dana", name: "Dana Reyes", email: "dreyes@apexrobotics.example.com" },
   { id: "u-ellen", name: "Dr. Ellen Vance", email: "evance@pittstate.example.edu" },
@@ -974,6 +975,28 @@ const appSeeds: AppSeed[] = [
     fundingHours: 252,
     hoursLogged: 240,
     hoursApproved: 240,
+  },
+
+  // --- Micro-internships banked but short of a credit on their own ---
+  {
+    id: "app-24",
+    postingId: "post-bluestem-research",
+    studentId: "stu-omar",
+    status: "placement_completed",
+    submittedDaysAgo: 48,
+    statusSinceDaysAgo: 27,
+    deliverableSubmitted: true,
+    deliverableAccepted: true,
+  },
+  {
+    id: "app-25",
+    postingId: "post-city-finance",
+    studentId: "stu-omar",
+    status: "placement_completed",
+    submittedDaysAgo: 33,
+    statusSinceDaysAgo: 14,
+    deliverableSubmitted: true,
+    deliverableAccepted: true,
   },
 
   // --- Rejections and withdrawals ---

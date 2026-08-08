@@ -105,6 +105,50 @@ describe("a single micro-internship cannot carry a credit", () => {
   });
 });
 
+describe("standard placements award what the posting declared", () => {
+  function completedStandard(hoursApproved: number): Application {
+    return {
+      ...completedMicro("s"),
+      id: "s",
+      track: "standard",
+      postingId: "post-s",
+      hoursApproved,
+      deliverableSubmitted: undefined,
+      deliverableAccepted: undefined,
+    };
+  }
+
+  it("never awards more than the posting's declared credit hours", () => {
+    // 240 hours over 45 would be 5, but the posting is worth 3
+    const progress = creditProgress([
+      { application: completedStandard(240), posting: standardPosting(18, 14) },
+    ]);
+    expect(progress.standardCredits).toBe(3);
+    expect(progress.creditsAvailable).toBe(3);
+  });
+
+  it("caps credit by hours actually worked when a placement ends early", () => {
+    const progress = creditProgress([
+      { application: completedStandard(50), posting: standardPosting(12, 14) },
+    ]);
+    expect(progress.standardCredits).toBe(1);
+  });
+
+  it("awards nothing for a placement that logged almost no hours", () => {
+    const progress = creditProgress([
+      { application: completedStandard(20), posting: standardPosting(12, 14) },
+    ]);
+    expect(progress.creditsAvailable).toBe(0);
+  });
+
+  it("does not pour standard hours into the micro bank", () => {
+    const progress = creditProgress([
+      { application: completedStandard(240), posting: standardPosting(18, 14) },
+    ]);
+    expect(progress.bankedHours).toBe(0);
+  });
+});
+
 describe("micro-internships stack toward a credit", () => {
   it("banks hours across several completed projects", () => {
     const progress = creditProgress([
@@ -123,6 +167,7 @@ describe("micro-internships stack toward a credit", () => {
       { application: completedMicro("c"), posting: microPosting(15) },
     ]);
     expect(progress.bankedHours).toBe(DEFAULT_HOURS_PER_CREDIT);
+    expect(progress.microCredits).toBe(1);
     expect(progress.creditsAvailable).toBe(1);
     expect(progress.contributingApplicationIds).toEqual(["a", "b", "c"]);
   });
@@ -162,7 +207,7 @@ describe("building an award", () => {
     expect(award).toBeNull();
   });
 
-  it("references every application that contributed hours", () => {
+  it("references every micro-internship that contributed hours", () => {
     const progress = creditProgress([
       { application: completedMicro("a"), posting: microPosting(20) },
       { application: completedMicro("b"), posting: microPosting(25) },

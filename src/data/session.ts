@@ -44,13 +44,14 @@ const ACCOUNTS: AccountDefinition[] = [
   {
     id: "acct-student",
     role: "student",
-    label: "Alex Miller",
+    label: "Omar Haddad",
     organizationName: "Pittsburg State University",
     marketName: "Southeast Kansas",
-    description: "Computer Science junior, already cleared by the board.",
+    description:
+      "Computer Science sophomore, stuck in the pause and banking micro-internship hours.",
     membership: {
       id: "mem-student",
-      userId: "u-alex",
+      userId: "u-omar",
       organizationId: "org-psu",
       marketId: "mkt-pittsburg",
       role: "student",
