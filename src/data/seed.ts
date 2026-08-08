@@ -26,8 +26,18 @@ import type {
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
 
-/** Fixed clock so the demo is deterministic. */
-export const DEMO_NOW = new Date("2026-08-08T15:00:00Z");
+/**
+ * The demo's clock, anchored at module load rather than to a fixed date.
+ *
+ * Every fixture timestamp is expressed relative to this, so dwell times stay
+ * stable ("19 days waiting" is always 19 days) while future-dated interview
+ * slots stay genuinely in the future. A hardcoded date would leave the board's
+ * "upcoming" availability sitting in the past a month after deployment.
+ *
+ * Pages opt out of static prerendering so this re-anchors instead of freezing
+ * into the build output — see the root layout.
+ */
+export const DEMO_NOW = new Date();
 
 function daysAgo(n: number): string {
   return new Date(DEMO_NOW.getTime() - n * 86_400_000).toISOString();
