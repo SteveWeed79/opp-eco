@@ -140,24 +140,72 @@ More generally: **the system's job is smoothing over pain points at handoffs.** 
 
 ## The two tracks, revisited
 
-The subsidy may be exactly what separates them:
+### What Parker Dewey micro-internships actually are
+
+Checked against Parker Dewey's own materials and partner career-center pages rather than memory:
+
+| Attribute | Reality |
+|---|---|
+| Hours | **5–40 total** — not 10–40 |
+| Turnaround | Due one week to one month after kickoff |
+| Payment | **Fixed project fee, not hourly.** The company sets the fee; 90% goes to the student |
+| Location | **~90% remote** |
+| Selection | Student expresses interest, company picks, work starts. No interview |
+| Academic credit | **Not built in.** Parker Dewey defers entirely to each institution and offers to share completion data "for credit consideration" |
+| Framing | A "working interview" — real work, seen before anyone commits, no conversion fee to hire |
+
+Three of those cut against the current design.
+
+### Problem 1: fixed fee is mechanically incompatible with the subsidy
+
+The board reimburses **$20 per hour**. A Parker Dewey-style micro-internship has a **fixed project fee and no tracked hours** — there is nothing to reimburse against. This isn't a policy question, it's an arithmetic one.
+
+So Q13 resolves itself: **micro-internships can't be hourly-subsidized without abandoning the fixed-fee model.** Which is good news — it means no eligibility determination, no pause, and the track keeps the low friction that is its entire reason for existing.
+
+### Problem 2: the credit math doesn't work
+
+This is the serious one. One college credit is roughly **45 hours** of student work. Micro-internships run **5–40 hours**, with many at the low end.
+
+**A single Parker Dewey-style micro-internship cannot carry 1 credit at most registrars.** Even a maximum-length 40-hour project falls short of the threshold, and a 10-hour project isn't remotely close.
+
+That reframes Q15 completely. The question was "do micro-internships stack toward *more* credit?" The real question is that **stacking is required to reach even one credit**:
+
+> 3 micro-internships × 15 hours = 45 hours = 1 credit
+
+Which changes the model: `CreditAward` is **many-to-many with placements from the start**, accumulating hours across completed micro-internships until a threshold is met. Not a one-to-one relationship I can loosen later.
+
+Three ways out — worth deciding before the model hardens **[Q21]**:
+
+- **Stack them.** Students bank micro-internships until they clear the hours floor. Truest to Parker Dewey, most work to model, best student experience.
+- **Make this program's micro track bigger.** Define it at 45+ hours so one project equals one credit. Simple, but it's no longer really a micro-internship and loses the fast turnaround.
+- **Micro is non-credit.** Purely a working interview and an on-ramp to a standard internship. Simplest by far, but it drops the "1 credit" you specified.
+
+### Problem 3: remote conflicts with local workforce funding
+
+~90% of Parker Dewey projects are remote, and companies can be anywhere. A *local* Kansas workforce board funds *local* economic development — a remote project for an out-of-state company is outside its mandate.
+
+For this program the micro track probably has to be scoped to **local Kansas businesses**, which is a deliberate departure from Parker Dewey's national remote marketplace. Worth naming as a differentiator rather than treating as a constraint. It also happens to make micro-internships work for rural students without a car.
+
+### What's genuinely worth stealing
+
+The **working interview** framing is the right pitch for a small Kansas manufacturer who has never hosted an intern and finds a full semester commitment intimidating. Start with a 20-hour project, see the work, then commit.
+
+That makes **micro → standard a designed funnel**, not two disconnected products: a completed micro-internship should convert to a standard internship offer in one click, carrying the work history with it. That's a feature the mockup should show.
+
+### Revised track comparison
 
 | | **Standard Internship** | **Micro-Internship** |
 |---|---|---|
-| Credit | 3 credit hours | 1 credit hour |
-| Duration | Semester or summer | Days to a few weeks |
-| Hours | ~135–150 | ~40 |
+| Credit | 3 credit hours | 1 credit, likely stacked **[Q21]** |
+| Duration | Semester or summer | One week to one month |
+| Hours | ~135–150 | 5–40 |
+| Payment | Hourly wage | Fixed project fee |
 | Shape | Ongoing role with a supervisor | Discrete project with a deliverable |
-| Board subsidy | **Yes — $20/hr** | **[Q13] — probably not** |
-| Board interview | Required | Probably not needed |
+| Board subsidy | **Yes — $20/hr** | **No** — fixed fee has no hours to reimburse |
+| Board interview | Required | Not needed |
+| Location | Local | Local for this program, though the model is usually remote |
 
-If micro-internships aren't subsidized, the whole thing snaps into place: **no subsidy means no eligibility determination means no pause.** The business pays full freight, the student gets 1 credit, and the project runs in days. The tracks then differ on the one axis that actually matters operationally, and the micro track keeps the low friction that is its entire reason for existing.
-
-If micro-internships *are* subsidized, the interview overhead has to be resolved some other way — likely by letting an already-determined-eligible student take micro work with no further gate.
-
-### The credit-hours floor still applies
-
-One college credit is roughly 45 hours of student work. 3 credits ≈ 135 hours, which a semester internship clears comfortably. 1 credit ≈ 45 hours — so a 40-hour micro-project is defensible and a 10-hour one is not. Since typical micro-projects run 10–40 hours, a real share fall below the threshold. Enforce the floor **at posting time**, institution-configurable. **[Q11]**
+**[Q11]** The hours floor per credit stays institution-configurable and enforced at posting time — it just now governs an accumulated total rather than a single placement.
 
 ---
 
@@ -309,7 +357,7 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q19** | Is the platform the system of record for reimbursement hours? | Raises hour logging from academic record to funding claim, with the rigor that implies |
 | **Q20** | Does the board have a fixed annual budget the program draws down? | If yes, the market has capacity limits and Admin's job includes allocating scarce subsidy |
 | **Q16** | Naming for the market entity; one board to many colleges? | Model root; WIOA areas and college service areas don't align cleanly |
-| **Q13** | Are micro-internships subsidized? | If not, the tracks separate cleanly and micro keeps its low friction |
+| **Q21** | **How does a 5–40 hour micro-internship earn 1 credit?** Stack them, enlarge the track, or drop credit from it | A single micro-internship falls short of the ~45-hour credit threshold. If they stack, `CreditAward` is many-to-many with placements from day one |
 
 ### Carried forward
 
@@ -324,11 +372,17 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q11** | Institution-configurable minimum hours per credit | Open |
 | **Q12** | How long does participant eligibility last? | Open |
 | **Q14** | Per-project or blanket institutional approval for micro? | Open |
-| **Q15** | Do micro-internships stack toward credit? | Open |
+| **Q15** | Do micro-internships stack toward credit? | **Superseded by Q21** — stacking is likely required, not optional |
 
 ### Resolved
 
-**Q2** eligibility once per applicant · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers
+**Q2** eligibility once per applicant · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers · **Q13** micro-internships are unsubsidized — a fixed project fee has no hours for an hourly reimbursement to attach to
+
+---
+
+## Sources
+
+Parker Dewey mechanics verified against [Parker Dewey's FAQ](https://www.parkerdewey.com/faq), [their Micro-Internships overview](https://www.parkerdewey.com/micro-internships), [Career Launchers page](https://www.parkerdewey.com/career-launchers), and partner career-center documentation at [Colorado State](https://career.colostate.edu/parker-dewey-micro-internships/), [Binghamton](https://careertools.binghamton.edu/resources/micro-internships-short-term-paid-professional-projects-via-parker-dewey/), and [UNT](https://careercenter.unt.edu/resources/about-micro-internships/).
 
 ---
 

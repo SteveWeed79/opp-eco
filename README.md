@@ -4,7 +4,15 @@ A workforce-development platform connecting Kansas students, employers, colleges
 
 The program launches city by city: the administrator secures a local workforce board, then a college, then opens the market to students and local businesses. The board's $20/hour wage reimbursement is what makes it work — and the pause while a student waits on their board eligibility interview is the gap this platform exists to close.
 
-**Status: pre-implementation.** We are settling the domain model before writing application code.
+**Status: mockup with real foundations.** The UI is a demo running on seeded fixtures, but it reads through the same domain layer and repository contracts a production build would use.
+
+## Getting started
+
+```bash
+npm install
+npm run dev     # http://localhost:3000
+npm test        # domain layer unit tests
+```
 
 ## Start here
 
@@ -23,9 +31,19 @@ The program launches city by city: the administrator secures a local workforce b
 | Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
 | Workforce clearance | Once per applicant | Clearance travels with the student, not the application |
-| Payments | Out of scope | No payment flows in the mockup |
+| Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 
-## Architecture intent
+## Architecture
 
-The five portals are five views onto **one workflow state machine**, not five independent applications. The domain layer — entities, guarded state transitions, and the permission matrix — is built first with no UI or database dependency, so portals become filtered queries over a single source of truth.
+The five portals are five views onto **one workflow state machine**, not five independent applications.
+
+```
+src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
+                 profiles per track, permission matrix. No UI, no database.
+src/data/        Repository interfaces + in-memory seeded implementation.
+                 Swap for Postgres without touching anything above.
+src/app/         Route segments per portal over a shared shell.
+```
+
+Assumptions currently stamped in place of unanswered questions are marked in the UI and tracked in the user story doc.
