@@ -74,8 +74,8 @@ export function SlotPicker({
                     title={slot.host ? `with ${slot.host}` : undefined}
                     className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       selected
-                        ? "border-brand-500 bg-brand-500 text-white"
-                        : "border-ink-200 bg-white text-ink-950 hover:border-brand-500"
+                        ? "border-brand-700 bg-brand-700 text-white"
+                        : "border-ink-200 bg-white text-ink-950 hover:border-brand-700"
                     }`}
                   >
                     {at.toLocaleTimeString("en-US", {

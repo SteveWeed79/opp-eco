@@ -362,9 +362,9 @@ function StatusSection() {
 
       <Section title="Progress and money">
         <div className="max-w-md space-y-4">
-          <ProgressBar value={33} max={45} />
-          <ProgressBar value={38} max={45} tone="warn" />
-          <ProgressBar value={45} max={45} tone="good" />
+          <ProgressBar value={33} max={45} label="Hours banked toward the next credit" />
+          <ProgressBar value={38} max={45} tone="warn" label="Hours banked, approaching the threshold" />
+          <ProgressBar value={45} max={45} tone="good" label="Hours banked, credit ready" />
           <p className="text-sm text-ink-600">
             Committed <Money value={29680} /> of <Money value={240000} />
           </p>

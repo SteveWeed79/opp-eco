@@ -16,7 +16,17 @@ updates:
 
   # Workflow actions are a supply-chain path too, and one that is easy to
   # forget because it is not in package.json.
+  #
+  # These are pinned to commit SHAs in the workflow. Dependabot understands
+  # that and rewrites the hash together with its `# v7.0.1` comment, so pinning
+  # costs nothing in maintenance.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # Same reasoning as npm: routine bumps arrive as one reviewable PR.
+      # Majors stay separate, because that is where a bump can change
+      # behaviour without failing — see the note in auto-merge.yml.
+      routine:
+        update-types: ["minor", "patch"]

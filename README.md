@@ -11,8 +11,32 @@ The program launches city by city: the administrator secures a local workforce b
 ```bash
 npm install
 npm run dev     # http://localhost:3000
-npm test        # domain layer unit tests
+npm test        # domain, data, and service unit tests
 ```
+
+### End-to-end and accessibility tests
+
+```bash
+npx playwright install chromium   # once
+npm run build                     # the suite runs against a production build
+npm run test:e2e
+```
+
+They run against `next start` rather than `next dev` because the things they
+assert differ between the two — the CSP drops `unsafe-eval` in production and
+HSTS is only set there, so testing the dev server would verify a configuration
+nobody deploys.
+
+Accessibility is checked with [axe](https://github.com/dequelabs/axe-core)
+against WCAG 2.1 A and AA on every page, plus states a static scan would miss:
+an open modal, a form showing a validation error, a sorted table. Automated
+tooling catches roughly a third of WCAG issues — it finds missing labels,
+contrast failures, and broken ARIA, but it cannot tell you whether a screen
+reader user can actually complete a booking. That still needs a person.
+
+One caveat worth knowing before you run them: the demo store lives in the
+server process, so `e2e/booking.spec.ts` permanently books the seed's only
+bookable application. Restart the server to reseed.
 
 ## Start here
 
