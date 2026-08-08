@@ -153,16 +153,22 @@ Because of KORA, and because it makes reporting cheaper. Aggregates should be de
 
 Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex`
 
-### Buildable now
+| Control | Where | Note |
+|---|---|---|
+| Nonce-based CSP, `frame-ancestors 'none'` | `src/proxy.ts` | Nonce per request, no allowlist — an allowlist is only as strong as the CDN in it |
+| HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy` | `src/proxy.ts` | HSTS production-only; setting it against localhost pins http out of the developer's own browser |
+| Rate limiting on sign-on and mutations | `src/services/rate-limit.ts` | **Per instance**, so it degrades as functions scale out. Swap the store for Redis before real traffic |
+| Log redaction | `src/services/logging.ts` | Redacts by key fragment, bounds depth and length, survives cyclic objects |
+| `npm audit` at high, Dependabot weekly | CI, `.github/dependabot.yml` | Actions are grouped and updated too — a supply-chain path that is easy to forget because it is not in package.json |
+| Vulnerability reporting path | `SECURITY.md` | Names cross-tenant access and audit tampering as the findings we most want |
+
+### Still buildable
 
 | Control | Why it matters here |
 |---|---|
-| Security headers (CSP, HSTS, frame-ancestors, Referrer-Policy) | The first thing a district IT reviewer scans for |
-| Rate limiting on sign-on and every server action | Brute force and enumeration; nothing currently limits either |
-| Log redaction helper | `console.error(error)` can serialise a student record today |
-| `SECURITY.md` | Public-sector buyers look for a reporting path |
-| Upload hardening | Content-type sniffing, size caps, no execution path, signed URLs |
-| `npm audit` + Dependabot in CI | Supply chain is the likeliest realistic compromise |
+| Upload hardening | Content-type sniffing, size caps, no execution path, signed URLs — needed the moment resumes and deliverables are real |
+| Shared-store rate limiting | The current limiter is per instance; a distributed one needs Redis or Vercel KV |
+| Branch protection requiring CI | CI reports today but does not block; a red PR is still mergeable |
 
 ### Policy and procurement, not code
 

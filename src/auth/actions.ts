@@ -3,6 +3,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, isActorRole } from "./session";
+import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
+import { logger } from "@/services/logging";
 
 /**
  * Sign on and sign out.
@@ -20,6 +22,19 @@ export async function signInAs(role: unknown): Promise<{ ok: boolean; error?: st
   }
 
   const store = await cookies();
+
+  // Sign-on is the brute-force target. Nothing identifies the caller before a
+  // session exists, so this is a shared bucket — blunt, but it fails closed.
+  const existing = store.get(SESSION_COOKIE)?.value ?? null;
+  const limit = checkRateLimit(callerKey("signIn", existing), LIMITS.signIn);
+  if (!limit.ok) {
+    logger.warn("rate_limit.exceeded", { action: "signIn" });
+    return {
+      ok: false,
+      error: `Too many sign-on attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
   store.set(SESSION_COOKIE, role, {
     httpOnly: true,
     sameSite: "lax",

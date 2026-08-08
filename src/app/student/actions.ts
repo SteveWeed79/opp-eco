@@ -5,6 +5,8 @@ import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
 import { bookInterviewInput, validate } from "@/services/validation";
+import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
+import { logger } from "@/services/logging";
 
 /**
  * Book a workforce board interview.
@@ -29,6 +31,23 @@ export async function bookInterviewSlot(
   if (!input.ok) return { ok: false, error: input.error };
 
   const actor = await actorForPortal("student");
+
+  // Bound how fast this can be called. Without it, an attacker learns which
+  // application ids exist from which errors come back.
+  const limit = checkRateLimit(
+    callerKey("bookInterview", actor.user.id),
+    LIMITS.mutation,
+  );
+  if (!limit.ok) {
+    logger.warn("rate_limit.exceeded", {
+      action: "bookInterview",
+      userId: actor.user.id,
+    });
+    return {
+      ok: false,
+      error: `Too many attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
 
   const slot = repositories.interviewSlots
     .list(actor)
@@ -86,7 +105,19 @@ export async function bookInterviewSlot(
     },
   });
 
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) {
+    logger.warn("transition.refused", {
+      action: "bookInterview",
+      applicationId: input.data.applicationId,
+      code: result.code,
+    });
+    return { ok: false, error: result.error };
+  }
+
+  logger.info("interview.booked", {
+    applicationId: input.data.applicationId,
+    slotId: input.data.slotId,
+  });
 
   revalidatePath("/student");
   revalidatePath("/board");

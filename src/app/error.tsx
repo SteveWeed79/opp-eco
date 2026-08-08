@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, RotateCw } from "lucide-react";
+import { logger } from "@/services/logging";
 
 /**
  * Route-level error boundary.
@@ -24,9 +25,10 @@ export default function Error({
   retry: () => void;
 }) {
   useEffect(() => {
-    // Stands in for an error reporting service. Structured so that whatever
-    // replaces it has the shape it needs.
-    console.error("[route-error]", { message: error.message, digest: error.digest });
+    // An error message can quote a record it failed on, so it is redacted
+    // before it reaches a log aggregator that has none of the database's
+    // access controls.
+    logger.error("route_error", { error, digest: error.digest });
   }, [error]);
 
   return (
