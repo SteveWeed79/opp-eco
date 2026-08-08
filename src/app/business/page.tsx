@@ -17,13 +17,12 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 
-const actor = contextFor("business");
-
-export default function BusinessPage() {
+export default async function BusinessPage() {
+  const actor = await actorForPortal("business");
   const org = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
   const boardName = organizationName(market.boardId);

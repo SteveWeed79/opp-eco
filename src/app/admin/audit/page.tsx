@@ -11,11 +11,10 @@ import {
   Th,
 } from "@/components/ui";
 import { repositories } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 
-const admin = contextFor("admin");
-
-export default function AuditPage() {
+export default async function AuditPage() {
+  const admin = await actorForPortal("admin");
   const events = repositories.auditEvents.list(admin);
 
   return (

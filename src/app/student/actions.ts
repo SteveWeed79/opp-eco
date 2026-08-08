@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
 import { bookInterviewInput, validate } from "@/services/validation";
@@ -28,7 +28,7 @@ export async function bookInterviewSlot(
   const input = validate(bookInterviewInput, { applicationId, slotId });
   if (!input.ok) return { ok: false, error: input.error };
 
-  const actor = contextFor("student");
+  const actor = await actorForPortal("student");
 
   const slot = repositories.interviewSlots
     .list(actor)

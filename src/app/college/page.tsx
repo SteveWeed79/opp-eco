@@ -12,14 +12,13 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { postingTotalHours } from "@/domain/types";
 
-const actor = contextFor("college");
-
-export default function CollegePage() {
+export default async function CollegePage() {
+  const actor = await actorForPortal("college");
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
 

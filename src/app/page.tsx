@@ -11,12 +11,14 @@ import {
 } from "lucide-react";
 import { Badge, Card, Money } from "@/components/ui";
 import { repositories } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { systemContext } from "@/auth/system";
 import { allMarketHealth } from "@/lib/queries";
 
-const admin = contextFor("admin");
-
 export default function LandingPage() {
+  // Public totals are a system read, not somebody's session — naming it that
+  // way keeps it from looking like an administrator context leaking onto a
+  // page anyone can load.
+  const admin = systemContext();
   const health = allMarketHealth(admin);
   const live = health.filter((h) => h.market.stage === "live");
   const credits = repositories.creditAwards

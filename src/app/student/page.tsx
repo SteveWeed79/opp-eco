@@ -20,7 +20,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import { DEMO_NOW, studentForUser } from "@/data/seed";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
@@ -28,13 +28,12 @@ import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
 
-const actor = contextFor("student");
+export default async function StudentPage() {
+  const actor = await actorForPortal("student");
+  // Resolved from the session rather than hardcoded.
+  const student = studentForUser(actor.user.id)!;
+  const STUDENT_ID = student.id;
 
-/** The signed-in student, resolved from the session rather than hardcoded. */
-const student = studentForUser(actor.user.id)!;
-const STUDENT_ID = student.id;
-
-export default function StudentPage() {
   const applications = repositories.applications
     .forStudent(actor, STUDENT_ID)
     .filter((a) => !isTerminal(a.status));

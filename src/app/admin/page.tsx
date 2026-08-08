@@ -25,7 +25,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { contextFor } from "@/data/session";
+import { actorForPortal } from "@/auth/session";
 import {
   allMarketHealth,
   averagePauseDays,
@@ -34,8 +34,6 @@ import {
   subsidyDeployed,
 } from "@/lib/queries";
 import type { MarketStage } from "@/domain/types";
-
-const admin = contextFor("admin");
 
 const STAGE_ORDER: MarketStage[] = [
   "prospecting",
@@ -59,7 +57,8 @@ const STAGE_LABEL: Record<MarketStage, string> = {
   declined: "Declined",
 };
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const admin = await actorForPortal("admin");
   const health = allMarketHealth(admin);
   const stalled = stalledApplications(admin);
   const pendingOrgs = repositories.organizations.pendingVetting(admin);

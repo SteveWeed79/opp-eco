@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Building2,
   GraduationCap,
   Landmark,
   Lock,
+  LogOut,
   School,
   SlidersHorizontal,
 } from "lucide-react";
 import type { ActorRole } from "@/domain/types";
 import { demoAccounts } from "@/data/session";
 import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
+import { signInAs, signOut } from "@/auth/actions";
 
 const PORTALS: {
   role: ActorRole;
@@ -28,7 +30,13 @@ const PORTALS: {
   { role: "board", href: "/board", label: "Workforce Board", icon: Landmark },
 ];
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  signedInAs,
+}: {
+  children: React.ReactNode;
+  signedInAs?: string;
+}) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
 
@@ -81,14 +89,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
               })}
             </nav>
 
-            <button
-              type="button"
-              onClick={() => setSignOnOpen(true)}
-              className="bg-ink-950 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-brand-500 transition-colors flex items-center gap-2 shrink-0"
-            >
-              <Lock className="w-4 h-4 text-brand-400" aria-hidden="true" />
-              Sign on
-            </button>
+            {signedInAs ? (
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="hidden sm:block text-xs text-ink-500">
+                  Signed in as{" "}
+                  <span className="font-bold text-ink-950">{signedInAs}</span>
+                </span>
+                {/* A plain form post, so signing out works without JavaScript
+                    and cannot be triggered by a cross-site GET. */}
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="border border-ink-200 text-ink-700 px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-ink-50 transition-colors flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    Sign out
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSignOnOpen(true)}
+                className="bg-ink-950 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-brand-500 transition-colors flex items-center gap-2 shrink-0"
+              >
+                <Lock className="w-4 h-4 text-brand-400" aria-hidden="true" />
+                Sign on
+              </button>
+            )}
           </div>
 
           {/* Small screens get the switcher as a scrolling row rather than losing it */}
@@ -177,12 +205,16 @@ function DemoFooter() {
  * authentication arrives.
  */
 function SignOnDialog({ onClose }: { onClose: () => void }) {
-  const router = useRouter();
   const [selected, setSelected] = useState<ActorRole>("admin");
+  const [pending, startTransition] = useTransition();
 
+  // The server establishes the session and redirects. Navigating on the client
+  // would leave the role as client state, which is the mistake the original
+  // mockup made by letting a dropdown choose the portal.
   function enterPortal() {
-    onClose();
-    router.push(`/${selected}`);
+    startTransition(async () => {
+      await signInAs(selected);
+    });
   }
 
   return (
@@ -196,8 +228,8 @@ function SignOnDialog({ onClose }: { onClose: () => void }) {
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="dark" onClick={enterPortal}>
-            Enter portal
+          <Button variant="dark" onClick={enterPortal} disabled={pending}>
+            {pending ? "Signing in…" : "Enter portal"}
           </Button>
         </>
       }
