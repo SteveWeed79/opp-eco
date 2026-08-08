@@ -58,18 +58,24 @@ test.describe("signed in as an administrator", () => {
     }) => {
       // The switcher hiding a route proves nothing about what a URL can reach,
       // which is this codebase's standing rule about authorization.
-      await page.goto(portal.path);
+      //
+      // `waitUntil: "commit"` rather than the default "load": Next streams the
+      // response, so the redirect is not a 307 — it arrives as a client-side
+      // navigation that cancels the load already in flight, and `goto` then
+      // rejects with `net::ERR_ABORTED`. Whether it does is a race, which made
+      // this suite pass locally and fail on a runner. Committing as soon as
+      // the response starts, then waiting on the URL, tests the same thing
+      // without depending on which side of the race wins.
+      await page.goto(portal.path, { waitUntil: "commit" });
+
       await expect(page).toHaveURL(/\/admin$/);
       await expect(page.getByText("Program administrator").first()).toBeVisible();
+      // Folded in from a separate test that walked all four portals in one
+      // pass: four redirecting navigations in a row made the race far more
+      // likely, and it asserted nothing these four do not.
+      await expect(page.getByText("This page didn't load")).toHaveCount(0);
     });
   }
-
-  test("no portal renders the error boundary", async ({ page }) => {
-    for (const portal of OTHER_PORTALS) {
-      await page.goto(portal.path);
-      await expect(page.getByText("This page didn't load")).toHaveCount(0);
-    }
-  });
 });
 
 test.describe("signed out", () => {
