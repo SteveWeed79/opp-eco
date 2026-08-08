@@ -19,7 +19,9 @@ test("signing on sets a server-side session and lands in the portal", async ({
   await page.getByRole("button", { name: "Sign on" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 
-  await page.getByRole("button", { name: /Dana Reyes/ }).click();
+  // A radio, not a button: the account picker is a set of mutually exclusive
+  // choices, and it announces "2 of 5" rather than "pressed".
+  await page.getByRole("radio", { name: /Dana Reyes/ }).click();
   await page.getByRole("button", { name: "Enter portal" }).click();
 
   await page.waitForURL("**/business");
@@ -36,7 +38,7 @@ test("signing on sets a server-side session and lands in the portal", async ({
 test("signing out clears the session", async ({ page, context }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Sign on" }).click();
-  await page.getByRole("button", { name: /Marcia Delgado/ }).click();
+  await page.getByRole("radio", { name: /Marcia Delgado/ }).click();
   await page.getByRole("button", { name: "Enter portal" }).click();
   await page.waitForURL("**/board");
 
@@ -62,7 +64,7 @@ test.describe("file downloads", () => {
   test("an unsigned request is refused", async ({ page, request }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Sign on" }).click();
-    await page.getByRole("button", { name: /Steve Weed/ }).click();
+    await page.getByRole("radio", { name: /Steve Weed/ }).click();
     await page.getByRole("button", { name: "Enter portal" }).click();
     await page.waitForURL("**/admin");
 

@@ -20,6 +20,7 @@ const PAGES = [
   { path: "/", name: "landing" },
   { path: "/admin", name: "admin console" },
   { path: "/admin/audit", name: "audit log" },
+  { path: "/admin/outbox", name: "notification outbox" },
   { path: "/student", name: "student portal" },
   { path: "/business", name: "business portal" },
   { path: "/college", name: "college portal" },

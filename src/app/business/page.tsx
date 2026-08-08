@@ -1,4 +1,4 @@
-import { CircleDollarSign, HelpCircle, Plus, Users, Zap } from "lucide-react";
+import { CircleDollarSign, HelpCircle, Users, Zap } from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -23,6 +23,7 @@ import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/wo
 import { postingTotalHours } from "@/domain/types";
 import { marketRemainingBudget } from "@/lib/queries";
 import { businessTransition } from "./actions";
+import { NewPosting } from "./NewPosting";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
@@ -44,6 +45,17 @@ export default async function BusinessPage() {
   // once here keeps it out of the row loop.
   const remainingBudget = marketRemainingBudget(actor, market);
 
+  // Skills already in use across this market's postings, offered as the
+  // vocabulary for a new one. Free-text tags sprawl into "JS", "Javascript",
+  // and "JavaScript", and match scoring compares them literally.
+  const skillVocabulary = Array.from(
+    new Set(postings.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
+  ).sort();
+  const college = repositories.organizations
+    .list(actor, { kind: "college" })
+    .find((o) => o.marketId === market.id);
+  const hoursPerCredit = college?.hoursPerCredit ?? 45;
+
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
       <PageHeader
@@ -52,11 +64,11 @@ export default async function BusinessPage() {
         title={org.name}
         subtitle={`${org.county} County · ${postings.filter((p) => p.status === "published").length} live postings`}
         action={
-          <Button variant="primary">
-            <span className="flex items-center gap-1.5">
-              <Plus className="w-4 h-4" aria-hidden="true" /> Post an opportunity
-            </span>
-          </Button>
+          <NewPosting
+            county={org.county}
+            skillVocabulary={skillVocabulary}
+            hoursPerCredit={hoursPerCredit}
+          />
         }
       />
 

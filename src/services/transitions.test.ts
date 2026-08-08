@@ -143,6 +143,38 @@ describe("a successful transition writes everything together", () => {
     expect(pendingNotifications[0].kind).toBe("interview.booked");
   });
 
+  it("passes the whole intent through rather than rebuilding it", async () => {
+    // This rebuilt the intent field by field, which silently dropped
+    // `recipientOrganizationId` — so every message addressed to an employer or
+    // board rendered without an address and was recorded undeliverable. The
+    // transition still succeeded, which is what made it invisible: the state
+    // moved and nobody was told.
+    await executeTransition(student, {
+      applicationId: "app-4",
+      to: "interview_scheduled",
+      notifications: () => [
+        {
+          recipientUserId: "contact:org-apex",
+          recipientOrganizationId: "org-apex",
+          kind: "interview.booked.employer",
+        },
+      ],
+    });
+
+    expect(pendingNotifications[0].recipientOrganizationId).toBe("org-apex");
+  });
+
+  it("stamps the market from the application, not the caller", async () => {
+    await executeTransition(student, {
+      applicationId: "app-4",
+      to: "interview_scheduled",
+      notifications: () => [{ recipientUserId: "u-marcia", kind: "interview.booked" }],
+    });
+    // A notification belongs to the market of the thing that caused it, so a
+    // caller cannot address one into someone else's market.
+    expect(pendingNotifications[0].marketId).toBe(find("app-4").marketId);
+  });
+
   it("records how far a closed application got", async () => {
     await executeTransition(board, {
       applicationId: "app-8",

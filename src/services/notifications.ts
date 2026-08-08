@@ -57,6 +57,18 @@ const TEMPLATES: Record<
       `The clearance interview for ${p.postingTitle} is on ${formatWhen(p.startsAt)}. ` +
       `Once the board authorizes funding, the placement can start.`,
   }),
+  "application.submitted": (p) => ({
+    subject: `New applicant for ${p.postingTitle}`,
+    body:
+      `${p.studentName} applied — a ${p.score}% match on the skills you listed. ` +
+      `Reviewing promptly is the single biggest thing you can do to keep a candidate engaged.`,
+  }),
+  "posting.submitted": (p) => ({
+    subject: `${p.businessName} submitted a posting for review`,
+    body:
+      `"${p.postingTitle}" is waiting on your review before students can see it. ` +
+      `${p.selfSufficient ? "It clears your hours-per-credit threshold on its own." : "It is below your threshold, so it will need to stack with other work to carry credit."}`,
+  }),
   "application.stalled": (p) => ({
     subject: `${p.postingTitle} has been waiting ${p.days} days`,
     body:

@@ -26,7 +26,12 @@ import type {
 import { attemptTransition, isTerminal } from "@/domain/workflow";
 import { repositories } from "@/data/memory";
 import { marketRemainingBudget } from "@/lib/queries";
-import { ConcurrencyError, type Store, type UnitOfWork } from "@/data/store";
+import {
+  ConcurrencyError,
+  type NotificationIntent,
+  type Store,
+  type UnitOfWork,
+} from "@/data/store";
 import { memoryStore } from "@/data/memory-store";
 
 export interface TransitionCommand {
@@ -42,11 +47,20 @@ export interface TransitionCommand {
   patch?: Partial<Application>;
   /** Extra writes belonging to the same transaction, e.g. claiming a slot. */
   sideEffects?: (uow: UnitOfWork, application: Application) => void;
-  notifications?: (application: Application) => {
-    recipientUserId: string;
-    kind: string;
+  /**
+   * Messages this transition causes, enqueued in the same transaction.
+   *
+   * `marketId` is filled in from the application rather than accepted, so a
+   * notification cannot be addressed into another market. Everything else is
+   * passed through — an earlier version rebuilt the intent field by field
+   * here, which silently dropped `recipientOrganizationId` and made every
+   * message to an employer or board undeliverable.
+   */
+  notifications?: (
+    application: Application,
+  ) => (Omit<NotificationIntent, "marketId" | "payload"> & {
     payload?: Record<string, unknown>;
-  }[];
+  })[];
 }
 
 export type TransitionResult =
@@ -139,9 +153,10 @@ export async function executeTransition(
       command.sideEffects?.(uow, updated);
       for (const intent of command.notifications?.(updated) ?? []) {
         uow.enqueueNotification({
+          ...intent,
+          // Not from the caller: a message belongs to the market of the thing
+          // that caused it.
           marketId: existing.marketId,
-          recipientUserId: intent.recipientUserId,
-          kind: intent.kind,
           payload: intent.payload ?? {},
         });
       }

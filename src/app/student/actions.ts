@@ -5,9 +5,11 @@ import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
-import { bookInterviewInput, validate } from "@/services/validation";
+import { applyInput, bookInterviewInput, validate } from "@/services/validation";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
+import { submitApplication } from "@/services/creation";
+import { drainPending } from "@/services/outbox";
 
 /**
  * Book a workforce board interview.
@@ -148,4 +150,42 @@ export async function studentTransition(
   reason?: unknown,
 ): Promise<ActionResult> {
   return runTransition("student", { applicationId, to, reason });
+}
+
+/**
+ * Apply to a posting.
+ *
+ * A creation rather than a transition, so it does not route through
+ * `runTransition` — there is no existing application to move. The match score
+ * is computed server-side; a caller who could send their own would sort
+ * themselves to the top of every employer's queue.
+ */
+export async function applyToPosting(postingId: unknown): Promise<ActionResult> {
+  const input = validate(applyInput, { postingId });
+  if (!input.ok) return { ok: false, error: input.error };
+
+  const actor = await actorForPortal("student");
+
+  const limit = checkRateLimit(callerKey("apply", actor.user.id), LIMITS.mutation);
+  if (!limit.ok) {
+    logger.warn("rate_limit.exceeded", { action: "apply", userId: actor.user.id });
+    return {
+      ok: false,
+      error: `Too many attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
+  const result = await submitApplication(actor, input.data.postingId);
+  if (!result.ok) {
+    logger.warn("application.refused", { code: result.code });
+    return { ok: false, error: result.error };
+  }
+
+  logger.info("application.submitted", { applicationId: result.created.id });
+
+  await drainPending();
+  revalidatePath("/student");
+  revalidatePath("/business");
+  revalidatePath("/admin");
+  return { ok: true };
 }

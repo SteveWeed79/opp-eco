@@ -28,6 +28,7 @@ import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
 import { TransitionActions } from "@/components/TransitionActions";
+import { ApplyButton } from "./ApplyButton";
 import { studentTransition } from "./actions";
 
 export default async function StudentPage() {
@@ -276,9 +277,7 @@ export default async function StudentPage() {
                         </Badge>
                       )}
                       <div className="mt-2">
-                        <Button size="sm" variant="primary">
-                          Apply
-                        </Button>
+                        <ApplyButton postingId={posting.id} title={posting.title} />
                       </div>
                     </div>
                   </div>

@@ -153,7 +153,19 @@ export function SelectField({
  * A set of mutually exclusive choices rendered as cards.
  *
  * Used where the choice carries enough context that a native select would hide
- * it — picking a demo account, picking an interview slot.
+ * it — picking a demo account, picking an interview slot, picking a posting
+ * track.
+ *
+ * A **radiogroup**, not a row of toggle buttons. It rendered as buttons with
+ * `aria-pressed` for a while, which is valid ARIA and the wrong meaning: a
+ * toggle button announces "pressed"/"not pressed" and implies each option is
+ * independently on or off. A screen reader user got no indication that picking
+ * one released the others, and no "2 of 3" position. Radios say exactly that.
+ *
+ * Keyboard behaviour follows the radiogroup pattern rather than the button
+ * one: the group holds a single tab stop and arrow keys move *and* select
+ * within it, so tabbing past a set of options takes one keystroke instead of
+ * one per option.
  */
 export function ChoiceGroup<T extends string>({
   label,
@@ -168,20 +180,50 @@ export function ChoiceGroup<T extends string>({
   options: { value: T; label: string; description?: string; meta?: string }[];
   columns?: 1 | 2;
 }) {
+  const selectedIndex = options.findIndex((o) => o.value === value);
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const keys = ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+
+    const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
+    const from = selectedIndex === -1 ? 0 : selectedIndex;
+    const next =
+      (from + (forward ? 1 : -1) + options.length) % options.length;
+
+    onChange(options[next].value);
+    // Move focus with the selection, as the pattern requires — otherwise the
+    // focus ring stays behind and the next arrow press moves from the wrong
+    // place.
+    event.currentTarget
+      .querySelectorAll<HTMLElement>('[role="radio"]')
+      [next]?.focus();
+  }
+
   return (
     <fieldset>
       <legend className="block text-xs font-bold text-ink-700 uppercase tracking-wider mb-2">
         {label}
       </legend>
-      <div className={`grid gap-2 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>
-        {options.map((option) => {
+      <div
+        role="radiogroup"
+        aria-label={label}
+        onKeyDown={onKeyDown}
+        className={`grid gap-2 ${columns === 2 ? "sm:grid-cols-2" : ""}`}
+      >
+        {options.map((option, index) => {
           const selected = value === option.value;
           return (
             <button
               key={option.value}
               type="button"
+              role="radio"
+              aria-checked={selected}
+              // One tab stop for the whole group. When nothing is selected the
+              // first option takes it, so the group is always reachable.
+              tabIndex={selected || (selectedIndex === -1 && index === 0) ? 0 : -1}
               onClick={() => onChange(option.value)}
-              aria-pressed={selected}
               className={`text-left p-3.5 rounded-xl border transition-colors ${
                 selected
                   ? "border-brand-700 bg-brand-50"

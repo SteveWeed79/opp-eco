@@ -73,8 +73,9 @@ src/auth/        Session resolution behind a provider interface. Replacing
 src/data/        Repository contracts + in-memory seeded implementation;
                  Store/UnitOfWork for writes; Postgres schema and SQL
                  scoping alongside, not connected.
-src/services/    Write path (executeTransition), input validation,
-                 notification dispatch.
+src/services/    Write paths (executeTransition for existing records,
+                 creation for new ones), input validation, notification
+                 dispatch and the outbox that records it.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
 src/components/  Component library, rendered at /design.
@@ -86,7 +87,14 @@ Properties worth knowing:
 - **No database.** Everything runs off seeded fixtures. The Postgres schema and its scoping SQL are written and tested; connecting is an adapter swap.
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
 - **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
-- **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces.
+- **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
+- **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
+- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
+
+### Not wired, on purpose
+
+- **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
+- **Student verification and posting publication.** These are workflows over `Student` and `Posting`, not application transitions. They need their own state machines rather than buttons that guess.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

@@ -16,6 +16,7 @@ import type {
   AuditEvent,
   CreditAward,
   InterviewSlot,
+  Posting,
   Student,
 } from "@/domain/types";
 
@@ -41,6 +42,17 @@ export interface NotificationIntent {
  * not listed here cannot be written, which keeps the write surface reviewable.
  */
 export interface UnitOfWork {
+  /**
+   * Insert a new application.
+   *
+   * Separate from `saveApplication` rather than an upsert, because the two
+   * have opposite preconditions: a save must find an existing row at a known
+   * version, and a create must find none. Collapsing them would let a stale
+   * version check silently become an insert.
+   */
+  createApplication(application: Application): void;
+  /** Insert a new posting. Same reasoning as `createApplication`. */
+  createPosting(posting: Posting): void;
   saveApplication(application: Application, expectedVersion: number): void;
   saveStudent(student: Student): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
