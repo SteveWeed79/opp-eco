@@ -16,6 +16,9 @@ import {
   Td,
   Th,
 } from "@/components/ui";
+import { TransitionActions } from "@/components/TransitionActions";
+import { AuthorizeFunding } from "./AuthorizeFunding";
+import { boardTransition } from "./actions";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
 import { DEMO_NOW } from "@/data/seed";
@@ -217,8 +220,10 @@ export default async function BoardPage() {
                     const commitment = hours * rate;
                     // Ask the state machine whether this would actually go
                     // through, rather than re-deriving affordability here and
-                    // enabling a button the guard will refuse.
-                    const canAuthorize = availableTransitions(actor, {
+                    // enabling a button the guard will refuse. The proposed
+                    // hours and rate are patched in so the budget guard sees
+                    // the commitment it is being asked to approve.
+                    const offered = availableTransitions(actor, {
                       application: {
                         ...application,
                         fundingAuthorizedHours: hours,
@@ -227,8 +232,15 @@ export default async function BoardPage() {
                       student,
                       remainingBudget: remaining,
                       postingOwnerId: posting.businessId,
-                    }).some((t) => t.to === "funding_authorized");
-                    
+                    });
+                    const canAuthorize = offered.some(
+                      (t) => t.to === "funding_authorized",
+                    );
+                    // Everything else renders as an ordinary transition button.
+                    const otherTransitions = offered.filter(
+                      (t) => t.to !== "funding_authorized",
+                    );
+
                     return (
                       <tr key={application.id}>
                         <Td className="whitespace-nowrap">
@@ -262,30 +274,30 @@ export default async function BoardPage() {
                           </span>
                         </Td>
                         <Td>
-                          {application.status === "interview_scheduled" && (
-                            <Button size="sm" variant="dark">
-                              Record outcome
-                            </Button>
-                          )}
-                          {application.status === "interview_completed" && (
-                            <Button size="sm" variant="primary">
-                              Determine eligibility
-                            </Button>
-                          )}
-                          {application.status === "cleared" && (
-                            <Button
-                              size="sm"
-                              variant={canAuthorize ? "primary" : "ghost"}
-                              disabled={!canAuthorize}
-                              title={
-                                canAuthorize
-                                  ? undefined
-                                  : "Commitment exceeds the remaining allocation"
-                              }
-                            >
-                              {canAuthorize ? "Authorize funding" : "Over budget"}
-                            </Button>
-                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Authorizing funding gets its own control: it
+                                writes an hour cap against a finite allocation,
+                                so the number has to be seen and confirmed
+                                rather than assumed from a button press. */}
+                            {canAuthorize && (
+                              <AuthorizeFunding
+                                applicationId={application.id}
+                                studentName={student.name}
+                                defaultHours={hours}
+                                ratePerHour={rate}
+                                remainingBudget={remaining}
+                              />
+                            )}
+                            <TransitionActions
+                              applicationId={application.id}
+                              action={boardTransition}
+                              subject={`${student.name} — ${posting.title}`}
+                              transitions={otherTransitions.map((t) => ({
+                                to: t.to,
+                                label: t.label,
+                              }))}
+                            />
+                          </div>
                         </Td>
                       </tr>
                     );

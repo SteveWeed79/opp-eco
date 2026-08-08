@@ -15,6 +15,7 @@
 
 import type { NotificationIntent } from "@/data/store";
 import { repositories } from "@/data/memory";
+import { systemContext } from "@/auth/system";
 
 export interface RenderedNotification {
   recipientUserId: string;
@@ -56,6 +57,18 @@ const TEMPLATES: Record<
       `The clearance interview for ${p.postingTitle} is on ${formatWhen(p.startsAt)}. ` +
       `Once the board authorizes funding, the placement can start.`,
   }),
+  "application.submitted": (p) => ({
+    subject: `New applicant for ${p.postingTitle}`,
+    body:
+      `${p.studentName} applied — a ${p.score}% match on the skills you listed. ` +
+      `Reviewing promptly is the single biggest thing you can do to keep a candidate engaged.`,
+  }),
+  "posting.submitted": (p) => ({
+    subject: `${p.businessName} submitted a posting for review`,
+    body:
+      `"${p.postingTitle}" is waiting on your review before students can see it. ` +
+      `${p.selfSufficient ? "It clears your hours-per-credit threshold on its own." : "It is below your threshold, so it will need to stack with other work to carry credit."}`,
+  }),
   "application.stalled": (p) => ({
     subject: `${p.postingTitle} has been waiting ${p.days} days`,
     body:
@@ -87,18 +100,45 @@ function formatWhen(value: unknown): string {
 
 export function render(intent: NotificationIntent): RenderedNotification | null {
   const template = TEMPLATES[intent.kind];
-  const user = repositories.users.find(intent.recipientUserId);
-  // An unknown template or a missing recipient is a bug, not a message. Better
-  // to drop it loudly in the dispatcher's result than to send something empty.
-  if (!template || !user) return null;
+  // An unknown template is a bug, not a message. Better to drop it loudly in
+  // the dispatcher's result than to send something empty.
+  if (!template) return null;
+
+  const email = addressFor(intent);
+  if (!email) return null;
 
   const { subject, body } = template(intent.payload);
   return {
     recipientUserId: intent.recipientUserId,
-    recipientEmail: user.email,
+    recipientEmail: email,
     subject,
     body,
   };
+}
+
+/**
+ * Where a message actually goes.
+ *
+ * A user record wins when there is one. Failing that, an organization's
+ * published contact — an employer is reachable long before anyone there has an
+ * account, and refusing to tell them their candidate cleared because of that
+ * would be the platform failing at its one job.
+ */
+function addressFor(intent: NotificationIntent): string | null {
+  const user = repositories.users.find(intent.recipientUserId);
+  if (user) return user.email;
+
+  if (intent.recipientOrganizationId) {
+    // Dispatch belongs to nobody — it runs after the acting user's request is
+    // over, on behalf of the system. `systemContext` is the named seam for
+    // that, rather than smuggling an admin session into a background read.
+    const org = repositories.organizations.find(
+      systemContext(),
+      intent.recipientOrganizationId,
+    );
+    if (org) return org.contactEmail;
+  }
+  return null;
 }
 
 /** Stand-in channel. Replacing it with a real sender is one class. */

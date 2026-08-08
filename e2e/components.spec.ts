@@ -125,3 +125,35 @@ test.describe("toasts", () => {
     await expect(alert).toBeVisible();
   });
 });
+
+test.describe("choice group", () => {
+  test("behaves as a radiogroup, not a row of toggle buttons", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Sign on" }).click();
+
+    const group = page.getByRole("radiogroup");
+    await expect(group).toBeVisible();
+
+    const options = group.getByRole("radio");
+    await expect(options.first()).toHaveAttribute("aria-checked", "true");
+
+    // Arrow keys move *and* select, which is the radiogroup pattern. Toggle
+    // buttons would need Tab to each one and Space to press it, and would
+    // never tell a screen reader that choosing one released the others.
+    await options.first().focus();
+    await page.keyboard.press("ArrowDown");
+
+    await expect(options.nth(1)).toHaveAttribute("aria-checked", "true");
+    await expect(options.first()).toHaveAttribute("aria-checked", "false");
+
+    // One tab stop for the whole group: only the selected option is reachable
+    // by Tab, so passing five accounts costs one keystroke rather than five.
+    await expect(options.nth(1)).toHaveAttribute("tabindex", "0");
+    await expect(options.first()).toHaveAttribute("tabindex", "-1");
+
+    // Wrapping at the end, so the group is navigable in one direction.
+    const count = await options.count();
+    for (let i = 1; i < count; i++) await page.keyboard.press("ArrowDown");
+    await expect(options.first()).toHaveAttribute("aria-checked", "true");
+  });
+});

@@ -59,6 +59,62 @@ export const overrideInput = z.object({
   reason,
 });
 
+/**
+ * Free text that other people read: a posting title, a description, a
+ * deliverable. Trimmed and bounded — an unbounded description is a storage
+ * and rendering problem, and a blank one is a posting nobody can answer.
+ */
+const shortText = z.string().trim().min(1).max(200);
+const longText = z.string().trim().min(1).max(5000);
+
+/** A skill tag. Bounded and pattern-checked so tags stay a vocabulary. */
+const skill = z.string().trim().min(1).max(40);
+
+export const applyInput = z.object({
+  postingId: id,
+});
+
+/**
+ * A new posting.
+ *
+ * The two tracks have genuinely different shapes — an hourly standard
+ * internship and a fixed-fee micro project — so this validates the union
+ * rather than one loose object with every field optional. A micro posting with
+ * a `wagePerHour` is not a slightly wrong standard posting; it is a caller
+ * who has misunderstood the model.
+ */
+const postingCommon = {
+  title: shortText,
+  description: longText,
+  county: shortText,
+  skillsRequired: z.array(skill).max(20).default([]),
+  skillsPreferred: z.array(skill).max(20).default([]),
+  openings: z.number().int().positive().max(50),
+};
+
+export const postingInput = z.discriminatedUnion("track", [
+  z.object({
+    ...postingCommon,
+    track: z.literal("standard"),
+    wagePerHour: z.number().int().positive().max(200),
+    hoursPerWeek: z.number().int().positive().max(40),
+    weeks: z.number().int().positive().max(52),
+    creditHours: z.number().int().positive().max(12),
+    supervisorName: shortText,
+  }),
+  z.object({
+    ...postingCommon,
+    track: z.literal("micro"),
+    // Parker Dewey's model: a scoped project of 5–40 hours for a fixed fee.
+    // The bounds are the model, not arbitrary limits — a 200-hour "micro"
+    // project is a standard internship avoiding the board.
+    projectFee: z.number().int().positive().max(10_000),
+    estimatedHours: z.number().int().min(5).max(40),
+    deliverable: longText,
+    dueWithinDays: z.number().int().positive().max(180),
+  }),
+]);
+
 export type ValidationFailure = { ok: false; error: string; code: "invalid" };
 
 /**

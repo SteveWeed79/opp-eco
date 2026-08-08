@@ -27,6 +27,9 @@ import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflo
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
+import { TransitionActions } from "@/components/TransitionActions";
+import { ApplyButton } from "./ApplyButton";
+import { studentTransition } from "./actions";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
@@ -154,12 +157,16 @@ export default async function StudentPage() {
                   )}
 
                   {options.length > 0 && !needsBoard && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {options.map((option) => (
-                        <Button key={option.to} size="sm" variant="dark">
-                          {option.label}
-                        </Button>
-                      ))}
+                    <div className="mt-4">
+                      <TransitionActions
+                        applicationId={application.id}
+                        action={studentTransition}
+                        subject={posting.title}
+                        transitions={options.map((o) => ({
+                          to: o.to,
+                          label: o.label,
+                        }))}
+                      />
                     </div>
                   )}
                 </li>
@@ -270,9 +277,7 @@ export default async function StudentPage() {
                         </Badge>
                       )}
                       <div className="mt-2">
-                        <Button size="sm" variant="primary">
-                          Apply
-                        </Button>
+                        <ApplyButton postingId={posting.id} title={posting.title} />
                       </div>
                     </div>
                   </div>
