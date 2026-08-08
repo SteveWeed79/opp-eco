@@ -86,33 +86,14 @@ export async function bookInterviewSlot(
         slot.version,
       );
     },
-    notifications: (moved) => {
-      const student = repositories.students.find(actor, moved.studentId);
-      const posting = repositories.postings.find(actor, moved.postingId);
-      const board = repositories.organizations.find(actor, slot.boardId);
-      return [
-        {
-          // The board that owns the slot, not a hardcoded officer. Booking a
-          // Flint Hills slot used to email the Southeast Kansas contact.
-          recipientUserId: `contact:${slot.boardId}`,
-          recipientOrganizationId: board?.id ?? slot.boardId,
-          kind: "interview.booked.board",
-          payload: {
-            studentName: student?.name,
-            postingTitle: posting?.title,
-            startsAt: slot.startsAt,
-          },
-        },
-        {
-          // Likewise the employer that owns the posting. This was pinned to
-          // Apex Robotics' contact, so booking an interview for a Frontier
-          // Health placement told Apex about it.
-          recipientUserId: `contact:${posting?.businessId ?? "unknown"}`,
-          recipientOrganizationId: posting?.businessId,
-          kind: "interview.booked.employer",
-          payload: { postingTitle: posting?.title, startsAt: slot.startsAt },
-        },
-      ];
+    // Who hears about a booking is decided by the notification policy, not
+    // here — the student, the board, and the employer all get a message keyed
+    // to `interview_scheduled`. All this adds is the one fact the policy
+    // cannot know: which slot was taken.
+    payload: {
+      startsAt: slot.startsAt,
+      officerName: slot.officerName,
+      durationMinutes: slot.durationMinutes,
     },
   });
 

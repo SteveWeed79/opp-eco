@@ -16,6 +16,7 @@
 import type { NotificationIntent } from "@/data/store";
 import { repositories } from "@/data/memory";
 import { systemContext } from "@/auth/system";
+import { templateFor } from "./templates";
 
 export interface RenderedNotification {
   recipientUserId: string;
@@ -34,72 +35,8 @@ export interface NotificationChannel {
   send(notification: RenderedNotification): Promise<void>;
 }
 
-/**
- * Message templates.
- *
- * Every message names what happened, who it concerns, and what the recipient
- * should do — a notification that only reports a state change makes the reader
- * work out their own next step, which is how queues stall.
- */
-const TEMPLATES: Record<
-  string,
-  (payload: Record<string, unknown>) => { subject: string; body: string }
-> = {
-  "interview.booked.board": (p) => ({
-    subject: `Interview booked: ${p.studentName}`,
-    body:
-      `${p.studentName} booked a clearance interview for ${p.postingTitle}, ` +
-      `on ${formatWhen(p.startsAt)}. Nothing else is needed until then.`,
-  }),
-  "interview.booked.employer": (p) => ({
-    subject: `Your candidate has booked their board interview`,
-    body:
-      `The clearance interview for ${p.postingTitle} is on ${formatWhen(p.startsAt)}. ` +
-      `Once the board authorizes funding, the placement can start.`,
-  }),
-  "application.submitted": (p) => ({
-    subject: `New applicant for ${p.postingTitle}`,
-    body:
-      `${p.studentName} applied — a ${p.score}% match on the skills you listed. ` +
-      `Reviewing promptly is the single biggest thing you can do to keep a candidate engaged.`,
-  }),
-  "posting.submitted": (p) => ({
-    subject: `${p.businessName} submitted a posting for review`,
-    body:
-      `"${p.postingTitle}" is waiting on your review before students can see it. ` +
-      `${p.selfSufficient ? "It clears your hours-per-credit threshold on its own." : "It is below your threshold, so it will need to stack with other work to carry credit."}`,
-  }),
-  "application.stalled": (p) => ({
-    subject: `${p.postingTitle} has been waiting ${p.days} days`,
-    body:
-      `This application has sat at "${p.status}" for ${p.days} days and is ` +
-      `waiting on you. Placements that stall here are the ones most likely to fall through.`,
-  }),
-  "funding.authorized": (p) => ({
-    subject: `Funding approved for ${p.studentName}`,
-    body:
-      `The board authorized up to ${p.hours} hours at $${p.rate}/hour. ` +
-      `You can start the placement and log hours against it.`,
-  }),
-  "credit.granted": (p) => ({
-    subject: `${p.creditHours} credit granted`,
-    body: `${p.collegeName} granted ${p.creditHours} credit for ${p.courseMapping}.`,
-  }),
-};
-
-function formatWhen(value: unknown): string {
-  if (typeof value !== "string") return "a scheduled time";
-  return new Date(value).toLocaleString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 export function render(intent: NotificationIntent): RenderedNotification | null {
-  const template = TEMPLATES[intent.kind];
+  const template = templateFor(intent.kind);
   // An unknown template is a bug, not a message. Better to drop it loudly in
   // the dispatcher's result than to send something empty.
   if (!template) return null;
@@ -151,9 +88,24 @@ export const consoleChannel: NotificationChannel = {
   },
 };
 
+/**
+ * The name a channel gives an error it will never succeed at retrying.
+ *
+ * A contract rather than a class import, so `dispatch` stays ignorant of what
+ * any particular transport considers permanent — email has reserved domains,
+ * an SMS channel would have unroutable numbers. Matching on the error *name*
+ * beats matching on its message, which is prose and gets reworded.
+ */
+export const PERMANENT_FAILURE = "UndeliverableAddress";
+
 export interface DispatchResult {
   sent: number;
-  failed: { intent: NotificationIntent; error: string }[];
+  failed: {
+    intent: NotificationIntent;
+    error: string;
+    /** True when retrying is pointless. The caller must not requeue these. */
+    permanent: boolean;
+  }[];
   undeliverable: NotificationIntent[];
 }
 
@@ -187,13 +139,16 @@ export async function dispatch(
       result.failed.push({
         intent,
         error: error instanceof Error ? error.message : String(error),
+        permanent: error instanceof Error && error.name === PERMANENT_FAILURE,
       });
     }
   }
 
-  // Anything that failed goes back for the next run; anything undeliverable
-  // does not, because retrying a missing template will never succeed.
-  queue.push(...result.failed.map((f) => f.intent));
+  // Transient failures go back for the next run. Permanent ones do not, nor do
+  // undeliverable ones — retrying a missing template or an address that cannot
+  // receive mail will never succeed, and a poison message that requeues itself
+  // forever blocks everything behind it.
+  queue.push(...result.failed.filter((f) => !f.permanent).map((f) => f.intent));
 
   return result;
 }

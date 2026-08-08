@@ -36,6 +36,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# The template is documentation, not configuration — it names the variables
+# and explains the safe defaults without carrying a value.
+!.env.example
 
 # vercel
 .vercel

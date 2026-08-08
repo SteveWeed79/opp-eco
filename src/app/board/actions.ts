@@ -64,8 +64,6 @@ export async function authorizeFunding(
   });
   if (!input.ok) return { ok: false, error: input.error };
 
-  const student = repositories.students.find(actor, application.studentId);
-
   return runTransition(
     "board",
     { applicationId, to: "funding_authorized" },
@@ -75,21 +73,6 @@ export async function authorizeFunding(
         fundingAuthorizedHours: input.data.hours,
         fundingAuthorizedRate: input.data.ratePerHour,
       },
-      notifications: () => [
-        {
-          // Most employers have a published contact and no user account. The
-          // organization id is the fallback address; resolution prefers a user
-          // record where one exists.
-          recipientUserId: `contact:${posting.businessId}`,
-          recipientOrganizationId: posting.businessId,
-          kind: "funding.authorized",
-          payload: {
-            studentName: student?.name,
-            hours: input.data.hours,
-            rate: input.data.ratePerHour,
-          },
-        },
-      ],
     },
   );
 }

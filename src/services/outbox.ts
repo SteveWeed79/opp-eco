@@ -20,6 +20,8 @@ import { dispatch, render, type NotificationChannel } from "./notifications";
 import { pendingNotifications } from "@/data/memory-store";
 import type { NotificationIntent } from "@/data/store";
 import { logger } from "./logging";
+import { emailConfig } from "./email/config";
+import { resendChannel } from "./email/resend";
 
 export type DeliveryState = "sent" | "failed" | "undeliverable";
 
@@ -34,6 +36,10 @@ export interface DeliveredNotification {
   state: DeliveryState;
   /** Why it failed. Present only when `state` is not "sent". */
   error?: string;
+  /** How it left: a real send, or a log line. The outbox must not conflate them. */
+  via?: "resend" | "console";
+  /** Set when a guard sent it somewhere other than the intended recipient. */
+  redirectedTo?: string;
 }
 
 /**
@@ -55,20 +61,38 @@ function record(entry: DeliveredNotification) {
 /**
  * Sends, and remembers having sent.
  *
- * Still writes to the console, because a developer running the demo should see
- * the message without opening a portal.
+ * Wraps whichever transport is configured: Resend when there is an API key,
+ * the console otherwise. The recording is the same either way, so the outbox
+ * page does not care how a message left.
  */
-export function recordingChannel(marketId: string, kind: string): NotificationChannel {
+export function recordingChannel(
+  marketId: string,
+  kind: string,
+  payload: Record<string, unknown> = {},
+): NotificationChannel {
+  const config = emailConfig();
+  const transport = config.enabled ? resendChannel(kind, payload, config) : null;
+
   return {
-    name: "recording",
+    name: transport ? `recording+${transport.name}` : "recording",
     async send(notification) {
+      if (transport) await transport.send(notification);
+
       record({
         ...notification,
         kind,
         marketId,
         at: new Date().toISOString(),
         state: "sent",
+        via: transport ? "resend" : "console",
+        // Stated on the record so the outbox does not imply a message left the
+        // building when it only reached a log line.
+        redirectedTo: config.redirectTo ?? undefined,
       });
+
+      // Still logged, because a developer running the demo should see the
+      // message without opening a portal — and with no transport configured
+      // this is the only place it exists.
       console.info(
         `[notify:${notification.recipientEmail}] ${notification.subject}\n  ${notification.body}`,
       );
@@ -108,14 +132,25 @@ async function drain(): Promise<{ sent: number; failed: number }> {
 
   for (const intent of batch) {
     try {
-      const result = await dispatch([intent], recordingChannel(intent.marketId, intent.kind));
+      const result = await dispatch(
+        [intent],
+        recordingChannel(intent.marketId, intent.kind, intent.payload),
+      );
       sent += result.sent;
       failed += result.failed.length;
 
       for (const failure of result.failed) {
-        recordFailure(failure.intent, "failed", failure.error);
-        // Requeue, so a transient failure is retried on the next drain.
-        pendingNotifications.push(failure.intent);
+        // The channel says whether a retry could ever work — a reserved-domain
+        // address never will, and the whole seed uses reserved domains.
+        recordFailure(
+          failure.intent,
+          failure.permanent ? "undeliverable" : "failed",
+          failure.error,
+        );
+        // Requeued here rather than relying on `dispatch` to do it: this loop
+        // hands it a throwaway single-element array, so the queue it puts
+        // failures back into is not the one that gets drained next time.
+        if (!failure.permanent) pendingNotifications.push(failure.intent);
       }
       for (const dead of result.undeliverable) {
         // Not requeued: an unknown template or a missing recipient will never
