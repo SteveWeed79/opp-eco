@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { contextFor } from "@/data/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
+import { bookInterviewInput, validate } from "@/services/validation";
 
 /**
  * Book a workforce board interview.
@@ -18,14 +19,20 @@ import { executeTransition } from "@/services/transitions";
  * nothing about what someone can attempt.
  */
 export async function bookInterviewSlot(
-  applicationId: string,
-  slotId: string,
+  applicationId: unknown,
+  slotId: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Validate before anything else. The arguments arrive over the wire and are
+  // typed `unknown` on purpose — a caller posting directly is not bound by the
+  // signature the UI happens to use.
+  const input = validate(bookInterviewInput, { applicationId, slotId });
+  if (!input.ok) return { ok: false, error: input.error };
+
   const actor = contextFor("student");
 
   const slot = repositories.interviewSlots
     .list(actor)
-    .find((s) => s.id === slotId);
+    .find((s) => s.id === input.data.slotId);
 
   if (!slot) {
     return { ok: false, error: "That interview slot is no longer listed." };
@@ -34,15 +41,15 @@ export async function bookInterviewSlot(
     return { ok: false, error: "Someone booked that slot first. Pick another." };
   }
 
-  const application = repositories.applications.find(actor, applicationId);
+  const application = repositories.applications.find(actor, input.data.applicationId);
   if (!application) {
     return { ok: false, error: "Application not found." };
   }
 
   const result = await executeTransition(actor, {
-    applicationId,
+    applicationId: input.data.applicationId,
     to: "interview_scheduled",
-    patch: { interviewSlotId: slotId },
+    patch: { interviewSlotId: input.data.slotId },
     // Claiming the slot belongs to the same transaction as moving the
     // application. A booked slot with an unmoved application, or the reverse,
     // is a placement nobody is tracking.
