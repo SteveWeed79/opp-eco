@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
@@ -86,9 +87,13 @@ export async function bookInterviewSlot(
     notifications: (moved) => {
       const student = repositories.students.find(actor, moved.studentId);
       const posting = repositories.postings.find(actor, moved.postingId);
+      const board = repositories.organizations.find(actor, slot.boardId);
       return [
         {
-          recipientUserId: "u-marcia",
+          // The board that owns the slot, not a hardcoded officer. Booking a
+          // Flint Hills slot used to email the Southeast Kansas contact.
+          recipientUserId: `contact:${slot.boardId}`,
+          recipientOrganizationId: board?.id ?? slot.boardId,
           kind: "interview.booked.board",
           payload: {
             studentName: student?.name,
@@ -97,7 +102,11 @@ export async function bookInterviewSlot(
           },
         },
         {
-          recipientUserId: "u-dana",
+          // Likewise the employer that owns the posting. This was pinned to
+          // Apex Robotics' contact, so booking an interview for a Frontier
+          // Health placement told Apex about it.
+          recipientUserId: `contact:${posting?.businessId ?? "unknown"}`,
+          recipientOrganizationId: posting?.businessId,
           kind: "interview.booked.employer",
           payload: { postingTitle: posting?.title, startsAt: slot.startsAt },
         },
@@ -123,4 +132,20 @@ export async function bookInterviewSlot(
   revalidatePath("/board");
   revalidatePath("/admin");
   return { ok: true };
+}
+
+/**
+ * Everything else a student can do: confirm interest after being shortlisted,
+ * withdraw, submit completed work for credit.
+ *
+ * `bookInterviewSlot` stays separate because it claims a slot in the same
+ * transaction as the status change — the one transition here that writes to a
+ * second entity.
+ */
+export async function studentTransition(
+  applicationId: unknown,
+  to: unknown,
+  reason?: unknown,
+): Promise<ActionResult> {
+  return runTransition("student", { applicationId, to, reason });
 }

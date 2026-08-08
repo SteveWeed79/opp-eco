@@ -23,6 +23,15 @@ import type {
 export interface NotificationIntent {
   marketId: string;
   recipientUserId: string;
+  /**
+   * Address the organization's contact when the recipient has no user record.
+   *
+   * Most employers in a real market are a name and an email long before anyone
+   * from that company has an account — the platform still has to be able to
+   * tell them their candidate cleared. Resolution prefers the user; this is the
+   * fallback, not a second recipient.
+   */
+  recipientOrganizationId?: string;
   kind: string;
   payload: Record<string, unknown>;
 }
