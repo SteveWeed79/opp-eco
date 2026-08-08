@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { actorForPortal } from "@/auth/session";
 import { outboxFor } from "@/services/outbox";
+import { emailConfig } from "@/services/email/config";
 
 /**
  * The notification outbox.
@@ -30,6 +31,10 @@ export default async function OutboxPage() {
   // Administrators are the one cross-market role; scoping to their own market
   // when they have one keeps a market operator from reading another's traffic.
   const { delivered, pending } = outboxFor(admin.membership.marketId);
+
+  const config = emailConfig();
+  const emailOn = config.enabled;
+  const redirect = config.redirectTo;
 
   const failed = delivered.filter((n) => n.state !== "sent");
   const sent = delivered.filter((n) => n.state === "sent");
@@ -48,6 +53,41 @@ export default async function OutboxPage() {
         title="Notification outbox"
         subtitle="What the system told people, and what it failed to tell them"
       />
+
+      {/* The single most important thing on this page: whether "delivered"
+          means an email left the building or a line hit a log. Conflating the
+          two would let an administrator believe a board was told when nothing
+          was sent. */}
+      <Card
+        className={emailOn ? "p-5 bg-good-50 border-good-100" : "p-5 bg-ink-50"}
+      >
+        <div className="flex flex-wrap items-start gap-3">
+          <span
+            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+              emailOn ? "bg-good-600 text-white" : "bg-ink-200 text-ink-700"
+            }`}
+          >
+            <Mail className="w-4 h-4" aria-hidden="true" />
+          </span>
+          <div className="flex-1 min-w-[16rem]">
+            <p className="font-bold text-sm text-ink-950">
+              {emailOn
+                ? "Email is sending through Resend"
+                : "Email is not configured — messages are logged, not sent"}
+            </p>
+            <p className="text-xs text-ink-600 mt-1 max-w-2xl">
+              {emailOn
+                ? redirect
+                  ? `Every message is redirected to ${redirect}, whatever recipient it names. Unset EMAIL_REDIRECT_TO to deliver to real recipients.`
+                  : "Messages go to their real recipients. Addresses on reserved domains (every seeded organization uses one) are refused rather than bounced."
+                : "Set RESEND_API_KEY to send. Until then everything below is a record of what would have gone out."}
+            </p>
+          </div>
+          <Badge tone={emailOn ? "good" : "neutral"}>
+            {emailOn ? (redirect ? "Redirected" : "Live") : "Console only"}
+          </Badge>
+        </div>
+      </Card>
 
       <div className="grid sm:grid-cols-3 gap-4">
         <Stat label="Delivered" value={String(sent.length)} tone="good" />

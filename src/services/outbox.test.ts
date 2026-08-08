@@ -85,6 +85,43 @@ describe("the notification outbox", () => {
     expect(outboxFor(null).delivered).toHaveLength(2);
   });
 
+  it("requeues a transient failure so it is retried", async () => {
+    // The queue handed to `dispatch` is a throwaway single-element array, so
+    // its own requeue lands somewhere that is never drained again. If this
+    // stops holding, transient failures are silently dropped and the outbox
+    // reports a message as failed that nothing will ever retry.
+    const boom = vi
+      .spyOn(console, "info")
+      .mockImplementationOnce(() => {
+        throw new Error("transient");
+      });
+    pendingNotifications.push(bookedForBoard);
+
+    await drainPending();
+
+    expect(pendingNotifications).toHaveLength(1);
+    expect(deliveredNotifications[0].state).toBe("failed");
+    boom.mockRestore();
+  });
+
+  it("does not requeue a permanent failure", async () => {
+    // A reserved-domain address will never accept mail. Retrying it on every
+    // subsequent drain would block the queue behind it forever.
+    const permanent = Object.assign(new Error("reserved domain"), {
+      name: "UndeliverableAddress",
+    });
+    const boom = vi.spyOn(console, "info").mockImplementationOnce(() => {
+      throw permanent;
+    });
+    pendingNotifications.push(bookedForBoard);
+
+    await drainPending();
+
+    expect(pendingNotifications).toHaveLength(0);
+    expect(deliveredNotifications[0].state).toBe("undeliverable");
+    boom.mockRestore();
+  });
+
   it("never throws, because the state change already committed", async () => {
     // A send that fails must not report a durable transition as a failure —
     // `drainPending` is awaited *after* the transaction commits.

@@ -28,7 +28,14 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Shell signedInAs={actor?.user.name}>{children}</Shell>
+        {/* The role, not just the name: the switcher has to know which portals
+            this session can actually reach. */}
+        <Shell
+          signedInAs={actor?.user.name}
+          signedInRole={actor?.membership.role}
+        >
+          {children}
+        </Shell>
       </body>
     </html>
   );
