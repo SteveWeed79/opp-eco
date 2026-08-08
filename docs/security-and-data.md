@@ -161,12 +161,27 @@ Authorization enforced at the repository layer with tests · one guarded write p
 | Log redaction | `src/services/logging.ts` | Redacts by key fragment, bounds depth and length, survives cyclic objects |
 | `npm audit` at high, Dependabot weekly | CI, `.github/dependabot.yml` | Actions are grouped and updated too — a supply-chain path that is easy to forget because it is not in package.json |
 | Vulnerability reporting path | `SECURITY.md` | Names cross-tenant access and audit tampering as the findings we most want |
+| Upload validation, quarantine, signed retrieval | `src/services/uploads/` | See below |
+
+### Uploads
+
+The only place the application accepts arbitrary bytes, so it gets its own note. Everything a client says about a file is treated as a lie: the declared MIME type, the extension, and the filename are all attacker-controlled, and only the bytes are evidence.
+
+- **Allowlist per purpose**, never a denylist — a denylist is a list of the attacks someone already thought of. SVG and HTML are absent from every list because both execute in a browser.
+- **Magic-byte verification.** The extension must agree with the actual signature, which is what catches an executable renamed to `.pdf`.
+- **Generated storage keys.** A UUID, never derived from the filename — that is what actually defeats traversal. Not a content hash either, which would let someone confirm they hold the same file as a student, and not a sequence, which would let them walk the store.
+- **Quarantine before availability.** Files are stored `pending` and only retrievable once a scan clears them. A scanner failure leaves them quarantined, because failing open on a malware check defeats the check. Infected files are deleted rather than kept.
+- **Never served inline.** Always `Content-Disposition: attachment`, `nosniff`, and a sandbox CSP. This matters because a `.docx` is only provably a zip, and a zip can contain anything.
+- **Signed, expiring URLs *and* an authorization check on every retrieval.** The signature stops key guessing; the check stops a forwarded link being as good as the record. Retrieval follows the record's own disclosure rules — an employer who cannot see a student's email cannot open their resume.
+- **Uniform 404s.** "Not yours" and "does not exist" are indistinguishable, so the endpoint cannot be used to confirm which files exist.
+
+The known limitation, stated rather than hidden: a `.docx` signature only proves the file is a zip. Nothing served inline is the mitigation.
 
 ### Still buildable
 
 | Control | Why it matters here |
 |---|---|
-| Upload hardening | Content-type sniffing, size caps, no execution path, signed URLs — needed the moment resumes and deliverables are real |
+| Real malware scanning | The stub detects only the EICAR test string. ClamAV or a hosted API is one class |
 | Shared-store rate limiting | The current limiter is per instance; a distributed one needs Redis or Vercel KV |
 | Branch protection requiring CI | CI reports today but does not block; a red PR is still mergeable |
 
