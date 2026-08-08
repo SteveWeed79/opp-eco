@@ -27,15 +27,16 @@ import type {
 import { scoreMatch } from "@/domain/matching";
 
 /**
- * The demo's clock, anchored at module load rather than to a fixed date.
+ * The demo's clock for *historical* fixtures, anchored once at module load.
  *
- * Every fixture timestamp is expressed relative to this, so dwell times stay
- * stable ("19 days waiting" is always 19 days) while future-dated interview
- * slots stay genuinely in the future. A hardcoded date would leave the board's
- * "upcoming" availability sitting in the past a month after deployment.
+ * Every past-dated timestamp derives from this, and dwell times are measured
+ * against the same anchor, so "19 days waiting" reads 19 days no matter how
+ * long the process has been up. That stability is the point — a demo whose
+ * numbers creep upward while nobody touches it is worse than one frozen.
  *
- * Pages opt out of static prerendering so this re-anchors instead of freezing
- * into the build output — see the root layout.
+ * Future-dated data cannot use this anchor. Interview slots built as
+ * "tomorrow" relative to module load are in the past by the day after, so they
+ * are computed per call against real time instead — see `interviewSlotsAt`.
  */
 export const DEMO_NOW = new Date();
 
@@ -294,10 +295,8 @@ export const organizations: Organization[] = [
 // Users — fake sign-on picks one of these
 // ---------------------------------------------------------------------------
 
-export const users: User[] = [
+const staffUsers: User[] = [
   { id: "u-admin", name: "Steve Weed", email: "admin@opportunityecosystem.example" },
-  { id: "u-omar", name: "Omar Haddad", email: "haddado@students.verdigris.example.edu" },
-  { id: "u-alex", name: "Alex Miller", email: "amiller@students.verdigris.example.edu" },
   { id: "u-dana", name: "Dana Reyes", email: "dreyes@apexrobotics.example.com" },
   { id: "u-ellen", name: "Dr. Ellen Vance", email: "evance@verdigris.example.edu" },
   { id: "u-marcia", name: "Marcia Delgado", email: "mdelgado@sekwp.example.org" },
@@ -499,10 +498,19 @@ const studentSeeds: StudentSeed[] = [
   },
 ];
 
+/**
+ * One derivation for both the student record and the users table, so a
+ * session's user id always resolves to a student. Deriving `u-${s.id}` gave
+ * `u-stu-omar`, which matched neither.
+ */
+function userIdForStudent(studentId: string): string {
+  return `u-${studentId.replace(/^stu-/, "")}`;
+}
+
 export const students: Student[] = studentSeeds.map((s) => ({
   id: s.id,
   marketId: "mkt-pittsburg",
-  userId: s.id === "stu-alex" ? "u-alex" : `u-${s.id}`,
+  userId: userIdForStudent(s.id),
   collegeId: "org-verdigris",
   name: s.name,
   email: `${s.name.split(" ")[0].toLowerCase()}${s.name.split(" ")[1].toLowerCase()[0]}@students.verdigris.example.edu`,
@@ -518,6 +526,20 @@ export const students: Student[] = studentSeeds.map((s) => ({
   eligibilityExpiresOn: s.eligibilityDaysAgo ? daysAhead(365 - s.eligibilityDaysAgo) : null,
   verifiedOn: s.status === "verified" ? daysAgo(60) : null,
 }));
+
+/**
+ * Staff plus one user per student, derived from the same source as the student
+ * records so a session's user id always resolves both ways.
+ */
+export const users: User[] = [
+  ...staffUsers,
+  ...students.map((s) => ({ id: s.userId, name: s.name, email: s.email })),
+];
+
+/** Resolve the student a signed-in user is, if any. */
+export function studentForUser(userId: string): Student | null {
+  return students.find((s) => s.userId === userId) ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Postings
@@ -768,6 +790,7 @@ interface AppSeed {
   postingId: string;
   studentId: string;
   status: ApplicationStatus;
+  furthestStatus?: ApplicationStatus;
   submittedDaysAgo: number;
   statusSinceDaysAgo: number;
   fundingHours?: number;
@@ -1010,6 +1033,22 @@ const appSeeds: AppSeed[] = [
     deliverableAccepted: true,
   },
 
+  // --- Finished and closed out. Exercises funnel reporting: a closed
+  // application must still count toward every stage it actually reached.
+  {
+    id: "app-26",
+    postingId: "post-apex-swe",
+    studentId: "stu-derek",
+    status: "closed",
+    furthestStatus: "credit_granted",
+    submittedDaysAgo: 260,
+    statusSinceDaysAgo: 40,
+    fundingHours: 210,
+    hoursLogged: 198,
+    hoursApproved: 198,
+    creditAwardId: "credit-3",
+  },
+
   // --- Rejections and withdrawals ---
   {
     id: "app-22",
@@ -1043,6 +1082,7 @@ export const applications: Application[] = appSeeds.map((a) => {
     studentId: a.studentId,
     track: trackOf(a.postingId),
     status: a.status,
+    furthestStatus: a.furthestStatus,
     submittedOn: daysAgo(a.submittedDaysAgo),
     statusSince: daysAgo(a.statusSinceDaysAgo),
     matchScore: scoreMatch(student, posting, "Crawford"),
@@ -1061,68 +1101,55 @@ export const applications: Application[] = appSeeds.map((a) => {
 // Board interview slots
 // ---------------------------------------------------------------------------
 
-export const interviewSlots: InterviewSlot[] = [
-  {
-    id: "slot-1",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(1, 14),
-    durationMinutes: 30,
-    officerName: "Marcia Delgado",
-    bookedByStudentId: null,
-    meetingUrl: null,
-  },
-  {
-    id: "slot-2",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(1, 16),
-    durationMinutes: 30,
-    officerName: "Marcia Delgado",
-    bookedByStudentId: null,
-    meetingUrl: null,
-  },
+interface SlotSeed {
+  id: string;
+  inDays: number;
+  hour: number;
+  officerName: string;
+  bookedByStudentId: string | null;
+  meetingUrl: string | null;
+}
+
+const slotSeeds: SlotSeed[] = [
+  { id: "slot-1", inDays: 1, hour: 14, officerName: "Marcia Delgado", bookedByStudentId: null, meetingUrl: null },
+  { id: "slot-2", inDays: 1, hour: 16, officerName: "Marcia Delgado", bookedByStudentId: null, meetingUrl: null },
   {
     id: "slot-3",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(2, 15),
-    durationMinutes: 30,
+    inDays: 2,
+    hour: 15,
     officerName: "Wes Trumbull",
     bookedByStudentId: "stu-nina",
     meetingUrl: "https://meet.example.org/sekwp-nina",
   },
-  {
-    id: "slot-4",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(3, 14),
-    durationMinutes: 30,
-    officerName: "Wes Trumbull",
-    bookedByStudentId: null,
-    meetingUrl: null,
-  },
-  {
-    id: "slot-5",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(3, 15),
-    durationMinutes: 30,
-    officerName: "Marcia Delgado",
-    bookedByStudentId: null,
-    meetingUrl: null,
-  },
-  {
-    id: "slot-6",
-    marketId: "mkt-pittsburg",
-    boardId: "org-sekwp",
-    startsAt: daysAhead(7, 14),
-    durationMinutes: 30,
-    officerName: "Wes Trumbull",
-    bookedByStudentId: null,
-    meetingUrl: null,
-  },
+  { id: "slot-4", inDays: 3, hour: 14, officerName: "Wes Trumbull", bookedByStudentId: null, meetingUrl: null },
+  { id: "slot-5", inDays: 3, hour: 15, officerName: "Marcia Delgado", bookedByStudentId: null, meetingUrl: null },
+  { id: "slot-6", inDays: 7, hour: 14, officerName: "Wes Trumbull", bookedByStudentId: null, meetingUrl: null },
 ];
+
+/**
+ * Board availability, computed against real time on every call rather than
+ * against the module-load anchor.
+ *
+ * Slots are the only forward-dated fixtures, and a demo that offers to book an
+ * interview for a date that has already passed undermines the exact screen it
+ * exists to show. Everything else stays anchored so the numbers hold still.
+ */
+export function interviewSlotsAt(now: Date = new Date()): InterviewSlot[] {
+  return slotSeeds.map((s) => {
+    const startsAt = new Date(now.getTime() + s.inDays * 86_400_000);
+    startsAt.setUTCHours(s.hour, 0, 0, 0);
+    return {
+      id: s.id,
+      marketId: "mkt-pittsburg",
+      boardId: "org-sekwp",
+      startsAt: startsAt.toISOString(),
+      durationMinutes: 30,
+      officerName: s.officerName,
+      bookedByStudentId: s.bookedByStudentId,
+      meetingUrl: s.meetingUrl,
+    };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Credit awards
@@ -1137,9 +1164,23 @@ export const creditAwards: CreditAward[] = [
     applicationIds: ["app-19"],
     creditHours: 3,
     totalWorkHours: 268,
+    carriedHours: 0,
     status: "granted",
     courseMapping: "MKT 490 — Internship in Marketing",
     grantedOn: daysAgo(26),
+  },
+  {
+    id: "credit-3",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-derek",
+    collegeId: "org-verdigris",
+    applicationIds: ["app-26"],
+    creditHours: 3,
+    totalWorkHours: 198,
+    carriedHours: 0,
+    status: "granted",
+    courseMapping: "ACCT 480 — Internship in Accounting",
+    grantedOn: daysAgo(44),
   },
   {
     id: "credit-2",
@@ -1149,6 +1190,7 @@ export const creditAwards: CreditAward[] = [
     applicationIds: ["app-20"],
     creditHours: 3,
     totalWorkHours: 205,
+    carriedHours: 0,
     status: "granted",
     courseMapping: "MET 480 — Industrial Internship",
     grantedOn: daysAgo(31),

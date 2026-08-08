@@ -5,9 +5,28 @@
  * the same interfaces and nothing above this layer would change.
  */
 
-import type { ActorContext, Organization, Posting } from "@/domain/types";
+import type { ActorContext, Application, Organization, Posting } from "@/domain/types";
+import { disclosureFor, redactStudent } from "@/domain/disclosure";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
+
+/** Postings an organization owns, for narrowing application access. */
+function postingIdsOwnedBy(organizationId: string | null): Set<string> {
+  return new Set(
+    seed.postings.filter((p) => p.businessId === organizationId).map((p) => p.id),
+  );
+}
+
+/**
+ * The single definition of which applications an actor may see, shared by
+ * every accessor so none of them can drift wider than the others.
+ */
+function visibleApplications(actor: ActorContext): Application[] {
+  const rows = inScope(actor, seed.applications);
+  if (actor.membership.role !== "business") return rows;
+  const own = postingIdsOwnedBy(actor.membership.organizationId);
+  return rows.filter((a) => own.has(a.postingId));
+}
 
 export const repositories: Repositories = {
   markets: {
@@ -42,18 +61,30 @@ export const repositories: Repositories = {
       inScope(actor, seed.students).filter(
         (s) => s.status === "pending_verification" || s.status === "profile_complete",
       ),
+    forApplication: (actor, application) => {
+      const student =
+        inScope(actor, seed.students).find((s) => s.id === application.studentId) ?? null;
+      if (!student) return null;
+      // Only a business is held at arm's length. The college owns the student
+      // relationship and the board needs identity to determine eligibility.
+      if (actor.membership.role !== "business") return student;
+      return redactStudent(student, disclosureFor(application));
+    },
   },
 
   postings: {
     list: (actor, filter) => {
-      let rows = ownedByActor<Posting>(actor, seed.postings, (p) =>
-        actor.membership.role === "business" ? p.businessId : actor.membership.organizationId,
-      );
+      let rows = ownedByActor<Posting>(actor, seed.postings, (p) => p.businessId);
       if (filter?.status) rows = rows.filter((p) => p.status === filter.status);
       return rows;
     },
-    find: (actor, id) => inScope(actor, seed.postings).find((p) => p.id === id) ?? null,
+    find: (actor, id) =>
+      ownedByActor<Posting>(actor, seed.postings, (p) => p.businessId).find(
+        (p) => p.id === id,
+      ) ?? null,
     published: (actor) =>
+      // Published postings are the market's shopfront — every role in the
+      // market may browse them, including businesses looking at competitors'.
       inScope(actor, seed.postings).filter((p) => p.status === "published"),
     awaitingCollegeHelp: (actor) =>
       inScope(actor, seed.postings).filter(
@@ -61,29 +92,25 @@ export const repositories: Repositories = {
       ),
   },
 
+  /**
+   * Every accessor here narrows the same way. Applying ownership only in
+   * `list` while `find`, `forStudent`, and `forPosting` stopped at market
+   * scope meant a business could read a competitor's pipeline by passing an
+   * id it did not own.
+   */
   applications: {
-    list: (actor) => {
-      const rows = inScope(actor, seed.applications);
-      const { role, organizationId } = actor.membership;
-      if (role === "business") {
-        const own = new Set(
-          seed.postings.filter((p) => p.businessId === organizationId).map((p) => p.id),
-        );
-        return rows.filter((a) => own.has(a.postingId));
-      }
-      return rows;
-    },
-    find: (actor, id) => inScope(actor, seed.applications).find((a) => a.id === id) ?? null,
+    list: (actor) => visibleApplications(actor),
+    find: (actor, id) => visibleApplications(actor).find((a) => a.id === id) ?? null,
     forStudent: (actor, studentId) =>
-      inScope(actor, seed.applications).filter((a) => a.studentId === studentId),
+      visibleApplications(actor).filter((a) => a.studentId === studentId),
     forPosting: (actor, postingId) =>
-      inScope(actor, seed.applications).filter((a) => a.postingId === postingId),
+      visibleApplications(actor).filter((a) => a.postingId === postingId),
   },
 
   interviewSlots: {
-    list: (actor) => inScope(actor, seed.interviewSlots),
+    list: (actor) => inScope(actor, seed.interviewSlotsAt()),
     open: (actor) =>
-      inScope(actor, seed.interviewSlots).filter((s) => s.bookedByStudentId === null),
+      inScope(actor, seed.interviewSlotsAt()).filter((s) => s.bookedByStudentId === null),
   },
 
   creditAwards: {

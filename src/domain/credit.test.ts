@@ -191,6 +191,66 @@ describe("micro-internships stack toward a credit", () => {
   });
 });
 
+describe("an award consumes only the work it pays for", () => {
+  it("leaves surplus micro hours banked instead of absorbing them", () => {
+    // 3 x 40 = 120 hours at 45/credit is 2 credits with 30 hours left over.
+    const progress = creditProgress([
+      { application: completedMicro("a"), posting: microPosting(40, "p1") },
+      { application: completedMicro("b"), posting: microPosting(40, "p2") },
+      { application: completedMicro("c"), posting: microPosting(40, "p3") },
+    ]);
+    expect(progress.microCredits).toBe(2);
+
+    const award = buildCreditAward({
+      id: "credit-1",
+      marketId: "mkt-1",
+      studentId: "stu-1",
+      collegeId: "org-college",
+      courseMapping: "BUS 390",
+      progress,
+    })!;
+
+    // Covering 90 awarded hours takes all three indivisible projects, so the
+    // surplus 30 hours carries forward instead of vanishing.
+    expect(award.creditHours).toBe(2);
+    expect(award.totalWorkHours).toBe(120);
+    expect(award.carriedHours).toBe(30);
+
+    // Those carried hours count toward the next credit.
+    const next = creditProgress([], 45, award.carriedHours);
+    expect(next.bankedHours).toBe(30);
+    expect(next.hoursToNextCredit).toBe(15);
+  });
+
+  it("records the hours behind a standard placement rather than zero", () => {
+    const standard: Application = {
+      ...completedMicro("s"),
+      id: "s",
+      track: "standard",
+      postingId: "post-s",
+      hoursApproved: 268,
+      deliverableSubmitted: undefined,
+      deliverableAccepted: undefined,
+    };
+    const progress = creditProgress([
+      { application: standard, posting: standardPosting(19, 14) },
+    ]);
+    const award = buildCreditAward({
+      id: "credit-1",
+      marketId: "mkt-1",
+      studentId: "stu-1",
+      collegeId: "org-college",
+      courseMapping: "MKT 490",
+      progress,
+    })!;
+
+    expect(award.creditHours).toBe(3);
+    expect(award.totalWorkHours).toBe(268);
+    expect(award.carriedHours).toBe(0);
+    expect(award.applicationIds).toEqual(["s"]);
+  });
+});
+
 describe("building an award", () => {
   it("produces nothing below the threshold", () => {
     const progress = creditProgress([

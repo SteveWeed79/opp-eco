@@ -38,6 +38,12 @@ export interface StudentRepository {
   list(actor: ActorContext): Student[];
   find(actor: ActorContext, id: string): Student | null;
   pendingVerification(actor: ActorContext): Student[];
+  /**
+   * The student behind an application, redacted to what the actor's
+   * relationship at this stage permits. Businesses must use this rather than
+   * `find`, so withheld fields never reach the page at all.
+   */
+  forApplication(actor: ActorContext, application: Application): Student | null;
 }
 
 export interface PostingRepository {
@@ -111,8 +117,20 @@ export function inScope<T extends { marketId: string }>(
 }
 
 /**
- * Business and college actors additionally see only their own organization's
- * records within their market.
+ * Roles whose view is narrowed further, to records their own organization
+ * owns. Colleges are deliberately absent: a college operates its market and
+ * needs to see every posting in it to review and help draft them. Its
+ * narrowing is by market, not by ownership.
+ */
+const OWNERSHIP_SCOPED_ROLES = new Set(["business"]);
+
+/**
+ * Business actors see only their own organization's records within their
+ * market. Everyone else is scoped by market alone.
+ *
+ * `organizationIdOf` must return the *row's* owner. Returning the actor's own
+ * organization makes the comparison a tautology that filters nothing, which is
+ * exactly the bug this signature invites — so callers pass a row accessor.
  */
 export function ownedByActor<T extends { marketId: string }>(
   actor: ActorContext,
@@ -121,6 +139,6 @@ export function ownedByActor<T extends { marketId: string }>(
 ): T[] {
   const scoped = inScope(actor, rows);
   const { role, organizationId } = actor.membership;
-  if (role === "admin" || role === "board" || role === "student") return scoped;
+  if (!OWNERSHIP_SCOPED_ROLES.has(role)) return scoped;
   return scoped.filter((r) => organizationIdOf(r) === organizationId);
 }

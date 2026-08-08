@@ -224,6 +224,14 @@ export interface Application {
   studentId: string;
   track: Track;
   status: ApplicationStatus;
+  /**
+   * The furthest status this application ever reached.
+   *
+   * `closed` erases how far an application got, so funnel reporting would
+   * otherwise show conversion falling as work completes. A production build
+   * derives this from the audit log; here it is recorded on the row.
+   */
+  furthestStatus?: ApplicationStatus;
   submittedOn: string;
   /** When the current status was entered — drives dwell-time reporting. */
   statusSince: string;
@@ -290,6 +298,13 @@ export interface CreditAward {
   applicationIds: string[];
   creditHours: number;
   totalWorkHours: number;
+  /**
+   * Hours this award consumed but did not convert into a credit. Micro
+   * projects are indivisible, so covering 90 hours can take 120 hours of
+   * work; the surplus carries into the student's next award rather than
+   * being silently lost.
+   */
+  carriedHours: number;
   status: "pending" | "granted" | "denied";
   courseMapping: string;
   grantedOn: string | null;

@@ -18,7 +18,6 @@ import { isSelfSufficientForCredit } from "@/domain/credit";
 import { postingTotalHours } from "@/domain/types";
 
 const actor = contextFor("college");
-const adminCtx = contextFor("admin");
 
 export default function CollegePage() {
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
@@ -133,7 +132,7 @@ export default function CollegePage() {
                         <span className="font-semibold text-sm text-ink-950">
                           {posting.title}
                         </span>
-                        <TrackBadge track={posting.track} />
+                        <TrackBadge track={posting.track} posting={posting} hoursPerCredit={hoursPerCredit} />
                       </div>
                       <p className="text-xs text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {posting.county} County
@@ -180,7 +179,7 @@ export default function CollegePage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink-950">{posting.title}</span>
-                        <TrackBadge track={posting.track} />
+                        <TrackBadge track={posting.track} posting={posting} hoursPerCredit={hoursPerCredit} />
                       </div>
                       <p className="text-xs text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {totalHours} total hours
@@ -232,8 +231,8 @@ export default function CollegePage() {
               }
 
               return Array.from(byStudent.entries()).map(([studentId, apps]) => {
-                const student = repositories.students.find(adminCtx, studentId)!;
-                const progress = studentCreditProgress(studentId, hoursPerCredit);
+                const student = repositories.students.find(actor, studentId)!;
+                const progress = studentCreditProgress(actor, studentId, hoursPerCredit);
                 const ready = progress.creditsAvailable >= 1;
 
                 return (
@@ -258,7 +257,7 @@ export default function CollegePage() {
                     <ul className="mt-3 space-y-1.5">
                       {apps.map((application) => {
                         const posting = repositories.postings.find(
-                          adminCtx,
+                          actor,
                           application.postingId,
                         )!;
                         return (
@@ -267,7 +266,7 @@ export default function CollegePage() {
                             className="flex items-center justify-between text-xs text-ink-600"
                           >
                             <span className="flex items-center gap-2">
-                              <TrackBadge track={application.track} />
+                              <TrackBadge track={application.track} posting={posting} hoursPerCredit={hoursPerCredit} />
                               {posting.title}
                             </span>
                             <span className="tabular">

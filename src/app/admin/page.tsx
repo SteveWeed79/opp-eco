@@ -60,13 +60,13 @@ const STAGE_LABEL: Record<MarketStage, string> = {
 };
 
 export default function AdminPage() {
-  const health = allMarketHealth();
-  const stalled = stalledApplications();
+  const health = allMarketHealth(admin);
+  const stalled = stalledApplications(admin);
   const pendingOrgs = repositories.organizations.pendingVetting(admin);
-  const stages = funnel();
+  const stages = funnel(admin);
   const liveMarkets = health.filter((h) => h.market.stage === "live");
   const totalBudget = liveMarkets.reduce((s, h) => s + h.market.subsidyBudget, 0);
-  const deployed = subsidyDeployed();
+  const deployed = subsidyDeployed(admin);
   const inPause = stalled.filter((s) => s.inPause).length;
 
   return (
@@ -141,7 +141,7 @@ export default function AdminPage() {
                     <Td>
                       <div className="flex items-center gap-2">
                         <span className="whitespace-nowrap">{item.posting.title}</span>
-                        <TrackBadge track={item.application.track} />
+                        <TrackBadge track={item.application.track} posting={item.posting} />
                       </div>
                       <span className="text-xs text-ink-500">
                         {organizationName(item.posting.businessId)}
@@ -336,7 +336,7 @@ export default function AdminPage() {
           <CardHeader
             icon={<TrendingUp className="w-5 h-5" />}
             title="Funnel"
-            subtitle={`Applications in the pause have been waiting ${averagePauseDays()} days on average`}
+            subtitle={`Applications in the pause have been waiting ${averagePauseDays(admin)} days on average`}
           />
           <div className="px-6 py-5 space-y-3">
             {stages.map((stage, i) => {

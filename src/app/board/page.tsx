@@ -19,11 +19,15 @@ import {
 import { repositories, organizationName } from "@/data/memory";
 import { contextFor } from "@/data/session";
 import { DEMO_NOW } from "@/data/seed";
-import { daysInStatus, fundingCommitment, isTerminal } from "@/domain/workflow";
+import {
+  availableTransitions,
+  daysInStatus,
+  fundingCommitment,
+  isTerminal,
+} from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 
 const actor = contextFor("board");
-const adminCtx = contextFor("admin");
 
 export default function BoardPage() {
   const board = repositories.organizations.find(actor, actor.membership.organizationId!)!;
@@ -143,8 +147,8 @@ export default function BoardPage() {
           />
           <ul className="divide-y divide-ink-100">
             {unbooked.map((application) => {
-              const student = repositories.students.find(adminCtx, application.studentId)!;
-              const posting = repositories.postings.find(adminCtx, application.postingId)!;
+              const student = repositories.students.find(actor, application.studentId)!;
+              const posting = repositories.postings.find(actor, application.postingId)!;
               const days = daysInStatus(application, DEMO_NOW);
               return (
                 <li
@@ -198,18 +202,33 @@ export default function BoardPage() {
                 {[...awaitingInterview, ...awaitingDetermination, ...awaitingFunding].map(
                   (application) => {
                     const student = repositories.students.find(
-                      adminCtx,
+                      actor,
                       application.studentId,
                     )!;
                     const posting = repositories.postings.find(
-                      adminCtx,
+                      actor,
                       application.postingId,
                     )!;
                     const days = daysInStatus(application, DEMO_NOW);
-                    const hours = postingTotalHours(posting);
-                    const commitment = hours * market.subsidyRatePerHour;
-                    const affordable = commitment <= remaining;
-
+                    // The proposed commitment: what the board would authorize
+                    // if it approved the posting's full hours at market rate.
+                    const hours = application.fundingAuthorizedHours ?? postingTotalHours(posting);
+                    const rate = application.fundingAuthorizedRate ?? market.subsidyRatePerHour;
+                    const commitment = hours * rate;
+                    // Ask the state machine whether this would actually go
+                    // through, rather than re-deriving affordability here and
+                    // enabling a button the guard will refuse.
+                    const canAuthorize = availableTransitions(actor, {
+                      application: {
+                        ...application,
+                        fundingAuthorizedHours: hours,
+                        fundingAuthorizedRate: rate,
+                      },
+                      student,
+                      remainingBudget: remaining,
+                      postingOwnerId: posting.businessId,
+                    }).some((t) => t.to === "funding_authorized");
+                    
                     return (
                       <tr key={application.id}>
                         <Td className="whitespace-nowrap">
@@ -235,7 +254,7 @@ export default function BoardPage() {
                           <DwellBadge days={days} />
                         </Td>
                         <Td className="whitespace-nowrap">
-                          <span className={affordable ? "text-ink-700" : "text-crit-700 font-semibold"}>
+                          <span className={canAuthorize ? "text-ink-700" : "text-crit-700 font-semibold"}>
                             <Money value={commitment} />
                           </span>
                           <span className="block text-xs text-ink-500">
@@ -256,15 +275,15 @@ export default function BoardPage() {
                           {application.status === "cleared" && (
                             <Button
                               size="sm"
-                              variant={affordable ? "primary" : "ghost"}
-                              disabled={!affordable}
+                              variant={canAuthorize ? "primary" : "ghost"}
+                              disabled={!canAuthorize}
                               title={
-                                affordable
+                                canAuthorize
                                   ? undefined
                                   : "Commitment exceeds the remaining allocation"
                               }
                             >
-                              {affordable ? "Authorize funding" : "Over budget"}
+                              {canAuthorize ? "Authorize funding" : "Over budget"}
                             </Button>
                           )}
                         </Td>
@@ -298,7 +317,7 @@ export default function BoardPage() {
         <div className="px-6 py-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {slots.map((slot) => {
             const bookedBy = slot.bookedByStudentId
-              ? repositories.students.find(adminCtx, slot.bookedByStudentId)
+              ? repositories.students.find(actor, slot.bookedByStudentId)
               : null;
             return (
               <div

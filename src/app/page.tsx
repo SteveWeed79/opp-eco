@@ -17,7 +17,7 @@ import { allMarketHealth } from "@/lib/queries";
 const admin = contextFor("admin");
 
 export default function LandingPage() {
-  const health = allMarketHealth();
+  const health = allMarketHealth(admin);
   const live = health.filter((h) => h.market.stage === "live");
   const credits = repositories.creditAwards
     .list(admin)
@@ -277,7 +277,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {allMarketHealth().map((h) => (
+          {health.map((h) => (
             <Card key={h.market.id} className="p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>

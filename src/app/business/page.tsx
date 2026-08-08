@@ -16,25 +16,17 @@ import {
   Th,
   TrackBadge,
 } from "@/components/ui";
-import { repositories } from "@/data/memory";
+import { repositories, organizationName } from "@/data/memory";
 import { contextFor } from "@/data/session";
 import { fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 
 const actor = contextFor("business");
 
-/**
- * Surnames stay hidden until board clearance, along with the rest of a
- * candidate's contact detail. Handles single-word names without exploding.
- */
-function maskName(name: string): string {
-  const [first, ...rest] = name.trim().split(/\s+/);
-  const last = rest.at(-1);
-  return last ? `${first} ${last[0]}.` : first;
-}
-
 export default function BusinessPage() {
   const org = repositories.organizations.find(actor, actor.membership.organizationId!)!;
+  const market = repositories.markets.find(actor, actor.membership.marketId!)!;
+  const boardName = organizationName(market.boardId);
   const postings = repositories.postings.list(actor);
   const applications = repositories.applications
     .list(actor)
@@ -73,7 +65,7 @@ export default function BusinessPage() {
             </span>
             <div>
               <h2 className="text-lg font-black text-ink-950">
-                Southeast Kansas Workforce Partnership reimburses you $20/hour
+                {boardName} reimburses you ${market.subsidyRatePerHour}/hour
               </h2>
               <p className="text-sm text-ink-600 mt-1 max-w-xl">
                 For every standard internship hour your intern works after board
@@ -119,7 +111,7 @@ export default function BusinessPage() {
           <CardHeader
             icon={<HelpCircle className="w-5 h-5 text-warn-600" />}
             title="Drafts you asked the college to help with"
-            subtitle="Verdigris State will scope these into postings students can actually apply to"
+            subtitle={`${organizationName(market.collegeIds[0])} will scope these into postings students can actually apply to`}
           />
           <ul className="divide-y divide-ink-100">
             {needsHelp.map((posting) => (
@@ -130,7 +122,7 @@ export default function BusinessPage() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-ink-950">{posting.title}</span>
-                    <TrackBadge track={posting.track} />
+                    <TrackBadge track={posting.track} posting={posting} />
                   </div>
                   <p className="text-xs text-ink-500 mt-1 max-w-xl">
                     {posting.description}
@@ -169,27 +161,22 @@ export default function BusinessPage() {
               </thead>
               <tbody className="divide-y divide-ink-100">
                 {applications.map((application) => {
-                  const student = repositories.students.find(
-                    contextFor("admin"),
-                    application.studentId,
+                  // Redacted at the repository, not in the markup — withheld
+                  // fields never reach this page in the first place.
+                  const student = repositories.students.forApplication(
+                    actor,
+                    application,
                   )!;
                   const posting = repositories.postings.find(
                     actor,
                     application.postingId,
                   )!;
-                  const cleared = [
-                    "funding_authorized",
-                    "placement_active",
-                    "unsubsidized",
-                  ].includes(application.status);
                   const commitment = fundingCommitment(application);
 
                   return (
                     <tr key={application.id}>
                       <Td className="whitespace-nowrap">
-                        <span className="font-semibold text-ink-950">
-                          {cleared ? student.name : maskName(student.name)}
-                        </span>
+                        <span className="font-semibold text-ink-950">{student.name}</span>
                         <span className="block text-xs text-ink-500">
                           {student.programOfStudy} · {student.classStanding}
                         </span>
@@ -197,7 +184,7 @@ export default function BusinessPage() {
                       <Td>
                         <div className="flex items-center gap-2">
                           <span className="whitespace-nowrap">{posting.title}</span>
-                          <TrackBadge track={application.track} />
+                          <TrackBadge track={application.track} posting={posting} />
                         </div>
                       </Td>
                       <Td>

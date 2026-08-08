@@ -21,6 +21,12 @@ export interface TransitionContext {
   student: Student;
   /** Board allocation still uncommitted in this market, in dollars. */
   remainingBudget: number;
+  /**
+   * The organization that owns the posting this application is against.
+   * Required so a business cannot act on a competitor's candidate merely by
+   * being in the same market.
+   */
+  postingOwnerId: string;
 }
 
 export interface Transition {
@@ -284,6 +290,26 @@ function trackAllows(transition: Transition, track: Track): boolean {
   return !transition.tracks || transition.tracks.includes(track);
 }
 
+/**
+ * Market membership is not enough. A business may only act on applications
+ * against its own postings, and a student only on their own applications.
+ * Colleges and boards act across their whole market by design.
+ */
+function ownershipViolation(
+  actor: ActorContext,
+  ctx: TransitionContext,
+): string | null {
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business" && organizationId !== ctx.postingOwnerId) {
+    return "This application is against another organization's posting";
+  }
+  if (role === "student" && actor.user.id !== ctx.student.userId) {
+    return "Students may only act on their own applications";
+  }
+  return null;
+}
+
 /** Transitions defined for a status on a given track, ignoring who is asking. */
 export function transitionsFrom(
   status: ApplicationStatus,
@@ -305,6 +331,8 @@ export function availableTransitions(
   const { application } = ctx;
   const candidates = transitionsFrom(application.status, application.track);
   if (actor.membership.role === ADMIN_OVERRIDE_ROLE) return candidates;
+  if (actor.membership.marketId !== application.marketId) return [];
+  if (ownershipViolation(actor, ctx)) return [];
   return candidates.filter(
     (t) => t.roles.includes(actor.membership.role) && !t.guard?.(ctx),
   );
@@ -331,6 +359,9 @@ export function attemptTransition(
   if (!isAdmin && actor.membership.marketId !== application.marketId) {
     return { ok: false, error: "Actor is not a member of this market" };
   }
+
+  const ownershipError = ownershipViolation(actor, ctx);
+  if (!isAdmin && ownershipError) return { ok: false, error: ownershipError };
 
   const transition = TRANSITIONS.find(
     (t) =>

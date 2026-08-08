@@ -25,10 +25,17 @@ export interface CompletedWork {
   posting: Posting;
 }
 
+export interface WorkContribution {
+  applicationId: string;
+  hours: number;
+}
+
 export interface CreditProgress {
   /** Credits from standard placements, each awarded against its own posting. */
   standardCredits: number;
   standardApplicationIds: string[];
+  /** Approved hours behind those standard credits. */
+  standardHours: number;
 
   /** Micro-internship hours banked but not yet converted into a credit. */
   bankedHours: number;
@@ -36,6 +43,8 @@ export interface CreditProgress {
   microCredits: number;
   hoursToNextCredit: number;
   microApplicationIds: string[];
+  /** Per-project micro hours, so an award can consume only what it needs. */
+  microContributions: WorkContribution[];
 
   /** Total credits claimable right now. */
   creditsAvailable: number;
@@ -74,6 +83,12 @@ export function standardCreditsEarned(
 export function creditProgress(
   completed: CompletedWork[],
   hoursPerCredit: number = DEFAULT_HOURS_PER_CREDIT,
+  /**
+   * Hours consumed by earlier awards that did not convert into a credit.
+   * Micro projects are indivisible, so covering 90 hours can require 120 hours
+   * of work; the surplus carries forward rather than evaporating.
+   */
+  carriedHours: number = 0,
 ): CreditProgress {
   const unclaimed = completed.filter(({ application }) => !application.creditAwardId);
 
@@ -85,24 +100,34 @@ export function creditProgress(
       sum + standardCreditsEarned(application, posting, hoursPerCredit),
     0,
   );
-
-  const bankedHours = micro.reduce(
+  const standardHours = standard.reduce(
     (sum, { application, posting }) => sum + workHoursFor(application, posting),
     0,
   );
 
+  const microContributions: WorkContribution[] = micro.map(
+    ({ application, posting }) => ({
+      applicationId: application.id,
+      hours: workHoursFor(application, posting),
+    }),
+  );
+
+  const bankedHours =
+    carriedHours + microContributions.reduce((sum, c) => sum + c.hours, 0);
   const microCredits = Math.floor(bankedHours / hoursPerCredit);
   const remainder = bankedHours % hoursPerCredit;
 
   return {
     standardCredits,
     standardApplicationIds: standard.map(({ application }) => application.id),
+    standardHours,
 
     bankedHours,
     hoursPerCredit,
     microCredits,
     hoursToNextCredit: hoursPerCredit - remainder,
     microApplicationIds: micro.map(({ application }) => application.id),
+    microContributions,
 
     creditsAvailable: standardCredits + microCredits,
     contributingApplicationIds: unclaimed.map(({ application }) => application.id),
@@ -135,7 +160,14 @@ export function creditsFor(
   return Math.floor(postingTotalHours(posting) / hoursPerCredit);
 }
 
-/** Build a pending award from completed work once there is credit to award. */
+/**
+ * Build a pending award from completed work once there is credit to award.
+ *
+ * Consumes only the projects that actually paid for the credits being granted.
+ * Micro hours above the threshold stay banked — a student with three 40-hour
+ * projects earns 2 credits and keeps the leftover 30 hours toward a third,
+ * rather than having them silently absorbed.
+ */
 export function buildCreditAward(params: {
   id: string;
   marketId: string;
@@ -147,21 +179,32 @@ export function buildCreditAward(params: {
   const { progress } = params;
   if (progress.creditsAvailable < 1) return null;
 
-  // Only the work that actually contributed credit is consumed by the award —
-  // micro hours below the threshold stay banked for next time.
-  const applicationIds =
-    progress.microCredits > 0
-      ? progress.contributingApplicationIds
-      : progress.standardApplicationIds;
+  // Standard placements each earn against their own posting, so all of them
+  // are consumed. Micro projects are consumed in order until the awarded hours
+  // are covered — and because a project is indivisible, covering them can take
+  // more hours than the credits are worth. The excess carries forward rather
+  // than disappearing.
+  const microHoursAwarded = progress.microCredits * progress.hoursPerCredit;
+  const consumedMicro: WorkContribution[] = [];
+  let consumedHours = 0;
+  for (const contribution of progress.microContributions) {
+    if (consumedHours >= microHoursAwarded) break;
+    consumedMicro.push(contribution);
+    consumedHours += contribution.hours;
+  }
 
   return {
     id: params.id,
     marketId: params.marketId,
     studentId: params.studentId,
     collegeId: params.collegeId,
-    applicationIds,
+    applicationIds: [
+      ...progress.standardApplicationIds,
+      ...consumedMicro.map((c) => c.applicationId),
+    ],
     creditHours: progress.creditsAvailable,
-    totalWorkHours: progress.bankedHours,
+    totalWorkHours: progress.standardHours + consumedHours,
+    carriedHours: Math.max(0, consumedHours - microHoursAwarded),
     status: "pending",
     courseMapping: params.courseMapping,
     grantedOn: null,

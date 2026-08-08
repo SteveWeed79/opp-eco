@@ -69,8 +69,13 @@ function student(over: Partial<Student> = {}): Student {
   };
 }
 
-function ctx(app: Application, stu = student(), remainingBudget = 100_000) {
-  return { application: app, student: stu, remainingBudget };
+function ctx(
+  app: Application,
+  stu = student(),
+  remainingBudget = 100_000,
+  postingOwnerId = "org-business",
+) {
+  return { application: app, student: stu, remainingBudget, postingOwnerId };
 }
 
 // --- role enforcement ------------------------------------------------------
@@ -101,6 +106,67 @@ describe("role enforcement", () => {
     const result = attemptTransition(actor("business", "mkt-1"), ctx(app), "shortlisted");
     expect(result.ok).toBe(false);
     expect(result.error).toContain("not a member of this market");
+  });
+});
+
+// --- organization ownership ------------------------------------------------
+// Sharing a market is not authorization. Without this a business could act on
+// a competitor's candidate.
+
+describe("organization ownership", () => {
+  it("refuses a business acting on another organization's posting", () => {
+    const app = application({ status: "under_review" });
+    const result = attemptTransition(
+      actor("business"),
+      ctx(app, student(), 100_000, "org-someone-else"),
+      "shortlisted",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("another organization's posting");
+  });
+
+  it("allows a business acting on its own posting", () => {
+    const app = application({ status: "under_review" });
+    const result = attemptTransition(
+      actor("business"),
+      ctx(app, student(), 100_000, "org-business"),
+      "shortlisted",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a student acting on someone else's application", () => {
+    const app = application({ status: "shortlisted" });
+    const stu = student({ userId: "u-someone-else" });
+    const result = attemptTransition(actor("student"), ctx(app, stu), "mutual_interest");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("their own applications");
+  });
+
+  it("allows a student acting on their own application", () => {
+    const app = application({ status: "shortlisted" });
+    const stu = student({ userId: "u-student" });
+    const result = attemptTransition(actor("student"), ctx(app, stu), "mutual_interest");
+    expect(result.ok).toBe(true);
+  });
+
+  it("lets a college act across its market without owning the posting", () => {
+    const app = application({ status: "placement_active" });
+    const result = attemptTransition(
+      actor("college"),
+      ctx(app, student(), 100_000, "org-someone-else"),
+      "terminated_early",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("offers no transitions at all to a business on a foreign posting", () => {
+    const app = application({ status: "under_review" });
+    const options = availableTransitions(
+      actor("business"),
+      ctx(app, student(), 100_000, "org-someone-else"),
+    );
+    expect(options).toHaveLength(0);
   });
 });
 

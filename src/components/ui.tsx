@@ -7,7 +7,8 @@
  */
 
 import type { ReactNode } from "react";
-import type { ApplicationStatus, Track } from "@/domain/types";
+import type { ApplicationStatus, Posting, Track } from "@/domain/types";
+import { creditsFor } from "@/domain/credit";
 
 // ---------------------------------------------------------------------------
 // Surfaces
@@ -166,12 +167,33 @@ export function Badge({
   );
 }
 
-export function TrackBadge({ track }: { track: Track }) {
-  return track === "micro" ? (
-    <Badge tone="micro">Micro · 1 cr</Badge>
-  ) : (
-    <Badge tone="brand">Standard · 3 cr</Badge>
-  );
+/**
+ * Shows the track, and credit only where the posting actually carries it.
+ *
+ * Hardcoding "Micro · 1 cr" badged a 15-hour project as worth a credit it
+ * cannot earn on its own — contradicting the credit rules and the app's own
+ * explanation of stacking. Pass the posting so the badge tells the truth.
+ */
+export function TrackBadge({
+  track,
+  posting,
+  hoursPerCredit,
+}: {
+  track: Track;
+  posting?: Posting;
+  hoursPerCredit?: number;
+}) {
+  const credits = posting ? creditsFor(posting, hoursPerCredit) : null;
+  const label =
+    credits === null
+      ? track === "micro"
+        ? "Micro"
+        : "Standard"
+      : credits > 0
+        ? `${track === "micro" ? "Micro" : "Standard"} · ${credits} cr`
+        : `${track === "micro" ? "Micro" : "Standard"} · banks hours`;
+
+  return <Badge tone={track === "micro" ? "micro" : "brand"}>{label}</Badge>;
 }
 
 /** Human label and severity for every state in the machine. */

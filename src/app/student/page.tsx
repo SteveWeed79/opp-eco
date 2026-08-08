@@ -21,25 +21,28 @@ import {
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
 import { contextFor } from "@/data/session";
-import { DEMO_NOW } from "@/data/seed";
+import { DEMO_NOW, studentForUser } from "@/data/seed";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { postingTotalHours } from "@/domain/types";
 
 const actor = contextFor("student");
-const STUDENT_ID = "stu-omar";
+
+/** The signed-in student, resolved from the session rather than hardcoded. */
+const student = studentForUser(actor.user.id)!;
+const STUDENT_ID = student.id;
 
 export default function StudentPage() {
-  const student = repositories.students.find(actor, STUDENT_ID)!;
   const applications = repositories.applications
     .forStudent(actor, STUDENT_ID)
     .filter((a) => !isTerminal(a.status));
   const openSlots = repositories.interviewSlots.open(actor);
   const college = repositories.organizations.find(actor, student.collegeId);
   const market = repositories.markets.find(actor, student.marketId)!;
-  const progress = studentCreditProgress(STUDENT_ID, college?.hoursPerCredit ?? 45);
-  const remainingBudget = marketRemainingBudget(market);
+  const progress = studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45);
+  const remainingBudget = marketRemainingBudget(actor, market);
+  const boardName = organizationName(market.boardId);
 
   // Opportunities the student hasn't applied to yet, best match first
   const applied = new Set(
@@ -57,17 +60,16 @@ export default function StudentPage() {
 
   // Only what the student can actually act on. An application waiting on the
   // business belongs in the list below, not in a card called "Needs you".
-  const needsAction = applications.filter((application) => {
-    const needsBoardBooking =
-      application.status === "mutual_interest" && application.track === "standard";
-    const hasOwnAction =
-      availableTransitions(actor, {
-        application,
-        student,
-        remainingBudget,
-      }).length > 0;
-    return needsBoardBooking || hasOwnAction;
-  });
+  const optionsFor = (application: (typeof applications)[number]) =>
+    availableTransitions(actor, {
+      application,
+      student,
+      remainingBudget,
+      postingOwnerId:
+        repositories.postings.find(actor, application.postingId)?.businessId ?? "",
+    });
+
+  const needsAction = applications.filter((a) => optionsFor(a).length > 0);
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
@@ -114,15 +116,11 @@ export default function StudentPage() {
             {needsAction.map((application) => {
               const posting = repositories.postings.find(actor, application.postingId)!;
               const days = daysInStatus(application, DEMO_NOW);
-              const options = availableTransitions(actor, {
-                application,
-                student,
-                remainingBudget,
-              });
-              const needsBoard =
-                application.status === "mutual_interest" &&
-                application.track === "standard" &&
-                student.eligibility !== "eligible";
+              const options = optionsFor(application);
+              // Show the booking panel only when booking is a move the state
+              // machine will actually accept — a student the board found
+              // ineligible must not be offered slots for a refused action.
+              const needsBoard = options.some((t) => t.to === "interview_scheduled");
 
               return (
                 <li key={application.id} className="px-6 py-5">
@@ -130,7 +128,7 @@ export default function StudentPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-bold text-ink-950">{posting.title}</h3>
-                        <TrackBadge track={application.track} />
+                        <TrackBadge track={application.track} posting={posting} hoursPerCredit={college?.hoursPerCredit} />
                       </div>
                       <p className="text-sm text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {posting.county} County
@@ -150,11 +148,11 @@ export default function StudentPage() {
                     <div className="mt-4 bg-warn-50 border border-warn-100 rounded-xl p-4">
                       <p className="text-sm font-semibold text-ink-950">
                         Book your workforce board interview to unlock the $
-                        {posting.wagePerHour ? 20 : 20}/hr wage reimbursement
+                        {market.subsidyRatePerHour}/hr wage reimbursement
                       </p>
                       <p className="text-xs text-ink-600 mt-1">
-                        Southeast Kansas Workforce Partnership needs a short conversation before this
-                        placement can be funded. Nothing moves until it's booked.
+                        {boardName} needs a short conversation before this placement
+                        can be funded. Nothing moves until it&rsquo;s booked.
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {openSlots.slice(0, 4).map((slot) => (
@@ -219,7 +217,7 @@ export default function StudentPage() {
                             <span className="font-semibold text-ink-950">
                               {posting.title}
                             </span>
-                            <TrackBadge track={application.track} />
+                            <TrackBadge track={application.track} posting={posting} hoursPerCredit={college?.hoursPerCredit} />
                           </div>
                           <p className="text-xs text-ink-500 mt-0.5">
                             {organizationName(posting.businessId)}
@@ -267,7 +265,7 @@ export default function StudentPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-ink-950">{posting.title}</span>
-                        <TrackBadge track={posting.track} />
+                        <TrackBadge track={posting.track} posting={posting} hoursPerCredit={college?.hoursPerCredit} />
                       </div>
                       <p className="text-xs text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {posting.county} County
@@ -378,7 +376,7 @@ export default function StudentPage() {
               subtitle="What employers match against"
             />
             <div className="px-6 py-5 flex flex-wrap gap-2">
-              {student.skills.map((skill) => (
+              {student.skills.map((skill: string) => (
                 <Badge key={skill}>{skill}</Badge>
               ))}
             </div>

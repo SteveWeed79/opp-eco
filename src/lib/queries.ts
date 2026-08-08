@@ -4,6 +4,11 @@
  * Portals stay thin: they render what these return rather than each computing
  * their own version of "what's stuck", which is how five surfaces end up with
  * five different answers.
+ *
+ * Every function takes the calling actor and reads through the repositories
+ * with it. An earlier version held a module-level admin context, which meant
+ * any portal calling in here quietly acquired cross-market reach and bypassed
+ * the isolation the repository layer exists to enforce.
  */
 
 import type {
@@ -19,12 +24,10 @@ import {
   fundingCommitment,
   isTerminal,
 } from "@/domain/workflow";
+import type { ActorContext } from "@/domain/types";
 import { repositories } from "@/data/memory";
-import { contextFor } from "@/data/session";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
-
-const admin = contextFor("admin");
 
 export interface StalledItem {
   application: Application;
@@ -51,8 +54,11 @@ const BLOCKED_ON: Record<string, string> = {
  * Exception-first: what is stuck and who is sitting on it. Sorted by dwell
  * time, with the pause weighted heaviest because that is where placements die.
  */
-export function stalledApplications(thresholdDays = 5): StalledItem[] {
-  const applications = repositories.applications.list(admin);
+export function stalledApplications(
+  actor: ActorContext,
+  thresholdDays = 5,
+): StalledItem[] {
+  const applications = repositories.applications.list(actor);
   const items: StalledItem[] = [];
 
   for (const application of applications) {
@@ -62,8 +68,8 @@ export function stalledApplications(thresholdDays = 5): StalledItem[] {
     const days = daysInStatus(application, DEMO_NOW);
     if (days < thresholdDays) continue;
 
-    const posting = repositories.postings.find(admin, application.postingId);
-    const student = repositories.students.find(admin, application.studentId);
+    const posting = repositories.postings.find(actor, application.postingId);
+    const student = repositories.students.find(actor, application.studentId);
     if (!posting || !student) continue;
 
     items.push({
@@ -95,9 +101,9 @@ export interface MarketHealth {
   creditHoursGranted: number;
 }
 
-export function marketHealth(market: Market): MarketHealth {
+export function marketHealth(actor: ActorContext, market: Market): MarketHealth {
   const applications = repositories.applications
-    .list(admin)
+    .list(actor)
     .filter((a) => a.marketId === market.id);
 
   const committed = applications
@@ -105,19 +111,19 @@ export function marketHealth(market: Market): MarketHealth {
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
 
   const credits = repositories.creditAwards
-    .list(admin)
+    .list(actor)
     .filter((c) => c.marketId === market.id && c.status === "granted");
 
   return {
     market,
     activeStudents: repositories.students
-      .list(admin)
+      .list(actor)
       .filter((s) => s.marketId === market.id && s.status === "verified").length,
     activeBusinesses: repositories.organizations
-      .list(admin, { kind: "business" })
+      .list(actor, { kind: "business" })
       .filter((o) => o.marketId === market.id && o.status === "active").length,
     openPostings: repositories.postings
-      .list(admin)
+      .published(actor)
       .filter((p) => p.marketId === market.id && p.status === "published").length,
     liveApplications: applications.filter((a) => !isTerminal(a.status)).length,
     inPause: applications.filter((a) => PAUSE_STATUSES.includes(a.status)).length,
@@ -135,14 +141,14 @@ export function marketHealth(market: Market): MarketHealth {
   };
 }
 
-export function allMarketHealth(): MarketHealth[] {
-  return repositories.markets.list(admin).map(marketHealth);
+export function allMarketHealth(actor: ActorContext): MarketHealth[] {
+  return repositories.markets.list(actor).map((m) => marketHealth(actor, m));
 }
 
 /** Uncommitted allocation left in a market's program year. */
-export function marketRemainingBudget(market: Market): number {
+export function marketRemainingBudget(actor: ActorContext, market: Market): number {
   const committed = repositories.applications
-    .list(admin)
+    .list(actor)
     .filter((a) => a.marketId === market.id && !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
   return market.subsidyBudget - committed;
@@ -155,9 +161,9 @@ export function marketRemainingBudget(market: Market): number {
  * the fixtures carry no per-transition history, and a number derived from
  * submission dates would look precise while meaning nothing.
  */
-export function averagePauseDays(): number {
+export function averagePauseDays(actor: ActorContext): number {
   const inPause = repositories.applications
-    .list(admin)
+    .list(actor)
     .filter((a) => PAUSE_STATUSES.includes(a.status));
   if (inPause.length === 0) return 0;
   const total = inPause.reduce((sum, a) => sum + daysInStatus(a, DEMO_NOW), 0);
@@ -169,60 +175,85 @@ export interface FunnelStage {
   count: number;
 }
 
-/** Conversion through each stage, with the pause called out explicitly. */
-export function funnel(): FunnelStage[] {
-  const applications = repositories.applications.list(admin);
-  const reached = (statuses: Application["status"][]) =>
-    applications.filter((a) => statuses.includes(a.status)).length;
+/**
+ * Conversion through each stage, with the pause called out explicitly.
+ *
+ * Counts by *furthest stage reached*, not current status. Enumerating live
+ * statuses per stage meant an application dropped out of every stage the
+ * instant it closed, so the funnel appeared to collapse as work finished.
+ */
+export function funnel(actor: ActorContext): FunnelStage[] {
+  const applications = repositories.applications.list(actor);
 
-  const downstreamOfPause: Application["status"][] = [
-    "funding_authorized",
-    "unsubsidized",
-    "placement_active",
-    "placement_completed",
-    "credit_pending",
-    "credit_granted",
-  ];
-  const inOrPastPause: Application["status"][] = [
-    ...PAUSE_STATUSES,
-    ...downstreamOfPause,
-  ];
+  const atLeast = (stage: FunnelRank) =>
+    applications.filter((a) => furthestRank(a) >= stage).length;
 
   return [
     { label: "Applied", count: applications.length },
-    {
-      label: "Shortlisted",
-      count: reached([
-        "shortlisted",
-        ...inOrPastPause,
-      ]),
-    },
-    { label: "Mutual interest", count: reached(inOrPastPause) },
-    { label: "Through the pause", count: reached(downstreamOfPause) },
-    {
-      label: "Placed",
-      count: reached([
-        "placement_active",
-        "placement_completed",
-        "credit_pending",
-        "credit_granted",
-      ]),
-    },
-    { label: "Credit granted", count: reached(["credit_granted"]) },
+    { label: "Shortlisted", count: atLeast(FunnelRank.Shortlisted) },
+    { label: "Mutual interest", count: atLeast(FunnelRank.MutualInterest) },
+    { label: "Through the pause", count: atLeast(FunnelRank.ThroughPause) },
+    { label: "Placed", count: atLeast(FunnelRank.Placed) },
+    { label: "Credit granted", count: atLeast(FunnelRank.CreditGranted) },
   ];
 }
 
+enum FunnelRank {
+  Applied = 0,
+  Shortlisted = 1,
+  MutualInterest = 2,
+  ThroughPause = 3,
+  Placed = 4,
+  CreditGranted = 5,
+}
+
+/** How far along the funnel a given status implies the application got. */
+const STATUS_RANK: Record<Application["status"], FunnelRank> = {
+  submitted: FunnelRank.Applied,
+  under_review: FunnelRank.Applied,
+  rejected: FunnelRank.Applied,
+  withdrawn: FunnelRank.Applied,
+  shortlisted: FunnelRank.Shortlisted,
+  mutual_interest: FunnelRank.MutualInterest,
+  interview_scheduled: FunnelRank.MutualInterest,
+  interview_completed: FunnelRank.MutualInterest,
+  cleared: FunnelRank.MutualInterest,
+  funding_authorized: FunnelRank.ThroughPause,
+  unsubsidized: FunnelRank.ThroughPause,
+  placement_active: FunnelRank.Placed,
+  placement_completed: FunnelRank.Placed,
+  terminated_early: FunnelRank.Placed,
+  credit_pending: FunnelRank.Placed,
+  credit_denied: FunnelRank.Placed,
+  credit_granted: FunnelRank.CreditGranted,
+  // `closed` says nothing about how far the application got, so it defers to
+  // the recorded furthest status.
+  closed: FunnelRank.Applied,
+};
+
+function furthestRank(application: Application): FunnelRank {
+  const current = STATUS_RANK[application.status];
+  const furthest = application.furthestStatus
+    ? STATUS_RANK[application.furthestStatus]
+    : FunnelRank.Applied;
+  return Math.max(current, furthest);
+}
+
 /** Banked micro-internship hours not yet converted into a credit award. */
-export function studentCreditProgress(studentId: string, hoursPerCredit = DEFAULT_HOURS_PER_CREDIT) {
+export function studentCreditProgress(
+  actor: ActorContext,
+  studentId: string,
+  hoursPerCredit = DEFAULT_HOURS_PER_CREDIT,
+) {
   const applications = repositories.applications
-    .forStudent(admin, studentId)
+    .forStudent(actor, studentId)
     .filter((a) =>
       ["placement_completed", "credit_pending", "credit_granted"].includes(a.status),
     );
 
   const completed = applications
     .map((application) => {
-      const posting = repositories.postings.find(admin, application.postingId);
+      const posting = repositories.postings.find(actor, application.postingId);
       return posting ? { application, posting } : null;
     })
     .filter((x): x is { application: Application; posting: Posting } => x !== null);
@@ -230,9 +261,9 @@ export function studentCreditProgress(studentId: string, hoursPerCredit = DEFAUL
   return creditProgress(completed, hoursPerCredit);
 }
 
-export function subsidyDeployed(): number {
+export function subsidyDeployed(actor: ActorContext): number {
   return repositories.applications
-    .list(admin)
+    .list(actor)
     .filter((a) => !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
 }
