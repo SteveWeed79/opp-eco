@@ -13,6 +13,35 @@ updates:
       # review rather than a dozen.
       routine:
         update-types: ["minor", "patch"]
+    ignore:
+      # Three majors that cannot pass CI for reasons outside this repository.
+      # Ignored rather than left to reopen weekly: a permanently red pull
+      # request list is worse than a slightly older toolchain, because once red
+      # is normal a genuinely broken change looks the same as these.
+      #
+      # Patch and minor updates still come through for all three — only the
+      # major is held.
+
+      # TypeScript 7 fails at `eslint` with "typescript-eslint does not support
+      # TS 7.0". Revisit when typescript-eslint ships support, which for this
+      # project arrives via eslint-config-next.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+      # ESLint 10 fails loading `react/display-name`:
+      # "contextOrFilename.getFilename is not a function". ESLint 10 removed an
+      # API that eslint-plugin-react@7.37.5 still calls, and that version is
+      # pinned transitively by eslint-config-next. The app itself is fine on
+      # ESLint 10 — the end-to-end job passed on that PR, only lint broke.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+
+      # @types/node majors track Node majors, and this project runs Node 22 in
+      # CI and on Vercel. Taking a 26 bump would let code typecheck against
+      # APIs the runtime does not have — green build, runtime failure. Lift
+      # this together with the Node version, not before it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # Workflow actions are a supply-chain path too, and one that is easy to
   # forget because it is not in package.json.
