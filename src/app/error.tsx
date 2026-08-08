@@ -58,7 +58,7 @@ export default function Error({
           <button
             type="button"
             onClick={retry}
-            className="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-ink-950 transition-colors flex items-center gap-2"
+            className="bg-brand-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-ink-950 transition-colors flex items-center gap-2"
           >
             <RotateCw className="w-4 h-4" aria-hidden="true" />
             Try again

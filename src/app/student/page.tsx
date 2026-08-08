@@ -217,6 +217,7 @@ export default async function StudentPage() {
                             <ProgressBar
                               value={application.hoursApproved ?? 0}
                               max={postingTotalHours(posting)}
+                      label="Hours approved"
                               tone="good"
                             />
                           </div>
@@ -277,7 +278,7 @@ export default async function StudentPage() {
                   </div>
                   {score && score.factors.length > 0 && (
                     <details className="mt-2">
-                      <summary className="text-xs text-brand-600 font-semibold cursor-pointer">
+                      <summary className="text-xs text-brand-700 font-semibold cursor-pointer">
                         Why this score?
                       </summary>
                       <ul className="mt-2 space-y-1">
@@ -331,6 +332,7 @@ export default async function StudentPage() {
               <ProgressBar
                 value={progress.bankedHours % progress.hoursPerCredit}
                 max={progress.hoursPerCredit}
+                      label="Micro-internship hours banked toward the next credit"
                 tone={progress.microCredits > 0 ? "good" : "brand"}
               />
               <p className="text-xs text-ink-500 mt-2">

@@ -47,7 +47,7 @@ export default async function CollegePage() {
             <p className="text-xs font-bold text-ink-500 uppercase tracking-wider">
               Credit policy
             </p>
-            <p className="text-lg font-black text-brand-600 tabular">
+            <p className="text-lg font-black text-brand-700 tabular">
               {hoursPerCredit} hrs / credit
             </p>
           </div>
@@ -291,6 +291,7 @@ export default async function CollegePage() {
                         <ProgressBar
                           value={progress.bankedHours % hoursPerCredit}
                           max={hoursPerCredit}
+                      label={`${student.name} hours banked toward the next credit`}
                           tone={progress.microCredits > 0 ? "good" : "warn"}
                         />
                       </div>

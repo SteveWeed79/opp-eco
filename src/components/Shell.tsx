@@ -49,14 +49,14 @@ export function Shell({
         <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-brand-100">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
-              <span className="w-10 h-10 rounded-xl bg-brand-500 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-500/30 group-hover:bg-ink-950 transition-colors">
+              <span className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors">
                 OE
               </span>
               <span className="hidden sm:block">
                 <span className="text-lg font-extrabold tracking-tight text-ink-950">
                   Opportunity
                 </span>
-                <span className="text-lg font-extrabold text-brand-500 ml-1">
+                <span className="text-lg font-extrabold text-brand-700 ml-1">
                   Ecosystem
                 </span>
               </span>
@@ -78,7 +78,7 @@ export function Shell({
                       isActive
                         ? portal.role === "admin"
                           ? "bg-ink-950 text-white shadow-sm"
-                          : "bg-brand-500 text-white shadow-sm"
+                          : "bg-brand-700 text-white shadow-sm"
                         : "text-ink-600 hover:text-ink-950"
                     }`}
                   >
@@ -111,7 +111,7 @@ export function Shell({
               <button
                 type="button"
                 onClick={() => setSignOnOpen(true)}
-                className="bg-ink-950 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-brand-500 transition-colors flex items-center gap-2 shrink-0"
+                className="bg-ink-950 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2 shrink-0"
               >
                 <Lock className="w-4 h-4 text-brand-400" aria-hidden="true" />
                 Sign on
@@ -130,7 +130,7 @@ export function Shell({
                     href={portal.href}
                     aria-current={isActive ? "page" : undefined}
                     className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
-                      isActive ? "bg-brand-500 text-white" : "text-ink-600"
+                      isActive ? "bg-brand-700 text-white" : "text-ink-600"
                     }`}
                   >
                     {portal.label}

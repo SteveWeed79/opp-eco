@@ -44,7 +44,7 @@ export function CardHeader({
   return (
     <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-ink-100">
       <div className="flex items-start gap-3">
-        {icon && <span className="text-brand-500 mt-0.5">{icon}</span>}
+        {icon && <span className="text-brand-700 mt-0.5">{icon}</span>}
         <div>
           <h2 className="text-base font-bold text-ink-950 text-balance">{title}</h2>
           {subtitle && <p className="text-sm text-ink-500 mt-0.5">{subtitle}</p>}
@@ -79,7 +79,7 @@ export function PageHeader({
       <div>
         <span
           className={`text-xs font-bold uppercase tracking-widest ${
-            dark ? "text-brand-400" : "text-brand-600"
+            dark ? "text-brand-400" : "text-brand-700"
           }`}
         >
           {eyebrow}
@@ -122,7 +122,7 @@ export function Stat({
     good: "text-good-700",
     warn: "text-warn-700",
     crit: "text-crit-700",
-    brand: "text-brand-600",
+    brand: "text-brand-700",
   }[tone];
 
   return (
@@ -263,10 +263,10 @@ export function Button({
 }) {
   const variants = {
     primary:
-      "bg-brand-500 text-white hover:bg-ink-950 shadow-sm shadow-brand-500/25",
-    dark: "bg-ink-950 text-white hover:bg-brand-500 shadow-sm",
+      "bg-brand-700 text-white hover:bg-ink-950 shadow-sm shadow-brand-700/25",
+    dark: "bg-ink-950 text-white hover:bg-brand-700 shadow-sm",
     ghost: "bg-white text-ink-950 border border-ink-200 hover:bg-ink-50",
-    quiet: "bg-transparent text-brand-600 hover:text-ink-950 hover:underline",
+    quiet: "bg-transparent text-brand-700 hover:text-ink-950 hover:underline",
     // Reserved for irreversible actions, so the colour keeps its meaning.
     danger: "bg-crit-600 text-white hover:bg-crit-700 shadow-sm",
   };
@@ -346,10 +346,16 @@ export function ProgressBar({
   value,
   max,
   tone = "brand",
+  label,
 }: {
   value: number;
   max: number;
   tone?: "brand" | "good" | "warn" | "crit";
+  /**
+   * Required by `role="progressbar"`. Without it a screen reader announces
+   * "progress bar, 33" with no indication of what is at 33 or out of what.
+   */
+  label: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   const fills = {
@@ -362,9 +368,11 @@ export function ProgressBar({
     <div
       className="h-2 w-full rounded-full bg-ink-100 overflow-hidden"
       role="progressbar"
+      aria-label={label}
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={max}
+      aria-valuetext={`${value} of ${max}`}
     >
       <div className={`h-full rounded-full ${fills[tone]}`} style={{ width: `${pct}%` }} />
     </div>

@@ -206,6 +206,7 @@ export default async function AdminPage() {
                     <ProgressBar
                       value={stageIndex + 1}
                       max={STAGE_ORDER.length}
+                      label={`${h.market.name} launch progress`}
                       tone={isLive ? "good" : "brand"}
                     />
                     <p className="text-xs text-ink-500 mt-1.5">
@@ -260,6 +261,7 @@ export default async function AdminPage() {
                         <ProgressBar
                           value={h.committed}
                           max={h.market.subsidyBudget}
+                      label={`${h.market.name} subsidy committed`}
                           tone={
                             h.committed / h.market.subsidyBudget > 0.8 ? "crit" : "brand"
                           }
@@ -361,6 +363,7 @@ export default async function AdminPage() {
                   <ProgressBar
                     value={stage.count}
                     max={max}
+                      label={`${stage.label} funnel stage`}
                     tone={isPause ? "warn" : "brand"}
                   />
                 </div>
@@ -377,7 +380,7 @@ export default async function AdminPage() {
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Building2 className="w-5 h-5 text-brand-500" aria-hidden="true" />
+            <Building2 className="w-5 h-5 text-brand-700" aria-hidden="true" />
             <div>
               <p className="font-bold text-sm text-ink-950">
                 Every state change is written to an immutable audit log
@@ -389,7 +392,7 @@ export default async function AdminPage() {
           </div>
           <Link
             href="/admin/audit"
-            className="text-sm font-bold text-brand-600 hover:text-ink-950 flex items-center gap-1.5"
+            className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
           >
             View audit log <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </Link>

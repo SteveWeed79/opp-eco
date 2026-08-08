@@ -41,7 +41,7 @@ export default function LandingPage() {
 
         <h1 className="mt-8 text-4xl md:text-6xl font-black text-ink-950 tracking-tight leading-[1.05] text-balance max-w-4xl mx-auto">
           Paid internships that earn{" "}
-          <span className="text-brand-500">real academic credit</span>
+          <span className="text-brand-700">real academic credit</span>
         </h1>
 
         <p className="mt-6 text-lg text-ink-600 max-w-2xl mx-auto">
@@ -53,7 +53,7 @@ export default function LandingPage() {
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           <Link
             href="/student"
-            className="bg-brand-500 text-white font-bold px-7 py-3.5 rounded-2xl hover:bg-ink-950 transition-colors shadow-lg shadow-brand-500/25 flex items-center gap-2.5"
+            className="bg-brand-700 text-white font-bold px-7 py-3.5 rounded-2xl hover:bg-ink-950 transition-colors shadow-lg shadow-brand-700/25 flex items-center gap-2.5"
           >
             Find an internship <ArrowRight className="w-5 h-5" aria-hidden="true" />
           </Link>
@@ -74,7 +74,7 @@ export default function LandingPage() {
           ].map((stat) => (
             <Card key={stat.label} className="p-6 text-center">
               <dd className="text-3xl font-black text-ink-950 tabular">{stat.value}</dd>
-              <dt className="text-xs font-semibold text-brand-600 mt-1.5 uppercase tracking-wider">
+              <dt className="text-xs font-semibold text-brand-700 mt-1.5 uppercase tracking-wider">
                 {stat.label}
               </dt>
             </Card>
@@ -104,7 +104,7 @@ export default function LandingPage() {
               </p>
               <Link
                 href="/business"
-                className="mt-7 inline-flex items-center gap-2 bg-brand-500 text-white font-bold px-6 py-3 rounded-xl hover:bg-white hover:text-ink-950 transition-colors"
+                className="mt-7 inline-flex items-center gap-2 bg-brand-700 text-white font-bold px-6 py-3 rounded-xl hover:bg-white hover:text-ink-950 transition-colors"
               >
                 See how it works <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </Link>
@@ -166,7 +166,7 @@ export default function LandingPage() {
                 "Supervisor evaluation and logged hours",
               ].map((line) => (
                 <li key={line} className="flex gap-2.5">
-                  <span className="text-brand-500 mt-1" aria-hidden="true">
+                  <span className="text-brand-700 mt-1" aria-hidden="true">
                     ●
                   </span>
                   {line}
@@ -247,14 +247,14 @@ export default function LandingPage() {
             return (
               <Link key={card.href} href={card.href} className="group">
                 <Card className="p-6 h-full flex flex-col hover:shadow-lg transition-shadow">
-                  <span className="w-11 h-11 bg-brand-50 text-brand-500 rounded-2xl flex items-center justify-center mb-4">
+                  <span className="w-11 h-11 bg-brand-50 text-brand-700 rounded-2xl flex items-center justify-center mb-4">
                     <Icon className="w-5 h-5" aria-hidden="true" />
                   </span>
                   <h3 className="text-lg font-extrabold text-ink-950">{card.title}</h3>
                   <p className="text-sm text-ink-500 mt-2 leading-relaxed flex-1">
                     {card.copy}
                   </p>
-                  <span className="mt-4 text-sm font-bold text-brand-600 group-hover:text-ink-950 flex items-center gap-1.5 transition-colors">
+                  <span className="mt-4 text-sm font-bold text-brand-700 group-hover:text-ink-950 flex items-center gap-1.5 transition-colors">
                     Open portal <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </span>
                 </Card>
