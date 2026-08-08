@@ -3,9 +3,16 @@ name: CI
 # Everything verified by hand during development should be verified
 # automatically on every change. Without this, nothing stops a commit that
 # breaks the build from reaching the branch a deployment tracks.
+#
+# `push` is limited to the two long-lived branches on purpose. Listing every
+# branch here ran the whole suite twice for every pull request — once for the
+# push to the feature branch, once for the PR — which doubled the wait and made
+# the checks list ambiguous about which run mattered. Feature branches are
+# covered by `pull_request`; `dev` and `main` still get a direct run, because
+# those are the branches something is deployed from.
 on:
   push:
-    branches: ["**"]
+    branches: [dev, main]
   pull_request:
 
 # A new push supersedes an in-flight run on the same ref.
@@ -37,8 +44,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # The whole project, not just `src`. The end-to-end tests and the config
+      # files are code that can break too, and they were unlinted while this
+      # step named a single directory.
       - name: Lint
-        run: npx eslint src
+        run: npm run lint
 
       - name: Test
         run: npm test
@@ -51,3 +61,67 @@ jobs:
       # High and above fails; anything lower is noise on a demo.
       - name: Audit dependencies
         run: npm audit --audit-level=high
+
+  # Runs alongside `verify` rather than after it. It repeats the install and
+  # build, which costs about a minute of machine time and saves more than that
+  # in wall-clock — and it means a browser-only failure can't be confused with
+  # a typecheck failure.
+  e2e:
+    name: End-to-end and accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Keyed on the resolved Playwright version, so a dependency bump misses
+      # the cache and downloads the browser build that version expects rather
+      # than launching a mismatched one.
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache browsers
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # A cached browser still needs the shared libraries it links against,
+      # which live outside the cached directory.
+      - name: Install browser system dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # The suite runs against a production build, not the dev server: the CSP
+      # and HSTS headers it asserts only exist in production.
+      - name: Build
+        run: npm run build
+
+      - name: Run end-to-end and accessibility tests
+        run: npm run test:e2e
+
+      # Traces and screenshots are only written for failures, so this uploads
+      # nothing on a green run.
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
