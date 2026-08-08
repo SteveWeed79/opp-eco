@@ -1,9 +1,60 @@
 # Opportunity Ecosystem — End-to-End User Story
 
-**Status:** Draft for review. Nothing here is settled.
+**Status:** Draft, under active revision.
 **Purpose:** Pin down the complete lifecycle before writing application code, so the domain model and state machine are built once.
 
-Open questions are marked **[Q1]**, **[Q2]**, … and collected at the end. Assumptions I made to keep the story moving are marked **[assumed]** — treat every one of them as a question I answered on your behalf.
+Open questions are marked **[Q#]** and collected at the end. Assumptions I made to keep the story moving are marked **[assumed]** — treat every one as a question I answered on your behalf.
+
+---
+
+## Settled
+
+| | Decision |
+|---|---|
+| **Scope** | College-level credit only. High school stays modeled but dark. |
+| **Who is a student** | Degree-seeking students earning credit. **No adult job seekers**, no unaffiliated career-changers — everyone has an institution. |
+| **The point of the product** | Expanding internship-for-credit. Credit is the outcome, not a side benefit. |
+| **Agency interview** | Once per applicant. Clearance travels with the student. *(Confirm: per-person, not per-application.)* |
+| **Transportation** | The student's responsibility. Optional profile field at most; **not** a matching factor. |
+| **Payments** | Out of scope entirely. |
+| **Database** | Postgres. |
+| **Primary customer** | The administrator. |
+
+**Copy change this forces:** the landing page's "Job Seekers" card becomes "Students." There is no unaffiliated track.
+
+---
+
+## The two tracks
+
+This is the defining structural feature of the product. There are two kinds of opportunity, and they are not the same shape.
+
+| | **Standard Internship** | **Micro-Internship** |
+|---|---|---|
+| Credit | 3 credit hours | 1 credit hour |
+| Duration | Semester or summer, 12–15 weeks | Days to a few weeks |
+| Hours | ~135–150 | ~40 |
+| Shape | An ongoing role with a supervisor | A discrete project with a deliverable |
+| Model | Traditional internship | Parker Dewey style |
+| Evaluation | Supervisor evaluation + student reflection | Deliverable accepted |
+
+### Why this matters more than it looks
+
+**The micro track cannot carry the standard track's process weight.** If a 40-hour project requires a state workforce interview, a formal offer, a negotiated credit arrangement, a midpoint check-in, and a final evaluation, the administrative overhead exceeds the work itself. Low friction *is* the value proposition of a micro-internship — Parker Dewey's whole model is that a company can post a project on Tuesday and have a student on it by Friday.
+
+So the design cannot be one workflow with a duration field. It needs **workflow profiles**: one state machine, where the opportunity type declares which transitions are required and which are skipped. Standard runs the full path; micro runs a compressed one. Admin configures which steps each track requires rather than us hardcoding it.
+
+That keeps a single transition table — the thing that makes the five portals coherent — while letting the two tracks feel appropriately different.
+
+### The credit-hours floor
+
+Standard Carnegie accounting puts **one college credit at roughly 45 hours of student work**. That does arithmetic on both tracks:
+
+- 3 credits ≈ 135 hours. A semester internship at 10–12 hrs/week over 14 weeks lands at 140–168. Comfortable.
+- 1 credit ≈ 45 hours. A 40-hour micro-internship is defensible. **A 10-hour one is not.**
+
+Parker Dewey projects commonly run 10–40 hours, so a meaningful share of typical micro-projects fall below the credit threshold. Registrars will not wave this through.
+
+**Implication:** every opportunity needs a minimum-hours requirement for credit eligibility, and that floor should be **institution-configurable**, because PSU's registrar and a partner institution's registrar may not set it in the same place. A posting below its institution's floor is either not credit-bearing or not postable. **[Q11]**
 
 ---
 
@@ -12,10 +63,10 @@ Open questions are marked **[Q1]**, **[Q2]**, … and collected at the end. Assu
 | Actor | Who they are | What they own |
 |---|---|---|
 | **Admin** | The platform operator. The customer this is built for. | Vetting, oversight, intervention, reporting, configuration |
-| **Student** | HS or college job seeker | Their master profile, applications |
+| **Student** | Degree-seeking college student | Their master profile, applications |
 | **Employer** | Approved business hosting interns | Postings, candidate decisions, supervision |
-| **Education** | High school district or PSU | Roster verification, credit awards |
-| **Agency** | KANSASWORKS / state workforce | Interview slots, workforce sign-off |
+| **Education** | PSU and partner institutions | Roster verification, credit awards, credit policy |
+| **Agency** | KANSASWORKS / state workforce | Interview slots, workforce clearance |
 
 **Admin is the only cross-tenant role.** Every other actor sees only their own organization's data. That exception is deliberate, and every cross-tenant read gets logged.
 
@@ -25,9 +76,9 @@ Open questions are marked **[Q1]**, **[Q2]**, … and collected at the end. Assu
 
 Nothing exists until Admin lets it exist.
 
-1. Admin configures the program: counties in scope, whether the agency interview is required, which credit types are allowed, SLA thresholds for stalled work.
+1. Admin configures the program: counties in scope, workflow profile per track, credit floors, SLA thresholds for stalled work.
 2. An organization applies through a public form — legal name, state registration, county, org type, primary contact.
-3. Admin vets it. For an employer that means confirming it's a real, registered, in-good-standing Kansas business. For a school, that it's a real accredited institution.
+3. Admin vets it. For an employer, that it's a real, registered, in-good-standing Kansas business. For an institution, that it's real and accredited.
 4. On approval the primary contact is invited to create an account and becomes that org's own admin, who can then invite colleagues.
 
 ```mermaid
@@ -44,21 +95,21 @@ stateDiagram-v2
     rejected --> [*]
 ```
 
-This queue is your mockup's *"Pending Entity Vetting — 3 Organizations."* It is the trust foundation of the whole program: schools will only participate if someone credible vetted the employers their 16-year-olds are being sent to.
+This queue is the mockup's *"Pending Entity Vetting — 3 Organizations."* It is the trust foundation of the program: institutions will only participate if someone credible vetted the employers their students are sent to.
 
 ---
 
 ## Phase 1 — Student onboarding and verification
 
 1. Student self-registers and selects their institution **from the list of already-approved institutions**. They can't invent one.
-2. Student builds the **master profile** — the thing they build once and reuse forever:
-   - Education history, expected graduation
-   - Skills, on a shared taxonomy (see [Q6])
-   - Career interests / pathways
-   - Availability: terms, hours per week, **and transportation** (see [Q7])
+2. Student builds the **master profile** — built once, reused forever:
+   - Program of study, standing, expected graduation
+   - Skills, on a shared taxonomy **[Q6]**
+   - Career interests
+   - Availability: terms, hours per week
    - Resume, portfolio links
-3. **The institution verifies them.** A counselor sees the student in a pending-verification queue and confirms: our student, this grade, this ID, in good standing, eligible for internship-for-credit.
-4. Verified students get the badge in your mockup. **Unverified students may browse but may not apply.** [assumed] — browsing is the carrot that gets them to finish verification.
+3. **The institution verifies them.** A staff member confirms: our student, this program, this ID, in good standing, eligible for internship-for-credit.
+4. Verified students get the badge in the mockup. **Unverified students may browse but may not apply.** [assumed]
 
 ```mermaid
 stateDiagram-v2
@@ -72,13 +123,17 @@ stateDiagram-v2
     inactive --> verified
 ```
 
-**Minors:** if DOB indicates under 18, a guardian record and consent artifact are required before verification completes. Modeled now, dark at launch (college-first), per your call.
+Guardian consent and under-18 PII gating are modeled in the schema but unreachable in the college-only product.
 
 ---
 
 ## Phase 2 — Employer posts an opportunity
 
-An approved employer creates a posting: title, description, county and work arrangement, term and dates, hours per week, **wage** (required — this is a paid-internship program), required and preferred skills, whether it's credit-eligible and for roughly how many hours, the assigned supervisor, and the number of openings.
+The employer picks a track first, because it changes the form:
+
+**Standard:** title, description, county and work arrangement, term and dates, hours per week, wage, required and preferred skills, credit hours available, supervisor, number of openings.
+
+**Micro:** project title, deliverable description, estimated hours, deadline, compensation, required skills. No ongoing supervisor relationship, no term alignment.
 
 ```mermaid
 stateDiagram-v2
@@ -92,37 +147,37 @@ stateDiagram-v2
     published --> expired
 ```
 
-**[Q1] Does Admin review every posting?** Three options: auto-publish for approved employers; review the first posting from each employer then auto-publish after; review everything. Given minors and academic credit are attached, I'd lean to the middle option — but this is a workload decision for whoever staffs the admin desk, so it should be a configuration setting rather than a hardcoded rule.
+**[Q1] Does Admin review every posting?** Auto-publish for approved employers, review-first-then-auto, or review everything. Given credit is attached, I'd lean to review-first-then-auto — but this is a staffing decision, so it should be configuration, not a hardcoded rule. Plausibly it differs by track: standard reviewed, micro auto-published.
 
 ---
 
 ## Phase 3 — Discovery and application
 
-Student browses and searches. Each posting shows a **match score** — computed from skill overlap, location and transportation fit, availability, and credit fit.
+Students browse and search. Each opportunity shows a **match score** from skill overlap, availability, and credit fit.
 
-Two rules about that score, and they matter:
-- It is **explainable**. Stored with the factors that produced it and the version of the algorithm that produced it, because employers will ask "why 94%?" and someone will eventually audit it for bias.
-- It **sorts, it never gates**. No student is ever filtered out of an employer's view by a score.
+Two rules about that score:
+- It is **explainable** — stored with the factors that produced it and the algorithm version, because employers will ask "why 94%?" and someone will eventually audit it for bias.
+- It **sorts, it never gates.** No student is filtered out of an employer's view by a score.
 
-"1-Click Apply" works because the master profile already carries everything. The student adds at most a short interest statement.
+"1-Click Apply" works because the master profile already carries everything.
 
-**[assumed]** The student's institution is notified when they apply — informational, not an approval step. Counselors want to know their kids are active.
+**[assumed]** The student's institution is notified when they apply — informational, not an approval step.
 
 ---
 
 ## Phase 4 — Employer review
 
-Employer works the candidate pipeline (the table in your mockup): shortlist, reject, or request more information.
+Employer works the candidate pipeline: shortlist, reject, request more information.
 
-Critically, **the employer does not see full contact PII at this stage** — not a phone number, not a home address. That unlocks later, and for minors it unlocks later still. Field-level disclosure is a property of the profile, not of the screen rendering it.
+The employer **does not see full contact PII at this stage.** That unlocks later in the flow. Field-level disclosure is a property of the profile, not of the screen rendering it.
 
 ---
 
-## Phase 5 — The Kansas Workforce interview
+## Phase 5 — Workforce clearance
 
-This is the distinctive step, and the one I most need you to correct me on.
+**Resolved: once per applicant.** The student is interviewed once and carries the clearance to every application. Agency workload scales with *students*, not applications — the difference between a program that works at scale and one that collapses at fifty concurrent applications.
 
-As drawn: employer shortlists → employer requests a KS interview → agency publishes slots → student books one → Zoom session happens → agency officer signs off → candidate is cleared.
+Open sub-questions: how long clearance lasts (a term? a year? until graduation?) **[Q12]**, and whether the micro track requires it at all **[Q13]**.
 
 ```mermaid
 stateDiagram-v2
@@ -130,47 +185,41 @@ stateDiagram-v2
     submitted --> under_review
     under_review --> shortlisted
     under_review --> rejected
-    shortlisted --> interview_requested
-    interview_requested --> interview_scheduled
-    interview_scheduled --> interview_completed
-    interview_scheduled --> no_show
-    no_show --> interview_scheduled
-    interview_completed --> agency_approved
-    interview_completed --> agency_declined
-    agency_approved --> offer_extended
+    shortlisted --> offer_extended
     offer_extended --> offer_accepted
     offer_extended --> offer_declined
     offer_accepted --> placement_active
 ```
 
-**[Q2] Is the interview per-application, or once per student per term?**
+Clearance now sits on the **student**, not the application — which is why it no longer appears as a stage in the application flow above.
 
-This is the highest-leverage question in the document. As drawn it's per-application — which means a student applying to five employers sits through five state interviews, and the agency's workload scales with *applications*, not with *students*. That will not survive contact with volume.
+**[Q4] Where the gate sits relative to the hiring decision — deferred.** You're writing this up.
 
-The alternative: the interview is a **workforce-readiness credential the student earns once per term**. Agency interviews the student, signs off, and that clearance travels with them to every application that term. Agency workload scales with students, the student's experience is dramatically better, and employers get pre-cleared candidates instantly instead of waiting a week.
-
-If the state's requirement is genuinely about validating *each placement* rather than each participant, the per-application model is forced. If it's about participant readiness and intake, the credential model is strictly better. Worth confirming with whoever wrote the requirement.
-
-**[Q3] Who attends?** Your mockup reads "Alex Miller ↔ Apex Robotics," which suggests employer and student together. Student-only is a readiness screen; joint is a placement validation. Different meanings, different scheduling complexity.
-
-**[Q4] Where does the gate sit relative to the hiring decision?** As drawn, the agency screens candidates the employer hasn't committed to hiring. Flipping it — employer extends a conditional offer, agency validates, offer confirms — cuts agency volume hard and only interviews people who are actually about to be placed.
+**[Q3] Who attends** — student only, or student and employer together — still open, though per-applicant clearance strongly implies student-only.
 
 ---
 
 ## Phase 6 — Offer and placement
 
-Employer extends an offer with role, wage, dates, hours, and supervisor. Student accepts (guardian co-signs if a minor). The institution confirms the credit arrangement: how many credits, mapped to which course, with what learning objectives and which faculty supervisor.
+**Standard:** employer extends an offer with role, wage, dates, hours, supervisor. Student accepts. Institution confirms the credit arrangement — how many credits, mapped to which course, with what learning objectives and which faculty supervisor.
 
-**Credit is not one thing.** A high school granting credit toward graduation and PSU granting college credit hours are different objects with different scales and different approvers. One generic `credits: 3` field breaks the first time both institution types are live.
+**Micro:** employer selects a student for the project. Far lighter — a project assignment, not an offer negotiation. Whether the institution pre-approves each micro-project or blanket-approves the track is **[Q14]**.
 
 ---
 
-## Phase 7 — The placement runs
+## Phase 7 — The work happens
 
-- Student logs hours; supervisor approves them. This feeds both wage verification and credit.
-- Midpoint check-in **[Q5]** — does anyone formally check in partway through?
+**Standard:**
+- Student logs hours; supervisor approves.
+- Midpoint check-in **[Q5]**.
 - Supervisor completes an end-of-placement evaluation.
-- **An escalation path exists.** Any party can raise a problem — safety, no-shows, conduct — and it routes to Admin. With minors in the program this is not optional, and it needs to exist before the first HS student is placed.
+
+**Micro:**
+- Student submits the deliverable by the deadline.
+- Employer accepts it or requests revision.
+- No hour logging, no midpoint, no formal evaluation — acceptance *is* the evaluation.
+
+An **escalation path** exists on both tracks. Any party can raise a problem and it routes to Admin.
 
 ```mermaid
 stateDiagram-v2
@@ -188,21 +237,25 @@ stateDiagram-v2
 
 ## Phase 8 — Credit and closeout
 
-Institution reviews hours logged, the supervisor evaluation, and the student's reflection, then grants credit. The credit award writes back to the student's profile as **verified completed experience** — which is the compounding value of the whole system. After two placements a student carries a work record that a school and a state agency both attested to.
+Institution reviews the evidence — hours and evaluation for standard, accepted deliverable for micro — and grants credit.
+
+The credit award writes back to the student's profile as **verified completed experience**. That is the compounding value of the system: after several placements a student carries a work record that an institution and a state agency both attested to.
+
+**[Q15] Do micro-internships stack?** Three 1-credit micro-internships summing to 3 credits is the obvious student question, and registrars will have an opinion. If they stack, `CreditAward` needs aggregation logic and a cap; if not, that's a rule to enforce at application time so nobody discovers it after the work is done.
 
 ---
 
 ## Phase 9 — Admin oversight (continuous, not sequential)
 
-This runs across every phase above, and it's the product.
+This runs across every phase above, and it is the product.
 
-**Oversight.** One view of every application in flight across all five parties. The useful version isn't a list — it's *exception-first*: what's stuck, who's sitting on a queue past SLA, which postings have no applicants, which students verified but never applied. Admin's job is unsticking things, so the screen should lead with what's stuck.
+**Oversight.** One view of every application in flight across all parties. The useful version isn't a list — it's **exception-first**: what's stuck, who's sitting on a queue past SLA, which postings have no applicants, which students verified but never applied. Admin's job is unsticking things, so the screen leads with what's stuck.
 
 **Vetting.** The org approval queue, plus visibility into student verification across institutions.
 
-**Reporting.** Rolled up from the audit event log rather than computed ad hoc: placements by county, credit hours granted, wages earned by students, employer and school participation, time-to-placement, funnel conversion at each stage. This is what justifies the program to the state and to funders.
+**Reporting.** Rolled up from the audit event log rather than computed ad hoc: placements by county and by track, credit hours granted, employer and institution participation, time-to-placement, funnel conversion at each stage. Standard-vs-micro comparison will be one of the most interesting numbers the program produces — and the strongest argument for the micro track's existence.
 
-**Intervention.** Admin can nudge a party, reassign, or force a state transition — always with a reason, always logged.
+**Intervention.** Admin can nudge, reassign, or force a state transition — always with a reason, always logged.
 
 **Audit.** Every transition writes an immutable event: who, what, when, why. This is also what makes the reporting free.
 
@@ -210,23 +263,36 @@ This runs across every phase above, and it's the product.
 
 ## Open questions
 
+### New, from the two-track model
+
 | # | Question | Why it matters |
 |---|---|---|
-| **Q1** | Does Admin review every posting, first-only, or none? | Admin desk workload; should probably be configurable |
-| **Q2** | Is the agency interview per-application or once per student per term? | **Biggest question here.** Determines whether agency workload scales with applications or with students |
-| **Q3** | Is the interview student-only or student + employer? | Changes what the interview *means* and how hard it is to schedule |
-| **Q4** | Does the agency gate sit before or after the employer's hiring decision? | Order-of-magnitude difference in agency volume |
-| **Q5** | Is there a formal midpoint check-in during a placement? | Adds a state and a notification cycle |
-| **Q6** | Skills taxonomy: adopt O\*NET, or roll our own tags? | O\*NET is federal, free, and state workforce systems already speak it — but it's coarse for HS-level skills |
-| **Q7** | Is transportation a first-class matching factor? | In rural SE Kansas a student without a car cannot take a placement 30 miles away. If it's not modeled, matches will be wrong in a way that's invisible on screen |
-| **Q8** | **Are adult job seekers in scope?** | Your landing page says "Job Seekers," but every other screen says "Student." An adult career-changer has no institution to verify them and wants no academic credit — that's a different lifecycle, missing Phases 1.3 and 8. Either it's out of scope, or it's a second track |
-| **Q9** | Can one posting produce multiple placements? | "3 openings" is common; affects whether posting→placement is 1:1 or 1:N |
-| **Q10** | Does a profile follow a student from HS to PSU? | If yes, profile ownership can't be tied to one institution |
+| **Q11** | Minimum hours per credit — institution-configurable floor? | Many typical micro-projects fall under 45 hours and aren't creditable. Needs enforcing at posting time, not discovered at credit time |
+| **Q13** | Does the micro track require workforce clearance? | If yes, overhead swamps a 40-hour project and the track's advantage evaporates |
+| **Q14** | Does the institution approve each micro-project, or blanket-approve the track? | Per-project approval reintroduces the friction the track exists to avoid |
+| **Q15** | Do micro-internships stack toward more credit? | Determines whether `CreditAward` needs aggregation and a cap |
+| **Q12** | How long does workforce clearance last? | A term, a year, until graduation — drives re-clearance cycles |
+
+### Still open from before
+
+| # | Question | Status |
+|---|---|---|
+| **Q1** | Does Admin review every posting? | Open — probably configurable, possibly per-track |
+| **Q3** | Interview: student only, or with employer? | Open — per-applicant clearance implies student-only |
+| **Q4** | Where the gate sits vs. the hiring decision | **Deferred — you're writing this up** |
+| **Q5** | Formal midpoint check-in on standard placements? | Open |
+| **Q6** | Skills taxonomy — O\*NET or custom? | Open. O\*NET is federal, free, and state workforce systems speak it |
+| **Q9** | Can one posting produce multiple placements? | Open. Near-certainly yes for micro |
+| **Q10** | Does a profile follow a student between institutions? | Open |
+
+### Resolved
+
+**Q2** once per applicant · **Q7** transportation is the student's responsibility, not a match factor · **Q8** no adult job seekers, everyone is a credit-seeking student
 
 ---
 
 ## What this buys us
 
-Once Q1–Q10 are answered, the state machine above becomes a single guarded transition table with a permission matrix — who may move what, from where, to where. Every one of the five portals is then a filtered query over that one table.
+Once these land, the state machine becomes a single guarded transition table with a permission matrix — who may move what, from where, to where — plus a workflow profile per track declaring which transitions are required.
 
-That table is the foundation. Build it right and the five portals are views. Build five portals first and you get five divergent truths.
+That table is the foundation. Build it right and the five portals are views over it. Build five portals first and you get five divergent truths.

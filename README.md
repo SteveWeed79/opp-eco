@@ -14,7 +14,10 @@ A workforce-development platform connecting Kansas students, employers, educatio
 |---|---|---|
 | Database | Postgres | Relational domain, cross-entity transactions, row-level tenancy |
 | Primary customer | The platform administrator | Admin console is the product; the other portals feed it |
-| Minors (under 18) | Model now, launch college-first | Guardian consent and PII disclosure gating built into the foundation |
+| Scope | College-level credit only | High school modeled in the schema but dark |
+| Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
+| Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
+| Workforce clearance | Once per applicant | Clearance travels with the student, not the application |
 | Payments | Out of scope | No payment flows in the mockup |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 
