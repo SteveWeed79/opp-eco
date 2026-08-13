@@ -73,6 +73,22 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  saveOrganization(organization: import("@/domain/types").Organization) {
+    const index = seed.organizations.findIndex((o) => o.id === organization.id);
+    if (index === -1) throw new Error(`Unknown organization ${organization.id}`);
+    this.effects.push(() => {
+      seed.organizations[index] = organization;
+    });
+  }
+
+  savePosting(posting: import("@/domain/types").Posting) {
+    const index = seed.postings.findIndex((p) => p.id === posting.id);
+    if (index === -1) throw new Error(`Unknown posting ${posting.id}`);
+    this.effects.push(() => {
+      seed.postings[index] = posting;
+    });
+  }
+
   saveInterviewSlot(slot: import("@/domain/types").InterviewSlot, expectedVersion: number) {
     const current = seed.slotOverrides.get(slot.id);
     const version = current?.version ?? 1;

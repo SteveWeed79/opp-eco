@@ -16,6 +16,7 @@ import type {
   AuditEvent,
   CreditAward,
   InterviewSlot,
+  Organization,
   Posting,
   Student,
   TimeEntry,
@@ -56,6 +57,17 @@ export interface UnitOfWork {
   createPosting(posting: Posting): void;
   saveApplication(application: Application, expectedVersion: number): void;
   saveStudent(student: Student): void;
+  /**
+   * Vetting and publication decisions.
+   *
+   * No version check on either, unlike applications and time entries: both are
+   * single-desk workflows — an organization is vetted by one administrator, a
+   * posting reviewed by one college — so the concurrent-write case these
+   * protect against does not arise the way it does where five portals act on
+   * one record. Add versions here the day a second desk appears.
+   */
+  saveOrganization(organization: Organization): void;
+  savePosting(posting: Posting): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
   /** Insert a week of logged hours. Same create/save split as applications. */
   createTimeEntry(entry: TimeEntry): void;

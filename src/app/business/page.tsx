@@ -1,4 +1,11 @@
-import { CircleDollarSign, Clock, HelpCircle, Users, Zap } from "lucide-react";
+import {
+  CircleDollarSign,
+  Clock,
+  FileText,
+  HelpCircle,
+  Users,
+  Zap,
+} from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -16,7 +23,12 @@ import {
   Th,
   TrackBadge,
 } from "@/components/ui";
-import { TransitionActions } from "@/components/TransitionActions";
+import {
+  TransitionActions,
+  POSTING_CONFIRM,
+} from "@/components/TransitionActions";
+import { postingMachine } from "@/domain/lifecycle";
+import { postingLifecycleAsBusiness } from "@/app/_actions/lifecycle";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
 import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
@@ -59,6 +71,37 @@ export default async function BusinessPage() {
     .list(actor, { kind: "college" })
     .find((o) => o.marketId === market.id);
   const hoursPerCredit = college?.hoursPerCredit ?? 45;
+
+  /**
+   * Live candidates against a posting — what the close guard reads, so the
+   * button and the service agree about whether closing would strand anyone.
+   */
+  const openApplicationsFor = (postingId: string) =>
+    repositories.applications
+      .forPosting(actor, postingId)
+      .filter((a) => !isTerminal(a.status)).length;
+
+  const POSTING_LABEL: Record<string, string> = {
+    draft: "Draft",
+    help_requested: "With the college",
+    college_drafting: "College drafting",
+    pending_review: "Awaiting review",
+    changes_requested: "Changes requested",
+    published: "Live",
+    filled: "Filled",
+    closed: "Closed",
+    expired: "Expired",
+  };
+
+  const POSTING_TONE: Record<string, "good" | "warn" | "brand" | "neutral"> = {
+    published: "good",
+    filled: "brand",
+    changes_requested: "warn",
+    pending_review: "warn",
+    help_requested: "warn",
+    college_drafting: "brand",
+  };
+
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
@@ -288,7 +331,7 @@ export default async function BusinessPage() {
                             transition to the table makes its button appear;
                             a guard failing makes it disappear. */}
                         <TransitionActions
-                          applicationId={application.id}
+                          id={application.id}
                           action={businessTransition}
                           subject={`${student.name} — ${posting.title}`}
                           transitions={availableTransitions(actor, {
@@ -306,6 +349,64 @@ export default async function BusinessPage() {
               </tbody>
             </table>
           </TableWrap>
+        )}
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Your postings, and where each one is                                */}
+      {/*                                                                     */}
+      {/* The college can send a posting back asking for a change. Without a  */}
+      {/* surface where the employer sees that and can resubmit, "request     */}
+      {/* changes" is a dead end that looks like a decision.                  */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader
+          icon={<FileText className="w-5 h-5" />}
+          title="Your postings"
+          subtitle="Nothing reaches students until the college has reviewed it"
+        />
+        {postings.length === 0 ? (
+          <Empty>No postings yet.</Empty>
+        ) : (
+          <ul className="divide-y divide-ink-100">
+            {postings.map((posting) => (
+              <li key={posting.id} className="px-6 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-ink-950">
+                        {posting.title}
+                      </span>
+                      <TrackBadge
+                        track={posting.track}
+                        posting={posting}
+                        hoursPerCredit={hoursPerCredit}
+                      />
+                      <Badge tone={POSTING_TONE[posting.status] ?? "neutral"}>
+                        {POSTING_LABEL[posting.status] ?? posting.status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-ink-500 mt-0.5">
+                      {posting.county} County ·{" "}
+                      {openApplicationsFor(posting.id)} in pipeline
+                    </p>
+                  </div>
+                  <TransitionActions
+                    id={posting.id}
+                    action={postingLifecycleAsBusiness}
+                    subject={posting.title}
+                    confirm={POSTING_CONFIRM}
+                    transitions={postingMachine
+                      .available(actor, {
+                        posting,
+                        openApplications: openApplicationsFor(posting.id),
+                      })
+                      .map((t) => ({ to: t.to, label: t.label }))}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 

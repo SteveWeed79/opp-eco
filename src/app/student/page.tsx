@@ -183,7 +183,7 @@ export default async function StudentPage() {
                   {options.length > 0 && !needsBoard && (
                     <div className="mt-4">
                       <TransitionActions
-                        applicationId={application.id}
+                        id={application.id}
                         action={studentTransition}
                         subject={posting.title}
                         transitions={options.map((o) => ({

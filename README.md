@@ -94,6 +94,26 @@ Properties worth knowing:
 - **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 
+## The four state machines
+
+Four things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, and an **organization's** vetting. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
+
+| Machine | Owned by | Gates |
+|---|---|---|
+| Application | all five portals | the placement itself |
+| Student | the college | whether a student may apply at all |
+| Posting | the college, with the employer's half | what students can see |
+| Organization | the administrator alone | whether anything can transact |
+
+The application machine was the only one modelled for a long time, and that left two claims in the interface with nothing behind them:
+
+- the admin console said *"nothing transacts until an organization is approved"* — a business at `applied` could post, take candidates, and approve hours a board would reimburse;
+- the college portal said *"students cannot apply until verified"* — applying worked regardless.
+
+Both were missing for the same reason. The status existed and the queue rendered it, but nothing could move it, so nothing could depend on it either. `canApply` and `canTransact` are now the single definitions, checked in `creation.ts` where applications and postings are made.
+
+**An administrator sees moves they would have to override**, and the refusal names the guard rather than only asking for a reason — on an admin-only machine like vetting, the administrator is the only caller a guard can ever refuse, so without that they are asked to justify a decision the product declined to describe.
+
 ## Hours
 
 Reimbursement is hourly, so logged hours are the basis of a funding claim and not only an academic record. The platform is the system of record for them (Q19).
@@ -168,7 +188,9 @@ The outbox states plainly whether "delivered" means an email left the building o
 ### Not wired, on purpose
 
 - **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
-- **Student verification and posting publication.** These are workflows over `Student` and `Posting`, not application transitions. They need their own state machines rather than buttons that guess.
+- **Interview slot publishing.** The board's "Publish slots" button. Slots already have a repository and optimistic concurrency; what is missing is the form and a rule about how far ahead a board may publish.
+- **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
+- **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

@@ -76,6 +76,19 @@ export const applyInput = z.object({
 });
 
 /**
+ * A move on one of the three gating machines.
+ *
+ * The target status is a bounded string rather than an enum per entity: the
+ * machine is the authority on whether the move exists, and duplicating its
+ * vocabulary here would give two places to update and one to forget.
+ */
+export const lifecycleInput = z.object({
+  id,
+  to: z.string().min(1).max(64),
+  reason: reason.optional(),
+});
+
+/**
  * A week of logged hours.
  *
  * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered

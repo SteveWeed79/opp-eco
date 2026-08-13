@@ -305,7 +305,7 @@ export default async function BoardPage() {
                               />
                             )}
                             <TransitionActions
-                              applicationId={application.id}
+                              id={application.id}
                               action={boardTransition}
                               subject={`${student.name} — ${posting.title}`}
                               transitions={otherTransitions.map((t) => ({

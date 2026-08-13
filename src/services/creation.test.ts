@@ -56,6 +56,83 @@ function openPostingId(): string {
   return posting.id;
 }
 
+describe("the gates that were claimed but never enforced", () => {
+  // Both of these were asserted in the interface and checked nowhere. The
+  // seeded demo satisfies them, which is exactly why they went unnoticed —
+  // so these drive the refusal path directly rather than trusting a green
+  // run over data that could never have failed.
+
+  it("refuses an application from a student the college has not verified", async () => {
+    const student = seed.students.find((s) => s.id === "stu-omar")!;
+    const original = student.status;
+    student.status = "pending_verification";
+
+    try {
+      const result = await submitApplication(contextFor("student"), openPostingId());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe("forbidden");
+      expect(result.error).toContain("has not verified your enrollment");
+    } finally {
+      student.status = original;
+    }
+  });
+
+  it("refuses an application to an employer still in vetting", async () => {
+    const postingId = openPostingId();
+    const posting = seed.postings.find((p) => p.id === postingId)!;
+    const employer = seed.organizations.find((o) => o.id === posting.businessId)!;
+    const original = employer.status;
+    employer.status = "under_review";
+
+    try {
+      const result = await submitApplication(contextFor("student"), postingId);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain("not currently able to take applications");
+    } finally {
+      employer.status = original;
+    }
+  });
+
+  it("refuses a posting from an employer still in vetting", async () => {
+    const employer = seed.organizations.find((o) => o.id === "org-apex")!;
+    const original = employer.status;
+    employer.status = "applied";
+
+    try {
+      const result = await createPosting(contextFor("business"), validPosting);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain("still being vetted");
+    } finally {
+      employer.status = original;
+    }
+  });
+
+  it("tells a suspended employer something other than 'not approved'", async () => {
+    // Telling them they are unapproved invites them to apply again, which is
+    // not the remedy.
+    const employer = seed.organizations.find((o) => o.id === "org-apex")!;
+    const original = employer.status;
+    employer.status = "suspended";
+
+    try {
+      const result = await createPosting(contextFor("business"), validPosting);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain("suspended");
+      expect(result.error).not.toContain("still being vetted");
+    } finally {
+      employer.status = original;
+    }
+  });
+});
+
 describe("submitting an application", () => {
   it("creates one, at submitted", async () => {
     const result = track(await submitApplication(student(), openPostingId()), "applications");
