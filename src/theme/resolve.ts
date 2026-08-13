@@ -24,6 +24,8 @@ export interface ResolvedTheme {
   logoUrl?: string;
   /** False when this is the platform's own look rather than a partner's. */
   isPartner: boolean;
+  /** Whether the partner supplied a second colour. */
+  hasAccent: boolean;
 }
 
 export function resolvePartnerTheme(actor: ActorContext | null): ResolvedTheme {
@@ -36,6 +38,7 @@ export function resolvePartnerTheme(actor: ActorContext | null): ResolvedTheme {
     monogram: theme.monogram,
     logoUrl: theme.logoUrl,
     isPartner: Boolean(organization?.brandColor),
+    hasAccent: Boolean(organization?.accentColor),
   };
 }
 

@@ -104,6 +104,16 @@ export interface Organization {
    * product's name. See `src/theme/ramp.ts`.
    */
   brandColor?: string;
+  /**
+   * The school's second colour. Institutions almost always have two — a
+   * crimson and a gold, a navy and a vegas gold.
+   *
+   * Used as a fill with automatically chosen ink on it, never as a text colour
+   * or an interactive one. A gold is unreadable as text on white, and solving
+   * it as though it were the primary would darken it into a brown that is no
+   * longer the school's colour. See `accentFromHue`.
+   */
+  accentColor?: string;
   logoUrl?: string;
 }
 

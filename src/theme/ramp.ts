@@ -282,3 +282,61 @@ export function hueOf(hex: string): number {
 
   return ((h * 60) % 360 + 360) % 360;
 }
+
+// ---------------------------------------------------------------------------
+// The second colour
+// ---------------------------------------------------------------------------
+
+/**
+ * A school's accent, and the text colour that survives on it.
+ *
+ * Institutions almost always have two colours — a crimson and a gold, a navy
+ * and a vegas gold — and the second one plays a different role from the first.
+ * This is not a stylistic observation, it is a contrast one:
+ *
+ * **A gold cannot be a text colour on white.** Its luminance is far too high.
+ * Running it through `rampFromHue` would darken it until it cleared 4.5:1,
+ * by which point it is a brown and no longer the school's colour at all.
+ *
+ * Which is also not how anyone uses these palettes. Crimson does the headings
+ * and the buttons; gold is a *fill* with dark text on it. So the accent's
+ * contract is a fill plus the ink that reads on it, chosen per hue — white for
+ * a navy, near-black for a gold — rather than a ramp pinned to white.
+ *
+ * The accent never carries body text and never becomes an interactive colour.
+ * It is a band, a rule, a mark. That restraint is what lets it stay the colour
+ * the school actually chose.
+ */
+export interface Accent {
+  /** The colour itself, as close to what was chosen as contrast allows. */
+  fill: string;
+  /** Whichever of near-black or white is readable on `fill`. */
+  on: string;
+}
+
+/** Preferred vividness for an accent fill, before contrast is considered. */
+const ACCENT_L = 48;
+
+export function accentFromHue(hue: number, chroma = 1): Accent {
+  const h = ((hue % 360) + 360) % 360;
+  const s = clamp(92 * chroma, 0, 100);
+
+  // Search outward from the preferred lightness, so the accent stays as close
+  // to its natural vividness as the contrast requirement allows.
+  for (let delta = 0; delta <= 50; delta++) {
+    for (const l of delta === 0 ? [ACCENT_L] : [ACCENT_L + delta, ACCENT_L - delta]) {
+      if (l < 0 || l > 100) continue;
+      const fill = hsl(h, s, l);
+
+      const onInk = contrastRatio(INK_950, fill);
+      const onWhite = contrastRatio(WHITE, fill);
+
+      if (onInk >= AA || onWhite >= AA) {
+        return { fill, on: onInk >= onWhite ? INK_950 : WHITE };
+      }
+    }
+  }
+
+  // Unreachable: every hue clears AA against one of black or white somewhere.
+  return { fill: hsl(h, s, ACCENT_L), on: INK_950 };
+}

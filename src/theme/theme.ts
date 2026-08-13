@@ -23,12 +23,18 @@
 
 import type { Organization } from "@/domain/types";
 import { brand } from "@/brand";
-import { hueOf, rampFromHue, type Ramp } from "./ramp";
+import { accentFromHue, hueOf, rampFromHue, type Accent, type Ramp } from "./ramp";
 
 export interface PartnerTheme {
   /** Whose theme this is, for the "themed by" attribution. */
   organizationName: string;
   ramp: Ramp;
+  /**
+   * The school's second colour, when they have one. Absent for the platform's
+   * own look, which is deliberately single-colour — a vendor with two brand
+   * colours competing with a school's two is noise.
+   */
+  accent?: Accent;
   /** Optional mark. Falls back to the platform monogram when absent. */
   logoUrl?: string;
   /** Two-letter fallback when there is no logo. */
@@ -67,6 +73,9 @@ export function themeFor(organization: Organization | null): PartnerTheme {
     // ramp is computed. That is the bargain — bring your colour, we guarantee
     // it stays readable.
     ramp: rampFromHue(hueOf(organization.brandColor)),
+    accent: organization.accentColor
+      ? accentFromHue(hueOf(organization.accentColor))
+      : undefined,
     logoUrl: organization.logoUrl,
     monogram: initialsOf(organization.name),
   };
@@ -93,6 +102,11 @@ export function isPartnerSurface(pathname: string): boolean {
  */
 export function themeVariables(theme: PartnerTheme): Record<string, string> {
   return {
+    // The accent and the ink that reads on it, resolved together so a call
+    // site can never pair them wrongly. Falls back to the primary when a
+    // partner has only one colour, so anything using the accent still works.
+    "--color-accent": theme.accent?.fill ?? theme.ramp[700],
+    "--color-accent-on": theme.accent?.on ?? "#ffffff",
     "--color-brand-50": theme.ramp[50],
     "--color-brand-100": theme.ramp[100],
     "--color-brand-200": theme.ramp[200],

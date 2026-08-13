@@ -155,6 +155,7 @@ export const organizations: Organization[] = [
     // student portal and the whole surface takes the school's colour, while
     // admin and board stay on the platform's.
     brandColor: "#1b5e3f",
+    accentColor: "#c9a227",
   },
   {
     id: "org-apex",

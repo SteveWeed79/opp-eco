@@ -85,7 +85,14 @@ export function Shell({
         <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-brand-100">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
-              <span className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden">
+              <span
+                className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden"
+                style={
+                  themed && theme.hasAccent
+                    ? { boxShadow: "0 0 0 2px var(--color-accent)" }
+                    : undefined
+                }
+              >
                 {themed && theme.logoUrl ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
@@ -196,6 +203,18 @@ export function Shell({
               </button>
             )}
           </div>
+
+          {/* The school's second colour, as a band.
+              Deliberately the only place it appears at full strength: an
+              accent is what a crimson-and-gold institution recognises as
+              theirs, and it does its job without carrying any text. */}
+          {themed && theme.hasAccent && (
+            <div
+              aria-hidden="true"
+              className="h-1 w-full"
+              style={{ backgroundColor: "var(--color-accent)" }}
+            />
+          )}
 
           {/* Small screens get the switcher as a scrolling row rather than losing it */}
           <div className="lg:hidden border-t border-ink-100 overflow-x-auto">

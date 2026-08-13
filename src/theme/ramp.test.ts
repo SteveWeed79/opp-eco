@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rampFromHue, contrastRatio, hueOf, hsl } from "./ramp";
+import { rampFromHue, accentFromHue, contrastRatio, hueOf, hsl } from "./ramp";
 
 /**
  * The point of generating ramps instead of accepting colours is that the
@@ -136,5 +136,45 @@ describe("hsl conversion", () => {
     [240, 100, 50, "#0000ff"],
   ])("hsl(%i %i%% %i%%) is %s", (h, s, l, expected) => {
     expect(hsl(h, s, l)).toBe(expected);
+  });
+});
+
+describe("the second colour", () => {
+  it.each(EVERY_HUE)("hue %i: something readable sits on the accent", (hue) => {
+    // The accent is a fill, not a text colour. What has to hold is that the
+    // ink chosen for it actually reads — white on a navy, near-black on a gold.
+    const accent = accentFromHue(hue);
+    expect(contrastRatio(accent.on, accent.fill)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("keeps a gold golden rather than darkening it into a brown", () => {
+    // The whole reason the accent has its own contract. Running gold through
+    // the primary solver would push it dark enough to carry white text, at
+    // which point it is not the school's colour any more.
+    const gold = accentFromHue(45);
+    const asIfPrimary = rampFromHue(45)[700];
+
+    // Still light enough to be recognisably gold...
+    expect(contrastRatio(gold.fill, "#ffffff")).toBeLessThan(4.5);
+    // ...and it takes dark text, which is how gold is actually used.
+    expect(gold.on).toBe("#020617");
+    // The primary solver would have gone much darker.
+    expect(contrastRatio(asIfPrimary, "#ffffff")).toBeGreaterThan(
+      contrastRatio(gold.fill, "#ffffff"),
+    );
+  });
+
+  it("puts white on a deep navy", () => {
+    const navy = accentFromHue(220);
+    expect(navy.on).toBe("#ffffff");
+  });
+
+  it("stays close to the vividness that was asked for", () => {
+    // An accent solved too far from its natural lightness stops looking like
+    // the colour the school picked.
+    for (const hue of [0, 45, 120, 220, 300]) {
+      const { fill } = accentFromHue(hue);
+      expect(contrastRatio(fill, "#ffffff")).toBeLessThan(12);
+    }
   });
 });
