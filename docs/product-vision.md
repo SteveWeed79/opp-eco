@@ -68,9 +68,15 @@ rather than a reporting exercise laid on top of it.
 
 ## What it starts with, and what it is built to hold
 
-The initial release focuses on **postsecondary internships and work-based
-learning** — common enough to prove the model, complex enough to test it. They
-involve every participant, real money, and academic credit.
+The initial release focuses on **internships and work-based learning that carry
+college-level credit** — common enough to prove the model, complex enough to
+test it. They involve every participant, real money, and academic credit.
+
+Note what that scope is defined by: **the credit, not the school.** A high
+school student enrolled in dual or concurrent credit is earning college credit,
+and is in scope for the same reason a college sophomore is. The distinction the
+platform cares about is which institution grants the credit, which it already
+models.
 
 The architecture is deliberately not built around that one experience type. It
 is designed to support career-connected learning in its several forms:
@@ -88,12 +94,17 @@ requires funding clearance, and what the student produces. New forms of
 career-connected learning are configurations of those dimensions rather than new
 systems.
 
-**Secondary is not yet modelled, and extending to it is real work rather than a
-setting.** High school work-based learning runs on different consent,
-supervision, liability, and credit rules; the current data model assumes a
-postsecondary student attached to a college. Saying so plainly is more useful
-than implying a switch that does not exist — and the dimensional approach above
-is what keeps that extension additive rather than a second system.
+**What is not yet modelled is the high school itself.** The credit path already
+works for a dual-enrolled student, because the credit-granting college is the
+institution the model tracks. What is missing is the school the student
+*attends* — and with it, the things that follow from a student being a minor:
+whose consent applies to which record, and the hour and occupation limits that
+govern paid work under 18.
+
+Those are real rules rather than a configuration flag, and they are the reason
+secondary follows rather than ships alongside. Getting them wrong is worse than
+arriving later. Stated plainly here because a district will ask, and the useful
+answer is that we know what the work is.
 
 The outcome all of them point toward — **a student moving into part-time or
 full-time employment** — is what the platform measures, not another experience
@@ -111,7 +122,8 @@ Recorded so the vision is not quietly read as a description of what exists.
 | Claim | Reality |
 |---|---|
 | Supports several experience forms | Two are modelled — standard and micro. `Track` is a two-value enum, not the dimensional model described above. |
-| Extending to secondary is additive | Not modelled at all. `organization_kind` is `('business','college','board')`, `Student` requires a `collegeId`, and a constraint pins `hours_per_credit` to colleges. Secondary needs schema work, not configuration. |
+| Scope is defined by credit, not school | True of the concept; the model has no way to record that a student attends a high school. `organization_kind` is `('business','college','board')` and `Student` carries only a `collegeId`. |
+| Minor status governs consent and hours | Not modelled. Nothing distinguishes a dual-enrolled sixteen-year-old from a college sophomore, so nothing can decline a placement it should. |
 | Measures transitions into employment | Not modelled. The lifecycle currently ends at credit granted or closed. |
 | Employers surfaced as a queue for colleges | Built and visible; the actions on it are not yet wired. |
 | Committed-versus-unspent allocation | Built — the board portal tracks it against a finite program year. |

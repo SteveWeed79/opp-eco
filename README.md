@@ -40,6 +40,7 @@ bookable application. Restart the server to reseed.
 
 ## Start here
 
+- [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
 - [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
 
@@ -52,8 +53,8 @@ bookable application. Restart the server to reseed.
 | Tenancy root | The market (board + college + geography) | Admin launches markets; everything else belongs to one |
 | The workforce interview | A wage-subsidy eligibility determination | Not compliance — the board reimburses the business $20/hr |
 | The college's role | Local operator and intermediary | Verifies students, helps businesses write postings, grants credit |
-| Scope | College-level credit only | High school is **not** modeled — `organization_kind` has no secondary kind and `Student` requires a college. Extending needs schema work, not a flag |
-| Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
+| Scope | College-level credit | Defined by the **credit, not the school** — a dual-enrolled high school student earns college credit and is in scope. The high school itself is not yet modeled |
+| Who participates | Students earning college credit | Includes dual/concurrent-credit high schoolers. No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
