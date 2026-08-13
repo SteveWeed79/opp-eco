@@ -52,7 +52,7 @@ bookable application. Restart the server to reseed.
 | Tenancy root | The market (board + college + geography) | Admin launches markets; everything else belongs to one |
 | The workforce interview | A wage-subsidy eligibility determination | Not compliance — the board reimburses the business $20/hr |
 | The college's role | Local operator and intermediary | Verifies students, helps businesses write postings, grants credit |
-| Scope | College-level credit only | High school modeled in the schema but dark |
+| Scope | College-level credit only | High school is **not** modeled — `organization_kind` has no secondary kind and `Student` requires a college. Extending needs schema work, not a flag |
 | Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
