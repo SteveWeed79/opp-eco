@@ -16,6 +16,7 @@ import type { ActorRole } from "@/domain/types";
 import { demoAccounts } from "@/data/session";
 import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
 import { signInAs, signOut } from "@/auth/actions";
+import { brand } from "@/brand";
 
 const PORTALS: {
   role: ActorRole;
@@ -68,14 +69,14 @@ export function Shell({
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
               <span className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors">
-                OE
+                {brand.monogram}
               </span>
               <span className="hidden sm:block">
                 <span className="text-lg font-extrabold tracking-tight text-ink-950">
-                  Opportunity
+                  {brand.lead}
                 </span>
                 <span className="text-lg font-extrabold text-brand-700 ml-1">
-                  Ecosystem
+                  {brand.accent}
                 </span>
               </span>
             </Link>
@@ -232,7 +233,7 @@ function DemoFooter() {
     <footer className="border-t border-ink-200 bg-white">
       <div className="max-w-7xl mx-auto px-6 py-8 text-sm text-ink-500 space-y-2">
         <p className="font-bold text-ink-950">
-          Opportunity Ecosystem — demonstration prototype
+          {brand.name} — demonstration prototype
         </p>
         <p className="max-w-3xl">
           Built to illustrate a proposed workforce-development program. The

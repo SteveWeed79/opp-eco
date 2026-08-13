@@ -11,6 +11,7 @@
 
 import type { ActorContext, ActorRole, Membership } from "@/domain/types";
 import * as seed from "./seed";
+import { brand } from "@/brand";
 
 export interface DemoAccount {
   id: string;
@@ -30,7 +31,7 @@ const ACCOUNTS: AccountDefinition[] = [
     id: "acct-admin",
     role: "admin",
     label: "Steve Weed",
-    organizationName: "Opportunity Ecosystem",
+    organizationName: brand.operatorName,
     marketName: "All markets",
     description: "Program administrator. The only cross-market role.",
     membership: {
