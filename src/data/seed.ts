@@ -151,6 +151,10 @@ export const organizations: Organization[] = [
     contactEmail: "evance@verdigris.example.edu",
     appliedOn: daysAgo(240),
     hoursPerCredit: 45,
+    // Seeded so the theming is visible in the demo: switch to the college or
+    // student portal and the whole surface takes the school's colour, while
+    // admin and board stay on the platform's.
+    brandColor: "#1b5e3f",
   },
   {
     id: "org-apex",

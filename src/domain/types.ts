@@ -93,6 +93,18 @@ export interface Organization {
   appliedOn: string;
   /** Colleges only: minimum student work hours required per credit awarded. */
   hoursPerCredit?: number;
+
+  /**
+   * Partner branding. Education organizations only — a student sees the school
+   * they attend, not a vendor.
+   *
+   * `brandColor` seeds a hue; the ramp rendered from it is computed so every
+   * step meets its contrast target. The exact hex is never rendered, which is
+   * what stops a partner shipping an accessibility failure under this
+   * product's name. See `src/theme/ramp.ts`.
+   */
+  brandColor?: string;
+  logoUrl?: string;
 }
 
 // ---------------------------------------------------------------------------

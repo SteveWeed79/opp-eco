@@ -3,6 +3,7 @@ import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { getActor } from "@/auth/session";
 import { pageTitle } from "@/brand";
+import { resolvePartnerTheme } from "@/theme/resolve";
 
 export const metadata: Metadata = {
   // "Demo" leads the title and description because these are what a link
@@ -26,6 +27,10 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const actor = await getActor();
+  // Resolved here rather than in the shell because it reads the repositories.
+  // The shell decides whether to *apply* it, since only it knows the route.
+  const theme = resolvePartnerTheme(actor);
+
   return (
     <html lang="en">
       <body>
@@ -34,6 +39,7 @@ export default async function RootLayout({
         <Shell
           signedInAs={actor?.user.name}
           signedInRole={actor?.membership.role}
+          theme={theme}
         >
           {children}
         </Shell>

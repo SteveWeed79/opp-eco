@@ -17,6 +17,8 @@ import { demoAccounts } from "@/data/session";
 import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
 import { signInAs, signOut } from "@/auth/actions";
 import { brand } from "@/brand";
+import { isPartnerSurface } from "@/theme/theme";
+import type { ResolvedTheme } from "@/theme/resolve";
 
 const PORTALS: {
   role: ActorRole;
@@ -35,11 +37,14 @@ export function Shell({
   children,
   signedInAs,
   signedInRole,
+  theme,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
   /** Absent when signed out, which is when every portal is browsable. */
   signedInRole?: ActorRole;
+  /** Resolved server-side; applied here, because only here knows the route. */
+  theme: ResolvedTheme;
 }) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
@@ -61,15 +66,36 @@ export function Shell({
    */
   const reachable = (portal: ActorRole) => !signedInRole || signedInRole === portal;
 
+  /**
+   * A partner's colours apply to the student and college portals only.
+   *
+   * The administrator and the workforce board are looking at the platform
+   * working across many partners; painting the board's console in one
+   * college's colours would misrepresent what they are seeing.
+   */
+  const themed = theme.isPartner && isPartnerSurface(pathname);
+
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-ink-50 text-ink-950 antialiased selection:bg-brand-200 flex flex-col">
+      <div
+        style={themed ? (theme.variables as React.CSSProperties) : undefined}
+        className="min-h-screen bg-ink-50 text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
+      >
         <DemoNotice />
         <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-brand-100">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
-              <span className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors">
-                {brand.monogram}
+              <span className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden">
+                {themed && theme.logoUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={theme.logoUrl}
+                    alt=""
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  (themed ? theme.monogram : brand.monogram)
+                )}
               </span>
               <span className="hidden sm:block">
                 <span className="text-lg font-extrabold tracking-tight text-ink-950">
@@ -127,6 +153,19 @@ export function Shell({
                 );
               })}
             </nav>
+
+            {themed && (
+              /* Says whose colours these are. A themed page that does not
+                 attribute is a page pretending to be the school's own
+                 system, which is a different and worse claim than
+                 "your school, on this platform". */
+              <span className="hidden xl:block text-xs text-ink-500 shrink-0">
+                Themed for{" "}
+                <span className="font-semibold text-ink-700">
+                  {theme.organizationName}
+                </span>
+              </span>
+            )}
 
             {signedInAs ? (
               <div className="flex items-center gap-3 shrink-0">
