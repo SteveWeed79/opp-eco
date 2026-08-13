@@ -28,15 +28,29 @@ What it requires that matters here:
 Once the college hands the platform a roster, a verification, or a credit award, those are education records.
 
 - **Directory information** may be disclosed without consent, but only if the institution has designated it as such, given public notice, and offered students a chance to opt out. Each college's designation differs — you cannot assume a field is directory information because another school treats it that way.
-- **Everything else needs written consent.** The student's own, since anyone at a postsecondary institution is an "eligible student" regardless of age. Your college-only scope makes this materially simpler than the high-school version would.
+- **Everything else needs written consent.** Whose consent depends on which institution holds the record, and this is the part that changed when dual-credit high school students came into scope.
+
+  FERPA rights transfer to the student either at 18 **or on enrolment at a postsecondary institution, at any age**. So for records the *college* holds about a dual-enrolled sixteen-year-old's college coursework, that student is an eligible student and consents for themselves. Records the *high school* holds about the same person remain the parent's until they turn 18.
+
+  A dual-credit work placement can generate both. The practical consequence for the platform: **consent is a property of the record's source institution, not of the student's age**, and a student may need two consents for what looks to them like one activity. Districts commonly require the parental one regardless of what FERPA strictly compels.
+
+  Flagging clearly: this is my reading and it is the kind of question where a district's counsel and the partner college's registrar will have a settled local answer that overrides general reasoning. Confirm before building a consent flow around it — the design conclusion (attach consent to the record's origin) holds either way and is worth adopting now.
 - **Redisclosure is the trap.** When an institution shares records with an employer, it should notify the employer that the records are FERPA-covered and may not be passed on without consent. The platform is the thing making that sharing easy, so the platform should carry the notice — an employer who forwards a candidate list to a colleague at another company has created a problem that traces back to your product.
 
 ### 3. Kansas Student Data Privacy Act (K.S.A. 72-6312 et seq.)
 
-Aimed principally at K-12 boards, so it binds directly only if high school returns to scope. Two provisions are worth honouring regardless, because they are cheap and they are what a district will ask about:
+Aimed principally at K-12 boards — so with dual-credit high school students in scope, **this binds directly** rather than being a courtesy. It was written up here as conditional when the scope was postsecondary-only; it no longer is. Two provisions matter most, and they are what a district will ask about first:
 
 - **Delete personal information when it is no longer required for the purpose it was collected.** That is a retention schedule, and it is a requirement rather than a nicety.
 - **No biometric collection, and no device or mechanism assessing a student's psychological or emotional state.** Worth writing into the product principles now, because "engagement scoring" and "readiness assessment" are exactly the features someone will eventually propose.
+
+### 3a. Child labour rules — new, and not a privacy regime
+
+Listed here because it arrived with the same scope change and nothing else in these docs covers it. A **paid** placement for a student under 18 is employment, and federal FLSA plus Kansas rules constrain hours, times of day, and hazardous occupations — tighter under 16 than at 16–17.
+
+This is not something the platform should try to adjudicate, but it is something the platform should **not quietly make easy to get wrong**. A posting that would be lawful for a college sophomore may not be for a dual-enrolled sixteen-year-old on the same worksite, and today nothing in the model distinguishes them. The minimum honest step is that age or minor status becomes a fact the matching and posting layers can see, so the system can decline to suggest a placement it has no business suggesting.
+
+Worth confirming the specifics with someone who does this for a living before encoding any of it.
 
 ### 4. Kansas breach notification (K.S.A. 50-7a02)
 

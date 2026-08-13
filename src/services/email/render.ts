@@ -18,6 +18,7 @@
  */
 
 import type { Message } from "../templates";
+import { brand } from "@/brand";
 
 /** The one accent, matching `brand-700` — the contrast-safe interactive tone. */
 const BRAND = "#0369a1";
@@ -72,7 +73,7 @@ function htmlBody(
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${LINE};border-radius:12px;">
 <tr><td style="padding:24px 28px 8px 28px;">
-  <span style="display:inline-block;font:700 13px/1 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${BRAND};letter-spacing:.08em;text-transform:uppercase;">Opportunity Ecosystem</span>
+  <span style="display:inline-block;font:700 13px/1 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${BRAND};letter-spacing:.08em;text-transform:uppercase;">${escape(brand.name)}</span>
 </td></tr>
 ${
   intendedFor

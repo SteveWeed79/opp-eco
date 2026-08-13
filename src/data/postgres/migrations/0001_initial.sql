@@ -106,7 +106,17 @@ CREATE TABLE organizations (
     CHECK (hours_per_credit IS NULL OR hours_per_credit > 0),
   -- Only colleges set a credit policy; a business with one is a data error.
   CONSTRAINT only_colleges_set_credit_policy
-    CHECK (hours_per_credit IS NULL OR kind = 'college')
+    CHECK (hours_per_credit IS NULL OR kind = 'college'),
+  -- Partner branding. Education organizations only: a business or a board
+  -- theming a student's portal would be misleading rather than white-label.
+  brand_color      text,
+  accent_color     text,
+  logo_url         text,
+    CHECK (brand_color IS NULL OR kind = 'college'),
+    CHECK (brand_color IS NULL OR brand_color ~ '^#[0-9a-fA-F]{6}$'),
+    CHECK (accent_color IS NULL OR accent_color ~ '^#[0-9a-fA-F]{6}$'),
+    -- An accent without a primary is a half-configured partner, not a choice.
+    CHECK (accent_color IS NULL OR brand_color IS NOT NULL)
 );
 
 CREATE INDEX organizations_market_kind_idx ON organizations (market_id, kind);

@@ -25,6 +25,7 @@ import type {
   User,
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
+import { brandAddress } from "@/brand";
 
 /**
  * The demo's clock for *historical* fixtures, anchored once at module load.
@@ -150,6 +151,11 @@ export const organizations: Organization[] = [
     contactEmail: "evance@verdigris.example.edu",
     appliedOn: daysAgo(240),
     hoursPerCredit: 45,
+    // Seeded so the theming is visible in the demo: switch to the college or
+    // student portal and the whole surface takes the school's colour, while
+    // admin and board stay on the platform's.
+    brandColor: "#1b5e3f",
+    accentColor: "#c9a227",
   },
   {
     id: "org-apex",
@@ -296,7 +302,7 @@ export const organizations: Organization[] = [
 // ---------------------------------------------------------------------------
 
 const staffUsers: User[] = [
-  { id: "u-admin", name: "Steve Weed", email: "admin@opportunityecosystem.example" },
+  { id: "u-admin", name: "Steve Weed", email: brandAddress("admin") },
   { id: "u-dana", name: "Dana Reyes", email: "dreyes@apexrobotics.example.com" },
   { id: "u-ellen", name: "Dr. Ellen Vance", email: "evance@verdigris.example.edu" },
   { id: "u-marcia", name: "Marcia Delgado", email: "mdelgado@sekwp.example.org" },

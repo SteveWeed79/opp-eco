@@ -18,6 +18,11 @@
   --color-brand-600: #0284c7;
   --color-brand-700: #0369a1;
 
+  /* A partner's second colour, and the ink that reads on it. Defaults to the
+     primary so anything using the accent works before a school sets one. */
+  --color-accent: #0369a1;
+  --color-accent-on: #ffffff;
+
   /* Ink — slate with a faint blue bias so neutrals sit with the accent */
   --color-ink-50: #f8fafc;
   --color-ink-100: #f1f5f9;

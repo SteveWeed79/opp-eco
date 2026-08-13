@@ -25,6 +25,8 @@
  *     recorded undeliverable with a reason instead.
  */
 
+import { defaultEmailFrom } from "@/brand";
+
 export interface EmailConfig {
   apiKey: string | null;
   /** The From address. Must be on a domain verified with Resend. */
@@ -48,7 +50,7 @@ export function emailConfig(env: EmailEnv = process.env): EmailConfig {
   const apiKey = env.RESEND_API_KEY?.trim() || null;
   return {
     apiKey,
-    from: env.EMAIL_FROM?.trim() || "Opportunity Ecosystem <onboarding@resend.dev>",
+    from: env.EMAIL_FROM?.trim() || defaultEmailFrom(),
     redirectTo: env.EMAIL_REDIRECT_TO?.trim() || null,
     appUrl: (env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000").replace(
       /\/$/,
