@@ -221,7 +221,7 @@ That makes **micro → standard a designed funnel**, not two disconnected produc
 | **Workforce Board** | The local workforce board | Clearance interviews, funding decisions, the budget |
 | **College** | Local institution, the market's operator | Student verification, business assistance, credit policy, credit awards |
 | **Business** | Approved local employer | Postings, candidate decisions, supervision, hour approval |
-| **Student** | Degree-seeking college student | Master profile, applications, hour logging |
+| **Student** | Student earning college credit — enrolled at a college, or at a high school through dual/concurrent credit | Master profile, applications, hour logging |
 
 **Admin is the only cross-market role.** Everyone else sees one market. That exception is deliberate and every cross-market read is logged.
 
@@ -245,7 +245,9 @@ stateDiagram-v2
     inactive --> verified
 ```
 
-Guardian consent and under-18 PII gating stay in the schema but unreachable in the college-only product.
+Guardian consent and under-18 PII gating are **not** in the schema — there is no guardian, date-of-birth, or age field anywhere in the model. This was previously written up as "in the schema but unreachable," which was wishful.
+
+It matters now that dual-credit high school students are in scope: nothing distinguishes a sixteen-year-old from a college sophomore, so nothing can apply the consent rules or the paid-work hour limits that follow from being a minor. See [`security-and-data.md`](security-and-data.md) §2 and §3a.
 
 ---
 

@@ -18,7 +18,9 @@ import { isSelfSufficientForCredit } from "@/domain/credit";
 import { availableTransitions } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 import { TransitionActions } from "@/components/TransitionActions";
+import { platformTheme } from "@/theme/theme";
 import { collegeTransition } from "./actions";
+import { ThemeChecker } from "./ThemeChecker";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
@@ -351,6 +353,15 @@ export default async function CollegePage() {
           </Assumption>
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Branding — what the college controls, and what it is told           */}
+      {/* ------------------------------------------------------------------ */}
+      <ThemeChecker
+        initialBrand={college.brandColor ?? platformTheme().ramp[700]}
+        initialAccent={college.accentColor}
+        organizationName={college.name}
+      />
     </div>
   );
 }

@@ -40,6 +40,7 @@ bookable application. Restart the server to reseed.
 
 ## Start here
 
+- [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
 - [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
 
@@ -52,8 +53,8 @@ bookable application. Restart the server to reseed.
 | Tenancy root | The market (board + college + geography) | Admin launches markets; everything else belongs to one |
 | The workforce interview | A wage-subsidy eligibility determination | Not compliance — the board reimburses the business $20/hr |
 | The college's role | Local operator and intermediary | Verifies students, helps businesses write postings, grants credit |
-| Scope | College-level credit only | High school modeled in the schema but dark |
-| Who participates | Degree-seeking students only | No adult job seekers or unaffiliated career-changers |
+| Scope | College-level credit | Defined by the **credit, not the school** — a dual-enrolled high school student earns college credit and is in scope. The high school itself is not yet modeled |
+| Who participates | Students earning college credit | Includes dual/concurrent-credit high schoolers. No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
@@ -92,6 +93,27 @@ Properties worth knowing:
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
 - **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
+
+## Theming
+
+A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
+
+**A partner controls a primary colour, a second colour, and a logo. Nothing else** — copy carries obligations, and a partner who can edit "the board must determine your eligibility" can misstate a funding rule in a way that traces back to the platform.
+
+Their exact hex is not what renders. It seeds a hue, and every step of the ramp is *computed* to meet the contrast target its role requires (`src/theme/ramp.ts`), so an unusable combination is not reachable rather than warned about. `ramp.test.ts` sweeps all 360° at 5° steps and asserts every target, because a spot check passes on the day and fails the first time a college with an unusual brand signs up.
+
+The second colour is not run through the same solver. A gold cannot be a text colour on white, and darkening it until it clears 4.5:1 turns it into a brown that is no longer the school's colour. Accents are a fill plus whichever ink reads on them, resolved together so a call site cannot pair them wrongly.
+
+### What the checker does
+
+Guaranteeing a readable result is half the job; the other half is saying so. A college that pastes its crimson and gets something deeper has no way to tell deliberate from broken, and enforcement without explanation reads as a product that ignored you. So the college portal carries a live checker (`src/theme/analyze.ts`) that reports:
+
+- **what was adjusted**, naming both the submitted colour and the rendered one;
+- **a colour that is really a second colour** — too light to carry text, and pointed at the accent slot where it works;
+- **collisions with a hue this product has already spent on meaning** — critical, warning, success, and the micro track. Not a contrast problem, a semantic one: an accent eleven degrees from the amber used for "waiting nineteen days" competes with a signal an administrator reads at a glance;
+- **two colours that will not read as two**, and which ink lands on the accent.
+
+**Nothing blocks.** A school knows its own brand, and refusing a legitimate institutional colour is worse than explaining the trade-off. The seeded college is green and gold — an extremely common institutional pairing, and one that collides twice. It was kept rather than swapped for something that reports clean: a checker that only ever produces good news on the data it ships with has not been tested against anything.
 
 ## Email
 

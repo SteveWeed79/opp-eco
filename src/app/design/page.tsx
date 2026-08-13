@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { pageTitle } from "@/brand";
 import { PageHeader } from "@/components/ui";
 import { Gallery } from "./Gallery";
 
 export const metadata: Metadata = {
-  title: "[Demo] Component library — Opportunity Ecosystem",
+  title: pageTitle("Component library"),
   robots: { index: false, follow: false },
 };
 

@@ -93,6 +93,28 @@ export interface Organization {
   appliedOn: string;
   /** Colleges only: minimum student work hours required per credit awarded. */
   hoursPerCredit?: number;
+
+  /**
+   * Partner branding. Education organizations only — a student sees the school
+   * they attend, not a vendor.
+   *
+   * `brandColor` seeds a hue; the ramp rendered from it is computed so every
+   * step meets its contrast target. The exact hex is never rendered, which is
+   * what stops a partner shipping an accessibility failure under this
+   * product's name. See `src/theme/ramp.ts`.
+   */
+  brandColor?: string;
+  /**
+   * The school's second colour. Institutions almost always have two — a
+   * crimson and a gold, a navy and a vegas gold.
+   *
+   * Used as a fill with automatically chosen ink on it, never as a text colour
+   * or an interactive one. A gold is unreadable as text on white, and solving
+   * it as though it were the primary would darken it into a brown that is no
+   * longer the school's colour. See `accentFromHue`.
+   */
+  accentColor?: string;
+  logoUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
