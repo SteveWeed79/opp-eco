@@ -94,6 +94,27 @@ Properties worth knowing:
 - **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 
+## Theming
+
+A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
+
+**A partner controls a primary colour, a second colour, and a logo. Nothing else** — copy carries obligations, and a partner who can edit "the board must determine your eligibility" can misstate a funding rule in a way that traces back to the platform.
+
+Their exact hex is not what renders. It seeds a hue, and every step of the ramp is *computed* to meet the contrast target its role requires (`src/theme/ramp.ts`), so an unusable combination is not reachable rather than warned about. `ramp.test.ts` sweeps all 360° at 5° steps and asserts every target, because a spot check passes on the day and fails the first time a college with an unusual brand signs up.
+
+The second colour is not run through the same solver. A gold cannot be a text colour on white, and darkening it until it clears 4.5:1 turns it into a brown that is no longer the school's colour. Accents are a fill plus whichever ink reads on them, resolved together so a call site cannot pair them wrongly.
+
+### What the checker does
+
+Guaranteeing a readable result is half the job; the other half is saying so. A college that pastes its crimson and gets something deeper has no way to tell deliberate from broken, and enforcement without explanation reads as a product that ignored you. So the college portal carries a live checker (`src/theme/analyze.ts`) that reports:
+
+- **what was adjusted**, naming both the submitted colour and the rendered one;
+- **a colour that is really a second colour** — too light to carry text, and pointed at the accent slot where it works;
+- **collisions with a hue this product has already spent on meaning** — critical, warning, success, and the micro track. Not a contrast problem, a semantic one: an accent eleven degrees from the amber used for "waiting nineteen days" competes with a signal an administrator reads at a glance;
+- **two colours that will not read as two**, and which ink lands on the accent.
+
+**Nothing blocks.** A school knows its own brand, and refusing a legitimate institutional colour is worse than explaining the trade-off. The seeded college is green and gold — an extremely common institutional pairing, and one that collides twice. It was kept rather than swapped for something that reports clean: a checker that only ever produces good news on the data it ships with has not been tested against anything.
+
 ## Email
 
 Messages send through [Resend](https://resend.com) when configured, and are recorded either way.

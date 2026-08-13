@@ -54,6 +54,38 @@ describe("every hue produces a usable ramp", () => {
     expect(contrastRatio(ramp[700], ramp[50])).toBeGreaterThanOrEqual(AA);
   });
 
+  it.each(EVERY_HUE)("hue %i: 700 is readable on the 100 ground", (hue) => {
+    // Every avatar is `bg-brand-100` with `text-brand-700`. No target covered
+    // it, and 100 was pinned at a fixed lightness: it failed AA for forty of
+    // the seventy-two hues here, and passed for the seeded green only because
+    // that hue happened to collapse 50 and 100 onto the same hex.
+    //
+    // The lesson is in the ramp's own doc comment now — a step described as
+    // decorative is worth grepping before believing.
+    const ramp = rampFromHue(hue);
+    expect(contrastRatio(ramp[700], ramp[100])).toBeGreaterThanOrEqual(AA);
+  });
+
+  it.each(EVERY_HUE)("hue %i: 500 works as a focus outline", (hue) => {
+    // `:focus-visible` draws a 2px outline in brand-500 on a white ground.
+    // It is the only indication of where the keyboard is, so it owes 3:1
+    // under WCAG 1.4.11 — not nothing, which is what "decorative fill" got it.
+    const ramp = rampFromHue(hue);
+    expect(contrastRatio(ramp[500], WHITE)).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(EVERY_HUE)("hue %i: no two steps are the same colour", (hue) => {
+    // Not accessibility — a ramp with duplicate steps is not a ramp. Solving
+    // every step for its contrast floor produced exactly that: 400 and 500
+    // landed on one hex for ninety-seven of the sampled hues, because 400's
+    // constraint is a minimum and the solver was returning it.
+    const ramp = rampFromHue(hue);
+    const steps = [50, 100, 200, 400, 500, 600, 700] as const;
+    const values = steps.map((step) => ramp[step]);
+
+    expect(new Set(values).size, `${values.join(" ")}`).toBe(steps.length);
+  });
+
   it.each(EVERY_HUE)("hue %i: 700 is readable on every light ground", (hue) => {
     // 700 is the interactive tone and does not only sit on white — the booking
     // panel is warn-50, tinted cards are good-50 or micro-50. Solving against
@@ -71,7 +103,15 @@ describe("every hue produces a usable ramp", () => {
     // makes 100 darker than 200 somewhere, and every surface built on it
     // stops making sense.
     const ramp = rampFromHue(hue);
-    const steps = [ramp[50], ramp[100], ramp[200], ramp[500], ramp[600], ramp[700]];
+    const steps = [
+      ramp[50],
+      ramp[100],
+      ramp[200],
+      ramp[400],
+      ramp[500],
+      ramp[600],
+      ramp[700],
+    ];
     const contrasts = steps.map((c) => contrastRatio(c, WHITE));
 
     for (let i = 1; i < contrasts.length; i++) {

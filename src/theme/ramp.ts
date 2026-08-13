@@ -18,15 +18,22 @@
  * | Step | Used for | Must satisfy |
  * |------|----------|--------------|
  * | 50   | tinted card grounds, badge fills | dark ink readable on it, **and 700 readable on it** |
- * | 100  | borders on tinted cards | — (decorative) |
+ * | 100  | avatar fills | **700 readable on it** |
  * | 200  | selection, emphasis borders | — (decorative) |
- * | 400  | icons on dark ground | ≥ 4.5:1 on ink-950 |
- * | 500  | decorative fills only | — (never carries text) |
+ * | 400  | icons and eyebrow text on dark ground | ≥ 4.5:1 on ink-950 |
+ * | 500  | progress fill, and the focus ring | ≥ 3:1 on white (non-text) |
  * | 600  | secondary text on white | ≥ 4.5:1 on white |
  * | 700  | buttons, links, headings | ≥ 4.5:1 on **every** light ground, and under white text |
  *
  * The 700 step is the demanding one: it carries white text *and* sits as text
  * on white, so it is pinned from both sides.
+ *
+ * Two of those rows were written by finding the code that contradicted them.
+ * `bg-brand-100` carries `text-brand-700` on every avatar, which no target
+ * covered — it passed for the seeded green only because 50 and 100 collapsed
+ * to the same hex, and failed AA for forty of the seventy-two hues swept. And
+ * 500 is the focus outline, which is a UI indicator and owes 3:1 rather than
+ * nothing. A step described as decorative is worth grepping before believing.
  */
 
 export interface Ramp {
@@ -67,6 +74,29 @@ const LIGHT_GROUNDS = [
 /** WCAG AA for normal text. The bar this product already claims to meet. */
 const AA = 4.5;
 
+/** WCAG AA for UI components and focus indicators — 1.4.11 non-text contrast. */
+const AA_NON_TEXT = 3;
+
+/**
+ * Where each step sits when contrast leaves it free, taken from the hand-tuned
+ * sky palette this project shipped with.
+ *
+ * Solving purely for the contrast floor produced ramps with no visible range:
+ * a saturated green landed 400 and 500 on the same hex, because 400's only
+ * hard constraint is a *minimum* lightness and the solver was returning it.
+ * Preferring these and moving only when a target demands it keeps a generated
+ * ramp looking like a ramp.
+ */
+const PREFERRED = { 50: 97, 100: 93, 200: 87, 400: 60, 500: 48 } as const;
+
+/**
+ * Minimum lightness between adjacent steps in the dark half.
+ *
+ * At these saturations a one-point difference rounds to the same eight-bit
+ * hex, so ordering the steps is not the same as separating them.
+ */
+const DARK_STEP = 6;
+
 /**
  * Build a full ramp from a hue.
  *
@@ -85,33 +115,50 @@ export function rampFromHue(hue: number, chroma = 1): Ramp {
   // varying it per step made contrast-against-white non-monotonic, which is
   // how the first version of this shipped a ramp where 500 came out darker
   // than 600 for blue-violet hues and every surface built on it inverted.
-  const l400 = solveL(h, s, INK_950, AA, "lighten");
+  // 600 and 700 are pinned by contrast; 500 and 400 have only floors, so they
+  // are stacked above 600 at a guaranteed interval. Ordering alone is not
+  // enough — at these saturations a one-point lightness difference rounds to
+  // the same hex, so "500 is lighter than 600" produced two identical steps
+  // for blue-violet hues.
   const l600 = solveL(h, s, WHITE, AA, "darken");
   const l700 = solveBothWaysL(h, s);
 
-  // Decorative fill only — the progress bar, which never carries text. Placed
-  // between its neighbours by construction so the ramp cannot invert, whatever
-  // the hue.
-  const l500 = Math.round((l400 + l600) / 2);
+  // The progress fill and the focus outline. The outline sits on white and is
+  // the only indication of where the keyboard is, so it owes 3:1, which caps
+  // how light it may go.
+  const l500 = Math.min(
+    Math.max(PREFERRED[500], l600 + DARK_STEP),
+    solveL(h, s, WHITE, AA_NON_TEXT, "darken"),
+  );
 
-  // The tinted-badge pairing: `bg-brand-50` with `text-brand-700`, used by the
-  // brand badge, the combobox chip and its highlighted row, and two icon
-  // tiles. It is the one place brand text sits on a brand ground, and the
-  // first version of this ramp had no target for it — the sky palette passed
-  // by luck and a saturated green failed axe on the themed portals.
+  // 400 only has to be light *enough* to read on the dark header, so the
+  // solver's answer is a lower bound rather than a value. Taking it literally
+  // is what collapsed 400 onto 500 for two hues in three.
+  const l400 = Math.max(
+    PREFERRED[400],
+    solveL(h, s, INK_950, AA, "lighten"),
+    l500 + DARK_STEP,
+  );
+
+  // The two tinted grounds that carry brand text: `bg-brand-50 text-brand-700`
+  // on badges, chips and icon tiles, and `bg-brand-100 text-brand-700` on
+  // every avatar. Both are solved from the same floor rather than one being
+  // solved and the other assumed, which is how 100 went unchecked.
   //
-  // 700 is already pinned from both sides against white, so 50 is the free
-  // variable. Lightening always converges: as 50 approaches white it inherits
-  // the guarantee 700 already carries.
-  const c700 = hsl(h, s, l700);
-  const l50 = solveGroundFor(h, s, c700, AA);
+  // 700 is already pinned from both sides, so the grounds are the free
+  // variables. Lightening always converges: as a ground approaches white it
+  // inherits the guarantee 700 already carries.
+  const lFloor = groundFloorFor(h, s, hsl(h, s, l700), AA);
+  const l100 = Math.max(PREFERRED[100], lFloor);
+  const l50 = Math.min(l100 + (PREFERRED[50] - PREFERRED[100]), 99);
+  const l200 = l100 - (PREFERRED[100] - PREFERRED[200]);
 
   return {
     // Light grounds. Dark ink on these has to work — it does at these
-    // lightnesses for every hue — and 50 additionally carries 700 as text.
+    // lightnesses for every hue — and 50 and 100 additionally carry 700.
     50: hsl(h, s, l50),
-    100: hsl(h, s, 93),
-    200: hsl(h, s, 87),
+    100: hsl(h, s, l100),
+    200: hsl(h, s, l200),
 
     400: hsl(h, s, l400),
     500: hsl(h, s, l500),
@@ -148,19 +195,24 @@ function solveL(
 }
 
 /**
- * Lighten a tint until the given foreground is readable on it.
+ * The lightest tint that still fails, plus one — i.e. the floor at which a
+ * ground carries the given foreground.
  *
- * Used for the one ground that carries brand-coloured text. Converges for
- * every hue because the limit is white, against which the foreground already
- * passes by construction.
+ * Scanned from well below the preferred grounds so the answer is the real
+ * floor rather than "the preferred value, if it happens to pass". The earlier
+ * version started at 93 and returned it, which made the floor invisible and
+ * left `brand-100` unchecked at that same lightness.
+ *
+ * Converges for every hue: the limit is white, against which the foreground
+ * already passes by construction.
  */
-function solveGroundFor(
+function groundFloorFor(
   h: number,
   s: number,
   foreground: string,
   target: number,
 ): number {
-  for (let l = 93; l <= 100; l++) {
+  for (let l = 80; l <= 100; l++) {
     if (contrastRatio(foreground, hsl(h, s, l)) >= target) return l;
   }
   return 100;
