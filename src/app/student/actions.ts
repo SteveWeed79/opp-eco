@@ -5,7 +5,13 @@ import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/memory";
 import { executeTransition } from "@/services/transitions";
-import { applyInput, bookInterviewInput, validate } from "@/services/validation";
+import {
+  applyInput,
+  bookInterviewInput,
+  logHoursInput,
+  validate,
+} from "@/services/validation";
+import { logHours } from "@/services/timesheet";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { submitApplication } from "@/services/creation";
@@ -131,6 +137,58 @@ export async function studentTransition(
   reason?: unknown,
 ): Promise<ActionResult> {
   return runTransition("student", { applicationId, to, reason });
+}
+
+/**
+ * Log a week of hours against an active placement.
+ *
+ * Everything identifying is derived server-side: the student comes from the
+ * session and the employer from the posting. The request carries only the
+ * week, the hours, and what was worked on — the three things the caller is
+ * actually the authority on.
+ */
+export async function logPlacementHours(
+  applicationId: unknown,
+  weekStarting: unknown,
+  hours: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  const input = validate(logHoursInput, {
+    applicationId,
+    weekStarting,
+    // The form sends a string; coercing here keeps the schema honest about
+    // what it accepts rather than making it tolerate both.
+    hours: typeof hours === "string" ? Number(hours) : hours,
+    summary,
+  });
+  if (!input.ok) return { ok: false, error: input.error };
+
+  const actor = await actorForPortal("student");
+
+  const limit = checkRateLimit(callerKey("logHours", actor.user.id), LIMITS.mutation);
+  if (!limit.ok) {
+    logger.warn("rate_limit.exceeded", { action: "logHours", userId: actor.user.id });
+    return {
+      ok: false,
+      error: `Too many attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
+  const result = await logHours(actor, input.data);
+  if (!result.ok) {
+    logger.warn("hours.refused", { code: result.code });
+    return { ok: false, error: result.error };
+  }
+
+  logger.info("hours.logged", {
+    applicationId: input.data.applicationId,
+    entryId: result.value.id,
+  });
+
+  await drainPending();
+  revalidatePath("/student");
+  revalidatePath("/business");
+  return { ok: true };
 }
 
 /**

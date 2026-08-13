@@ -1,6 +1,7 @@
 import {
   BadgeCheck,
   CalendarClock,
+  Clock,
   Layers,
   Sparkles,
   TrendingUp,
@@ -21,7 +22,10 @@ import {
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
+import { unreviewedWeeksByApplication } from "@/services/timesheet";
+import { openWeeksFor } from "@/domain/timesheet";
 import { DEMO_NOW, studentForUser } from "@/data/seed";
+import { LogHours } from "./LogHours";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
@@ -33,6 +37,7 @@ import { studentTransition } from "./actions";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
+  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
   // Resolved from the session rather than hardcoded.
   const student = studentForUser(actor.user.id)!;
   const STUDENT_ID = student.id;
@@ -46,6 +51,24 @@ export default async function StudentPage() {
   const progress = studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45);
   const remainingBudget = marketRemainingBudget(actor, market);
   const boardName = organizationName(market.boardId);
+
+  // Timesheets for placements currently running. Only the standard track has
+  // one — a micro project is bought as a deliverable for a fixed fee.
+  const timesheets = applications
+    .filter((a) => a.status === "placement_active" && a.track === "standard")
+    .map((application) => ({
+      application,
+      posting: repositories.postings.find(actor, application.postingId)!,
+      entries: repositories.timeEntries.forApplication(actor, application.id),
+    }))
+    .map((row) => ({
+      ...row,
+      openWeeks: openWeeksFor(
+        new Date(row.application.statusSince),
+        DEMO_NOW,
+        row.entries,
+      ),
+    }));
 
   // Opportunities the student hasn't applied to yet, best match first
   const applied = new Set(
@@ -70,6 +93,7 @@ export default async function StudentPage() {
       remainingBudget,
       postingOwnerId:
         repositories.postings.find(actor, application.postingId)?.businessId ?? "",
+      unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
     });
 
   const needsAction = applications.filter((a) => optionsFor(a).length > 0);
@@ -235,6 +259,38 @@ export default async function StudentPage() {
               </ul>
             )}
           </Card>
+
+          {/* -------------------------------------------------------------- */}
+          {/* The week, logged. Until this existed the lifecycle dead-ended   */}
+          {/* here: `placement_completed` has always required approved hours  */}
+          {/* and nothing in the product could produce them.                  */}
+          {/* -------------------------------------------------------------- */}
+          {timesheets.length > 0 && (
+            <Card>
+              <CardHeader
+                icon={<Clock className="w-5 h-5" />}
+                title="Log your hours"
+                subtitle="Your supervisor approves each week before it counts toward credit"
+              />
+              {timesheets.map(({ application, posting, entries, openWeeks }) => (
+                <div key={application.id}>
+                  <p className="px-6 pt-4 text-sm font-semibold text-ink-950">
+                    {posting.title}
+                    <span className="font-normal text-ink-500">
+                      {" · "}
+                      {organizationName(posting.businessId)}
+                    </span>
+                  </p>
+                  <LogHours
+                    applicationId={application.id}
+                    postingTitle={organizationName(posting.businessId)}
+                    entries={entries}
+                    openWeeks={openWeeks}
+                  />
+                </div>
+              ))}
+            </Card>
+          )}
 
           <Card>
             <CardHeader

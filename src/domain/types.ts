@@ -264,6 +264,15 @@ export interface Application {
   fundingAuthorizedHours?: number;
   fundingAuthorizedRate?: number;
 
+  /**
+   * Running totals over this placement's time entries, maintained by the
+   * timesheet service inside the same transaction that writes an entry.
+   *
+   * Denormalised rather than derived because the transition guards and the
+   * credit calculation take an `Application` and no repository — recomputing
+   * on read would mean handing every guard a database. `timesheet.test.ts`
+   * pins them against the entries so the cache cannot drift.
+   */
   hoursLogged?: number;
   hoursApproved?: number;
   deliverableSubmitted?: boolean;
@@ -313,6 +322,53 @@ export interface InterviewSlot {
 }
 
 // ---------------------------------------------------------------------------
+// Hours
+// ---------------------------------------------------------------------------
+
+export type TimeEntryStatus = "submitted" | "approved" | "rejected";
+
+/**
+ * One week of a student's logged hours on one placement.
+ *
+ * Weekly rather than daily because that is the period a workforce board
+ * reimburses against, and a daily grid would be a data-entry burden on a
+ * student for precision nobody downstream consumes.
+ *
+ * **Only the standard track has these.** Micro-internships are fixed-fee for
+ * an agreed deliverable — there is no hourly wage to reimburse and no
+ * supervisor watching the clock, so billing them by the hour would misstate
+ * what was bought. `workHoursFor` uses the posting's estimate instead.
+ */
+export interface TimeEntry {
+  id: string;
+  marketId: string;
+  applicationId: string;
+  /** Denormalised so a row can be scoped without joining through the application. */
+  studentId: string;
+  /** The employer supervising this placement — the only party that may approve. */
+  businessId: string;
+  /** Monday of the week worked, ISO date. One entry per placement per week. */
+  weekStarting: string;
+  hours: number;
+  /**
+   * What the student worked on.
+   *
+   * Read by the employer approving it and the college awarding credit for it.
+   * Deliberately **not** shown to the workforce board: the board validates a
+   * reimbursement claim, which needs hours and periods, not a description of
+   * the work. See `TimeEntryRepository`.
+   */
+  summary: string;
+  status: TimeEntryStatus;
+  submittedOn: string;
+  reviewedOn?: string;
+  reviewedByUserId?: string;
+  /** Why it was sent back. Required on rejection — see `reviewHoursInput`. */
+  reviewNote?: string;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Credit
 // ---------------------------------------------------------------------------
 
@@ -355,7 +411,14 @@ export interface AuditEvent {
   at: string;
   actorUserId: string;
   actorRole: ActorRole;
-  entityType: "market" | "organization" | "student" | "posting" | "application" | "credit";
+  entityType:
+    | "market"
+    | "organization"
+    | "student"
+    | "posting"
+    | "application"
+    | "credit"
+    | "time_entry";
   entityId: string;
   from: string | null;
   to: string;

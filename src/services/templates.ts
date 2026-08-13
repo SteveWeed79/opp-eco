@@ -46,6 +46,18 @@ function when(value: unknown): string {
   });
 }
 
+/** A week-starting date as something a person reads. */
+function week(value: unknown): string {
+  if (typeof value !== "string") return "that week";
+  const at = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(at.getTime())) return "that week";
+  return at.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export const TEMPLATES: Record<string, Template> = {
   // --- Application received ------------------------------------------------
   "application.submitted.student": (p) => ({
@@ -281,6 +293,35 @@ export const TEMPLATES: Record<string, Template> = {
         ? `It clears your hours-per-credit threshold on its own.`
         : `It is below your threshold, so it will need to stack with other work to carry credit.`),
     action: { label: "Review the posting", path: "/college" },
+  }),
+
+  // --- Hours ---------------------------------------------------------------
+  // The one exchange that repeats every week of a placement, which makes the
+  // wording matter more than it does for a one-off status change. A supervisor
+  // who has to open a portal to find out what they are approving will approve
+  // it unread, and an approval nobody looked at is not a validation.
+  "hours.submitted": (p) => ({
+    subject: `${str(p.studentName)} logged ${num(p.hours) ?? "some"} hours — week of ${week(p.weekStarting)}`,
+    body:
+      `${str(p.studentName)} submitted ${num(p.hours) ?? "some"} hours for ${str(p.postingTitle)}, week beginning ${week(p.weekStarting)}. ` +
+      `Approving confirms they worked those hours. It is what the workforce board reimburses against and what the college counts toward credit, ` +
+      `so please send it back if anything looks wrong rather than approving to clear the queue.`,
+    action: { label: "Review the week", path: "/business" },
+  }),
+  "hours.approved": (p) => ({
+    subject: `${num(p.hours) ?? "Your"} hours approved — week of ${week(p.weekStarting)}`,
+    body:
+      `Your supervisor approved ${num(p.hours) ?? "your"} hours for the week beginning ${week(p.weekStarting)}. ` +
+      `They now count toward your credit total. Nothing is needed from you.`,
+    action: { label: "View your hours", path: "/student" },
+  }),
+  "hours.rejected": (p) => ({
+    subject: `Please correct your hours — week of ${week(p.weekStarting)}`,
+    body:
+      `Your supervisor sent back the ${num(p.hours) ?? ""} hours you logged for the week beginning ${week(p.weekStarting)}.` +
+      (str(p.note) ? `\n\nWhat they said: "${str(p.note)}"` : "") +
+      `\n\nYou can log that week again with the correction. Sent-back hours do not count toward your credit until they are resubmitted and approved.`,
+    action: { label: "Correct the week", path: "/student" },
   }),
 
   // --- Nudges --------------------------------------------------------------

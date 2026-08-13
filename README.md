@@ -94,6 +94,34 @@ Properties worth knowing:
 - **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 
+## Hours
+
+Reimbursement is hourly, so logged hours are the basis of a funding claim and not only an academic record. The platform is the system of record for them (Q19).
+
+Hours are the one record every party needs and none of them owns alone, so the write path is deliberately split across two roles:
+
+| Party | Does | Sees |
+|---|---|---|
+| Student | Logs the week — a **claim**, not an approval | Their own weeks, including why one was sent back |
+| Employer | **Validates it.** Approves or sends it back with a reason | The placements they supervise, with the work descriptions |
+| College | Awards credit against it | The weekly record, because credit judges work done |
+| Board | Reimburses against it | Hours and periods — **not** the work summaries |
+
+**The employer's approval is the whole evidentiary basis.** They are the only party who can attest the student was there — not the college, which awards credit but was not present, and not the board, which pays but was not present either. Self-reported hours nobody countersigned are not something public money can be reimbursed against.
+
+Weekly rather than daily, because a week is the period a board reimburses against and a daily grid is a data-entry burden for precision nobody downstream consumes. Only the standard track has a timesheet: a micro-internship is bought as a deliverable for a fixed fee, and billing it by the hour would misstate the agreement in both directions.
+
+`hoursLogged` and `hoursApproved` on the application are a cache over the entries, rewritten inside the same transaction that writes an entry. They are cached rather than derived because the transition guards and the credit calculation take an `Application` and no repository — recomputing on read would mean handing every guard a database. The invariant is pinned in `timesheet.test.ts` against both the seed and the write path, because a cache that can drift gets reported as "the board paid the wrong amount".
+
+### Two things that fall out of it
+
+- **Approved hours can exceed the authorized cap, and that is not a bug.** A supervisor approving a genuine week does not know what the board committed three months earlier. So the overage is surfaced on the board's console, not prevented — and the employer carries it. Reimbursing past the cap would overspend a finite allocation; dropping the hours would hide a bill the employer is about to receive. Naming it is the only honest option.
+- **A placement cannot be completed over unreviewed weeks.** Closing it strands them: they reach neither the credit total nor the reimbursement claim, and a student cannot reopen a completed placement to chase them. The employer sitting on the queue is the one who can clear it, and completion is the moment they notice.
+
+### Who sees what, and why not more
+
+The board sees hours and periods; the work summaries are stripped before the rows reach it. Pricing a claim against an hour cap does not take a description of what the student built, and holding one would give a government agency a weekly diary of a named student's activity it has no need for — which, once held, is subject to retention and open-records questions it would rather not answer. Collect once, disclose per purpose. The redaction is in the repository, not the component: a field hidden on screen while the full row travels to the client is not withheld.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
@@ -141,5 +169,6 @@ The outbox states plainly whether "delivered" means an email left the building o
 
 - **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
 - **Student verification and posting publication.** These are workflows over `Student` and `Posting`, not application transitions. They need their own state machines rather than buttons that guess.
+- **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

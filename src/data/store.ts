@@ -18,6 +18,7 @@ import type {
   InterviewSlot,
   Posting,
   Student,
+  TimeEntry,
 } from "@/domain/types";
 
 /** A notification queued inside the transaction and dispatched after commit. */
@@ -56,6 +57,9 @@ export interface UnitOfWork {
   saveApplication(application: Application, expectedVersion: number): void;
   saveStudent(student: Student): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
+  /** Insert a week of logged hours. Same create/save split as applications. */
+  createTimeEntry(entry: TimeEntry): void;
+  saveTimeEntry(entry: TimeEntry, expectedVersion: number): void;
   saveCreditAward(award: CreditAward): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;

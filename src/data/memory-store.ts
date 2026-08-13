@@ -84,6 +84,28 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createTimeEntry(entry: import("@/domain/types").TimeEntry) {
+    if (seed.timeEntries.some((e) => e.id === entry.id)) {
+      throw new Error(`Time entry ${entry.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.timeEntries.push(entry);
+    });
+  }
+
+  saveTimeEntry(entry: import("@/domain/types").TimeEntry, expectedVersion: number) {
+    const index = seed.timeEntries.findIndex((e) => e.id === entry.id);
+    if (index === -1) throw new Error(`Unknown time entry ${entry.id}`);
+    if (seed.timeEntries[index].version !== expectedVersion) {
+      // Two supervisors clearing the same queue is exactly as routine as two
+      // students racing for an interview slot.
+      throw new ConcurrencyError("Time entry", entry.id);
+    }
+    this.effects.push(() => {
+      seed.timeEntries[index] = { ...entry, version: expectedVersion + 1 };
+    });
+  }
+
   saveCreditAward(award: import("@/domain/types").CreditAward) {
     const index = seed.creditAwards.findIndex((c) => c.id === award.id);
     this.effects.push(() => {

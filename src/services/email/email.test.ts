@@ -230,10 +230,18 @@ describe("policy and templates agree", () => {
   });
 
   it("has a policy entry for every template, so none is dead prose", () => {
-    // The other direction. These four are sent outside the transition path —
-    // a posting submitted for review, and the stalled-application nudges — so
-    // they legitimately have no status entry.
-    const OUT_OF_BAND = new Set(["posting.submitted", "application.stalled"]);
+    // The other direction. These are sent outside the transition path, so
+    // they legitimately have no status entry: a posting submitted for review,
+    // the stalled-application nudge, and the weekly timesheet exchange — which
+    // is driven by time-entry events rather than by an application changing
+    // status, and happens many times within the single `placement_active` one.
+    const OUT_OF_BAND = new Set([
+      "posting.submitted",
+      "application.stalled",
+      "hours.submitted",
+      "hours.approved",
+      "hours.rejected",
+    ]);
     const used = new Set(policyKinds());
     const orphans = knownKinds().filter(
       (kind) => !used.has(kind) && !OUT_OF_BAND.has(kind),

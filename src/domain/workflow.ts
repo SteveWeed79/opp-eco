@@ -27,6 +27,14 @@ export interface TransitionContext {
    * being in the same market.
    */
   postingOwnerId: string;
+  /**
+   * Weeks the student has logged that the supervisor has not yet reviewed.
+   *
+   * Required rather than optional, so the compiler names every call site
+   * instead of letting one default to zero and quietly get the permissive
+   * answer. Guards that fail open are the ones nobody notices are broken.
+   */
+  unreviewedWeeks: number;
 }
 
 export interface Transition {
@@ -212,10 +220,20 @@ export const TRANSITIONS: Transition[] = [
     roles: ["business"],
     tracks: ["standard"],
     label: "Mark placement complete",
-    guard: ({ application }) =>
-      (application.hoursApproved ?? 0) > 0
-        ? null
-        : "No approved hours logged for this placement",
+    guard: ({ application, unreviewedWeeks }) => {
+      if ((application.hoursApproved ?? 0) === 0) {
+        return "No approved hours logged for this placement";
+      }
+      // Closing a placement over the student's unreviewed weeks would strand
+      // them: those hours never reach the credit total and never reach the
+      // board's reimbursement claim, and the student has no way to reopen a
+      // completed placement to chase them. The employer sitting on the queue
+      // is the one who can clear it, and this is the moment they notice.
+      if (unreviewedWeeks > 0) {
+        return `${unreviewedWeeks} week${unreviewedWeeks === 1 ? "" : "s"} of logged hours still need your approval — approve or send them back first`;
+      }
+      return null;
+    },
   },
   {
     from: "placement_active",

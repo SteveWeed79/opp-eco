@@ -20,6 +20,7 @@ import type {
   Organization,
   Posting,
   Student,
+  TimeEntry,
   User,
 } from "@/domain/types";
 
@@ -73,6 +74,24 @@ export interface InterviewSlotRepository {
   open(actor: ActorContext): InterviewSlot[];
 }
 
+/**
+ * Hours, scoped by relationship and reduced by purpose.
+ *
+ * Three narrowings, not one. Market isolation applies as everywhere else; a
+ * student sees only their own weeks and an employer only the placements they
+ * supervise; and the board — which sees every row in its market, because it
+ * reimburses them — sees them **without the work summaries**, because
+ * validating an hour cap does not require knowing what was built. See
+ * `redactTimeEntry`.
+ */
+export interface TimeEntryRepository {
+  find(actor: ActorContext, id: string): TimeEntry | null;
+  forApplication(actor: ActorContext, applicationId: string): TimeEntry[];
+  forStudent(actor: ActorContext, studentId: string): TimeEntry[];
+  /** The employer's queue: weeks submitted and not yet signed off. */
+  awaitingReview(actor: ActorContext): TimeEntry[];
+}
+
 export interface CreditAwardRepository {
   list(actor: ActorContext): CreditAward[];
   forStudent(actor: ActorContext, studentId: string): CreditAward[];
@@ -93,6 +112,7 @@ export interface Repositories {
   postings: PostingRepository;
   applications: ApplicationRepository;
   interviewSlots: InterviewSlotRepository;
+  timeEntries: TimeEntryRepository;
   creditAwards: CreditAwardRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;

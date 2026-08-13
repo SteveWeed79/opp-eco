@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
+import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { availableTransitions } from "@/domain/workflow";
@@ -21,9 +22,11 @@ import { TransitionActions } from "@/components/TransitionActions";
 import { platformTheme } from "@/theme/theme";
 import { collegeTransition } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
+import { WeeklyRecord } from "./WeeklyRecord";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
@@ -293,6 +296,20 @@ export default async function CollegePage() {
                                   ? `${application.hoursApproved} hrs approved`
                                   : `${postingTotalHours(posting)} hrs`}
                               </span>
+                              {/* The work behind the number. A college
+                                  awarding academic credit is making a
+                                  judgement about what was done, not about how
+                                  many hours were billed — so the weekly record
+                                  the supervisor signed off is here rather than
+                                  a total it has to take on trust. */}
+                              {application.track === "standard" && (
+                                <WeeklyRecord
+                                  entries={repositories.timeEntries.forApplication(
+                                    actor,
+                                    application.id,
+                                  )}
+                                />
+                              )}
                               {/* Per application, because that is what the
                                   domain models. The aggregate award across
                                   several placements is the open stacking
@@ -306,6 +323,7 @@ export default async function CollegePage() {
                                   student,
                                   remainingBudget,
                                   postingOwnerId: posting.businessId,
+                                  unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                                 }).map((t) => ({ to: t.to, label: t.label }))}
                               />
                             </span>

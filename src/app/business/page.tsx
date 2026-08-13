@@ -1,4 +1,4 @@
-import { CircleDollarSign, HelpCircle, Users, Zap } from "lucide-react";
+import { CircleDollarSign, Clock, HelpCircle, Users, Zap } from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -19,6 +19,8 @@ import {
 import { TransitionActions } from "@/components/TransitionActions";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
+import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
+import { ApproveHours } from "./ApproveHours";
 import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 import { marketRemainingBudget } from "@/lib/queries";
@@ -27,6 +29,8 @@ import { NewPosting } from "./NewPosting";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
+  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
+  const hoursQueue = reviewQueue(actor);
   const org = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
   const boardName = organizationName(market.boardId);
@@ -154,6 +158,58 @@ export default async function BusinessPage() {
       )}
 
       {/* ------------------------------------------------------------------ */}
+      {/* Hours awaiting sign-off                                             */}
+      {/*                                                                     */}
+      {/* Above the pipeline deliberately. A student cannot be paid, cannot   */}
+      {/* earn credit, and cannot have their placement closed out until these */}
+      {/* are cleared, and the employer is the only party who can clear them. */}
+      {/* ------------------------------------------------------------------ */}
+      {hoursQueue.length > 0 && (
+        <Card className="border-warn-100 ring-1 ring-warn-100">
+          <CardHeader
+            icon={<Clock className="w-5 h-5 text-warn-600" />}
+            title="Hours awaiting your approval"
+            subtitle="The board reimburses against these, and the college counts them toward credit"
+          />
+          <ul className="divide-y divide-ink-100">
+            {hoursQueue.map(({ entry, posting, studentName }) => (
+              <li key={entry.id} className="px-6 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-ink-950">
+                      {studentName}
+                      <span className="font-normal text-ink-500">
+                        {" · "}
+                        {posting.title}
+                      </span>
+                    </p>
+                    <p className="text-xs text-ink-500 mt-0.5 tabular">
+                      Week of{" "}
+                      {new Date(`${entry.weekStarting}T12:00:00Z`).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric", timeZone: "UTC" },
+                      )}{" "}
+                      · {entry.hours} hours
+                    </p>
+                  </div>
+                  <ApproveHours
+                    entryId={entry.id}
+                    hours={entry.hours}
+                    studentName={studentName}
+                  />
+                </div>
+                {/* What they say they did. Approving without it visible is a
+                    signature on a blank page. */}
+                <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-ink-200 pl-3">
+                  &ldquo;{entry.summary}&rdquo;
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Candidate pipeline                                                  */}
       {/* ------------------------------------------------------------------ */}
       <Card>
@@ -240,6 +296,7 @@ export default async function BusinessPage() {
                             student,
                             remainingBudget,
                             postingOwnerId: posting.businessId,
+                            unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                           }).map((t) => ({ to: t.to, label: t.label }))}
                         />
                       </Td>

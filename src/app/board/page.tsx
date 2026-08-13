@@ -21,6 +21,8 @@ import { AuthorizeFunding } from "./AuthorizeFunding";
 import { boardTransition } from "./actions";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
+import { unreviewedWeeksByApplication } from "@/services/timesheet";
+import { reimbursementFor } from "@/domain/timesheet";
 import { DEMO_NOW } from "@/data/seed";
 import {
   availableTransitions,
@@ -32,6 +34,7 @@ import { postingTotalHours } from "@/domain/types";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
+  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
   const board = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
 
@@ -53,6 +56,18 @@ export default async function BoardPage() {
   const unbooked = applications.filter(
     (a) => a.status === "mutual_interest" && a.track === "standard",
   );
+
+  // Placements that have produced approved hours. `hoursApproved` is the
+  // cached total the timesheet service maintains inside the transaction that
+  // writes each entry, so this needs no per-row query.
+  const claims = applications
+    .filter((a) => a.track === "standard" && (a.hoursApproved ?? 0) > 0)
+    .map((application) => ({
+      application,
+      posting: repositories.postings.find(actor, application.postingId)!,
+      reimbursement: reimbursementFor(application, application.hoursApproved ?? 0),
+    }))
+    .sort((a, b) => b.reimbursement.amount - a.reimbursement.amount);
 
   const slots = repositories.interviewSlots.list(actor);
   const openSlots = slots.filter((s) => s.bookedByStudentId === null);
@@ -232,6 +247,7 @@ export default async function BoardPage() {
                       student,
                       remainingBudget: remaining,
                       postingOwnerId: posting.businessId,
+                      unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                     });
                     const canAuthorize = offered.some(
                       (t) => t.to === "funding_authorized",
@@ -316,6 +332,84 @@ export default async function BoardPage() {
           </Assumption>
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* What is actually owed, against what was authorized                  */}
+      {/*                                                                     */}
+      {/* An authorization is a commitment; approved hours are a bill. They   */}
+      {/* are different numbers and the gap between them is the board's real  */}
+      {/* exposure — money committed against placements that may never work   */}
+      {/* the hours, and hours worked beyond what was committed.              */}
+      {/* ------------------------------------------------------------------ */}
+      {claims.length > 0 && (
+        <Card>
+          <CardHeader
+            icon={<CircleDollarSign className="w-5 h-5" />}
+            title="Reimbursement against authorization"
+            subtitle="Hours the supervising employer has signed off, priced at the authorized rate"
+          />
+          <TableWrap>
+            {/* Named, so it is reachable and announced as itself rather than
+                as the third unlabelled table on the page. */}
+            <table className="w-full text-sm" aria-label="Reimbursement against authorization">
+              <thead>
+                <tr>
+                  <Th>Placement</Th>
+                  <Th>Approved</Th>
+                  <Th>Authorized</Th>
+                  <Th>Reimbursable</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map(({ application, posting, reimbursement }) => (
+                  <tr key={application.id} className="border-t border-ink-100">
+                    <Td>
+                      <span className="font-semibold text-ink-950">
+                        {posting.title}
+                      </span>
+                      <span className="block text-xs text-ink-500">
+                        {organizationName(posting.businessId)}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="tabular">{reimbursement.approvedHours} hrs</span>
+                    </Td>
+                    <Td>
+                      <span className="tabular text-ink-600">
+                        {reimbursement.authorizedHours} hrs
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="tabular font-bold text-ink-950">
+                        <Money value={reimbursement.amount} />
+                      </span>
+                      {/* Named rather than netted off silently. Someone bears
+                          this cost and it is the employer — a board that
+                          quietly paid past its cap would overspend the
+                          allocation, and one that quietly dropped the hours
+                          would hide a bill an employer is about to eat. */}
+                      {reimbursement.overCap && (
+                        <span className="block text-xs text-warn-700 font-semibold mt-0.5">
+                          {reimbursement.unreimbursedHours} hrs past the cap — not
+                          reimbursable
+                        </span>
+                      )}
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+          <div className="px-6 py-4">
+            <Assumption>
+              Hours are approved by the supervising employer, who is the party
+              that can attest the student was there. This board sees the hours
+              and the periods; it does not see what the student worked on, which
+              it has no need of to price a claim.
+            </Assumption>
+          </div>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Slot calendar                                                       */}
