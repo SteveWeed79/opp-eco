@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   BadgeCheck,
   CalendarClock,
@@ -304,11 +305,26 @@ export default async function StudentPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-ink-950">{posting.title}</span>
+                        {/* The title is the link. Applying is a decision, and
+                            until this existed a student made it from a title
+                            and a wage — the description the college refuses to
+                            publish without was rendered to nobody. */}
+                        <Link
+                          href={`/opportunities/${posting.id}`}
+                          className="font-semibold text-ink-950 hover:text-brand-700 transition-colors"
+                        >
+                          {posting.title}
+                        </Link>
                         <TrackBadge track={posting.track} posting={posting} hoursPerCredit={college?.hoursPerCredit} />
                       </div>
                       <p className="text-xs text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {posting.county} County
+                      </p>
+                      {/* Clamped rather than truncated with a string slice, so
+                          the full text is in the DOM for a screen reader and
+                          the cut lands on a line rather than mid-word. */}
+                      <p className="text-xs text-ink-600 mt-1.5 line-clamp-2 max-w-xl">
+                        {posting.description}
                       </p>
                       <p className="text-xs text-ink-600 mt-1.5">
                         {posting.track === "standard" ? (

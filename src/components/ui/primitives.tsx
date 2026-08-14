@@ -7,7 +7,12 @@
  */
 
 import type { ReactNode } from "react";
-import type { ApplicationStatus, Posting, Track } from "@/domain/types";
+import type {
+  ApplicationStatus,
+  Posting,
+  PostingStatus,
+  Track,
+} from "@/domain/types";
 import { creditsFor } from "@/domain/credit";
 
 // ---------------------------------------------------------------------------
@@ -223,6 +228,39 @@ export const STATUS_META: Record<
 
 export function StatusBadge({ status }: { status: ApplicationStatus }) {
   const meta = STATUS_META[status];
+  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+}
+
+/**
+ * A posting's own status, which is a different vocabulary from an
+ * application's.
+ *
+ * Separate rather than folded into `STATUS_META` because the two share words
+ * that mean different things — `closed` on an application is bookkeeping after
+ * credit is granted, and on a posting it means nobody can apply any more.
+ * Merging them would give one label to two facts.
+ *
+ * Written out here rather than per page: the employer's list and the
+ * opportunity page both need it, and the second call site is where a private
+ * lookup table becomes a component.
+ */
+export const POSTING_STATUS_META: Record<
+  PostingStatus,
+  { label: string; tone: BadgeTone }
+> = {
+  draft: { label: "Draft", tone: "neutral" },
+  help_requested: { label: "With the college", tone: "warn" },
+  college_drafting: { label: "College drafting", tone: "brand" },
+  pending_review: { label: "Awaiting review", tone: "warn" },
+  changes_requested: { label: "Changes requested", tone: "warn" },
+  published: { label: "Live", tone: "good" },
+  filled: { label: "Filled", tone: "brand" },
+  closed: { label: "Closed", tone: "neutral" },
+  expired: { label: "Expired", tone: "neutral" },
+};
+
+export function PostingStatusBadge({ status }: { status: PostingStatus }) {
+  const meta = POSTING_STATUS_META[status];
   return <Badge tone={meta.tone}>{meta.label}</Badge>;
 }
 

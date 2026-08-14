@@ -100,6 +100,23 @@ export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
 }
 
 /**
+ * The actor for a page that is not a portal.
+ *
+ * An opportunity listing belongs to no single role — a student reads it to
+ * decide whether to apply, a college reads it to review it, an employer reads
+ * their own and their competitors'. So it cannot use `actorForPortal`, which
+ * would redirect four roles in five away from a link they were sent.
+ *
+ * Signed out falls back to the demo student, for the same reason the portals
+ * do: this is a demonstration and every screen has to be reachable from a bare
+ * link. Scoping still applies — the fallback is a real actor context with a
+ * market and a role, not an exemption from the repository rules.
+ */
+export async function viewerActor(): Promise<ActorContext> {
+  return (await getActor()) ?? contextFor("student");
+}
+
+/**
  * Whether an actor may view a portal.
  *
  * A person can hold several memberships, so this is a membership question

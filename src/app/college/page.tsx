@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Award, FileEdit, PenLine, UserCheck } from "lucide-react";
 import {
   Assumption,
@@ -12,7 +13,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
-import { actorForPortal } from "@/auth/session";
+import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
@@ -35,6 +36,9 @@ import { WeeklyRecord } from "./WeeklyRecord";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  // Whether there is a real session, as opposed to the signed-out demo
+  // fallback this portal renders under. Only affects what is linkable.
+  const signedIn = (await getActor()) !== null;
   const unreviewedWeeks = unreviewedWeeksByApplication(actor);
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
@@ -225,11 +229,35 @@ export default async function CollegePage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-ink-950">{posting.title}</span>
+                        {/* Publishing is a judgement about the work, so the
+                            work is one click away rather than summarised in a
+                            row.
+
+                            Linked only for a genuinely signed-in reviewer. The
+                            opportunity page treats a signed-out visitor as a
+                            student, and a student cannot open an unpublished
+                            posting — so offering the link while browsing the
+                            demo signed out would be a link to a 404. The
+                            description below is on the row either way. */}
+                        {signedIn ? (
+                          <Link
+                            href={`/opportunities/${posting.id}`}
+                            className="font-semibold text-ink-950 hover:text-brand-700 transition-colors"
+                          >
+                            {posting.title}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold text-ink-950">
+                            {posting.title}
+                          </span>
+                        )}
                         <TrackBadge track={posting.track} posting={posting} hoursPerCredit={hoursPerCredit} />
                       </div>
                       <p className="text-xs text-ink-500 mt-0.5">
                         {organizationName(posting.businessId)} · {totalHours} total hours
+                      </p>
+                      <p className="text-xs text-ink-600 mt-1.5 line-clamp-2 max-w-xl">
+                        {posting.description}
                       </p>
                     </div>
                     <TransitionActions

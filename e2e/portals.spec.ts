@@ -17,6 +17,7 @@ const PORTALS = [
   { path: "/college", name: "college" },
   { path: "/board", name: "board" },
   { path: "/design", name: "component gallery" },
+  { path: "/opportunities/post-frontier-nursing", name: "opportunity detail" },
 ];
 
 /** Collect anything the browser complains about while a page loads. */

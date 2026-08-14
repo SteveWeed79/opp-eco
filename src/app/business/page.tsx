@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   CircleDollarSign,
   Clock,
@@ -15,6 +16,7 @@ import {
   Empty,
   Money,
   PageHeader,
+  PostingStatusBadge,
   ProgressBar,
   Stat,
   StatusBadge,
@@ -81,26 +83,6 @@ export default async function BusinessPage() {
       .forPosting(actor, postingId)
       .filter((a) => !isTerminal(a.status)).length;
 
-  const POSTING_LABEL: Record<string, string> = {
-    draft: "Draft",
-    help_requested: "With the college",
-    college_drafting: "College drafting",
-    pending_review: "Awaiting review",
-    changes_requested: "Changes requested",
-    published: "Live",
-    filled: "Filled",
-    closed: "Closed",
-    expired: "Expired",
-  };
-
-  const POSTING_TONE: Record<string, "good" | "warn" | "brand" | "neutral"> = {
-    published: "good",
-    filled: "brand",
-    changes_requested: "warn",
-    pending_review: "warn",
-    help_requested: "warn",
-    college_drafting: "brand",
-  };
 
 
   return (
@@ -374,17 +356,18 @@ export default async function BusinessPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-ink-950">
+                      <Link
+                        href={`/opportunities/${posting.id}`}
+                        className="font-semibold text-sm text-ink-950 hover:text-brand-700 transition-colors"
+                      >
                         {posting.title}
-                      </span>
+                      </Link>
                       <TrackBadge
                         track={posting.track}
                         posting={posting}
                         hoursPerCredit={hoursPerCredit}
                       />
-                      <Badge tone={POSTING_TONE[posting.status] ?? "neutral"}>
-                        {POSTING_LABEL[posting.status] ?? posting.status}
-                      </Badge>
+                      <PostingStatusBadge status={posting.status} />
                     </div>
                     <p className="text-xs text-ink-500 mt-0.5">
                       {posting.county} County ·{" "}

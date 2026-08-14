@@ -26,6 +26,10 @@ const PAGES = [
   { path: "/college", name: "college portal" },
   { path: "/board", name: "board portal" },
   { path: "/design", name: "component gallery" },
+  // A seeded published posting. `accessibility.spec.ts` sorts first under
+  // `workers: 1`, so the suites that publish and close postings have not run
+  // yet and this id is still in the state the seed left it.
+  { path: "/opportunities/post-frontier-nursing", name: "opportunity detail" },
 ];
 
 /** WCAG 2.1 A and AA — the level public-sector procurement asks for. */

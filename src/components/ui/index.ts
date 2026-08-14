@@ -34,6 +34,8 @@ export {
   Badge,
   TrackBadge,
   StatusBadge,
+  PostingStatusBadge,
+  POSTING_STATUS_META,
   DwellBadge,
   STATUS_META,
   Button,
