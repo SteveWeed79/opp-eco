@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { MAX_HOURS_PER_WEEK } from "@/domain/timesheet";
 
 /**
  * Entity identifiers are opaque slugs. Bounding the length and character set
@@ -72,6 +73,54 @@ const skill = z.string().trim().min(1).max(40);
 
 export const applyInput = z.object({
   postingId: id,
+});
+
+/**
+ * A move on one of the three gating machines.
+ *
+ * The target status is a bounded string rather than an enum per entity: the
+ * machine is the authority on whether the move exists, and duplicating its
+ * vocabulary here would give two places to update and one to forget.
+ */
+export const lifecycleInput = z.object({
+  id,
+  to: z.string().min(1).max(64),
+  reason: reason.optional(),
+});
+
+/**
+ * A week of logged hours.
+ *
+ * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered
+ * 400 before it reaches a reimbursement claim, not to legislate overtime.
+ * Half-hours are allowed — a real timesheet has them — but nothing finer,
+ * because a claim of 16.37 hours is a unit error somewhere upstream.
+ */
+export const logHoursInput = z.object({
+  applicationId: id,
+  weekStarting: z.string().min(1).max(40),
+  hours: z
+    .number()
+    .positive()
+    .max(MAX_HOURS_PER_WEEK)
+    .refine((h) => Number.isInteger(h * 2), {
+      message: "Log hours to the nearest half hour",
+    }),
+  summary: z.string().trim().min(1).max(1000),
+});
+
+/**
+ * A supervisor's decision on a week.
+ *
+ * The note is required on rejection and that rule lives in the service rather
+ * than here: it depends on the value of another field, and a schema that
+ * enforced it would still have to be re-checked server-side where the entry is
+ * actually read. One place, not two.
+ */
+export const reviewHoursInput = z.object({
+  entryId: id,
+  decision: z.enum(["approve", "reject"]),
+  note: z.string().trim().max(2000).optional(),
 });
 
 /**

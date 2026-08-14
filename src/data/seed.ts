@@ -21,6 +21,7 @@ import type {
   Organization,
   Posting,
   Student,
+  TimeEntry,
   Track,
   User,
 } from "@/domain/types";
@@ -1055,6 +1056,26 @@ const appSeeds: AppSeed[] = [
     creditAwardId: "credit-3",
   },
 
+  // --- The demo student's own active placement ---
+  // Omar is the seeded student account and his story is the pause — app-4 is
+  // still waiting on a board interview. But a student stuck on one application
+  // is routinely working another, and without this the signed-in student has
+  // no placement to log hours against and the timesheet is a feature you can
+  // only read about. `post-apex-swe` carries two openings, and the second is
+  // this one; the supervisor is the seeded employer account, so logging a week
+  // here lands in Dana's approval queue and the round trip is walkable.
+  {
+    id: "app-27",
+    postingId: "post-apex-swe",
+    studentId: "stu-omar",
+    status: "placement_active",
+    submittedDaysAgo: 51,
+    statusSinceDaysAgo: 28,
+    fundingHours: 210,
+    hoursLogged: 64,
+    hoursApproved: 44,
+  },
+
   // --- Rejections and withdrawals ---
   {
     id: "app-22",
@@ -1102,6 +1123,150 @@ export const applications: Application[] = appSeeds.map((a) => {
     creditAwardId: a.creditAwardId,
     version: 1,
   };
+});
+
+// ---------------------------------------------------------------------------
+// Timesheets
+// ---------------------------------------------------------------------------
+
+/**
+ * Weekly entries generated from each placement's hour totals rather than
+ * written out by hand.
+ *
+ * `hoursLogged` and `hoursApproved` are a cache over these rows, so a
+ * hand-written fixture that summed to 87 against a stated 88 would be a
+ * permanently broken invariant sitting in the demo data. Generating means the
+ * two cannot disagree — `timesheet.test.ts` checks it for every seeded
+ * placement, and that check is only meaningful because the numbers came from
+ * one place.
+ */
+const WEEKLY_TARGET = 20;
+
+/** Plausible week-notes per posting, cycled. Real enough to review. */
+const WORK_NOTES: Record<string, string[]> = {
+  "post-apex-swe": [
+    "Paired on the parts-catalog importer; wrote the CSV validation cases.",
+    "Fixed three defects in the order-status view and shipped them.",
+    "Shadowed the on-call rotation, documented two runbook gaps.",
+    "Built the retry logic for the supplier feed and tested the failure path.",
+  ],
+  "post-cherokee-mfg": [
+    "Ran dimensional checks on the second-shift output, logged four out-of-tolerance parts.",
+    "Cross-trained on the press brake setup sheets.",
+    "Updated the tooling inventory and flagged two worn dies for replacement.",
+    "Assisted the quality lead with the weekly scrap-rate report.",
+  ],
+  "post-heartland-data": [
+    "Cleaned the elevator throughput logs and rebuilt the weekly summary.",
+    "Wrote the moisture-reading import and reconciled it against the paper tickets.",
+    "Sat with the scale operators to map how the tickets are actually entered.",
+    "Charted the load-out delays by hour for the operations meeting.",
+  ],
+  "post-frontier-care": [
+    "Front-desk intake support and appointment reminder calls.",
+    "Digitised the referral backlog; escalated the incomplete records.",
+    "Observed the care-coordination huddle and took the action notes.",
+    "Reorganised the supply room and rebuilt the reorder list.",
+  ],
+};
+
+function notesFor(postingId: string, index: number): string {
+  const pool = WORK_NOTES[postingId] ?? [
+    "Placement work as scheduled with the site supervisor.",
+  ];
+  return pool[index % pool.length];
+}
+
+/** Monday of the week containing a date, matching `weekStartingFor`. */
+function mondayOf(date: Date): string {
+  const utc = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  utc.setUTCDate(utc.getUTCDate() - ((utc.getUTCDay() + 6) % 7));
+  return utc.toISOString().slice(0, 10);
+}
+
+function weekStartingAgo(weeks: number): string {
+  return mondayOf(new Date(DEMO_NOW.getTime() - weeks * 7 * 86_400_000));
+}
+
+/** Split a total into weekly chunks of at most `WEEKLY_TARGET`. */
+function weeklyChunks(total: number): number[] {
+  const chunks: number[] = [];
+  let remaining = total;
+  while (remaining > 0) {
+    chunks.push(Math.min(WEEKLY_TARGET, remaining));
+    remaining -= WEEKLY_TARGET;
+  }
+  return chunks;
+}
+
+export const timeEntries: TimeEntry[] = applications.flatMap((application) => {
+  // Micro-internships are fixed-fee for a deliverable — no timesheet exists to
+  // seed, and inventing one would misrepresent what was bought.
+  if (application.track !== "standard") return [];
+
+  const approved = application.hoursApproved ?? 0;
+  const logged = application.hoursLogged ?? 0;
+  if (logged === 0) return [];
+
+  const posting = postings.find((p) => p.id === application.postingId)!;
+  const rows: TimeEntry[] = [];
+
+  const push = (
+    index: number,
+    hours: number,
+    status: TimeEntry["status"],
+    extra: Partial<TimeEntry> = {},
+  ) => {
+    const weekStarting = weekStartingAgo(index + 1);
+    rows.push({
+      id: `te-${application.id}-${index + 1}`,
+      marketId: application.marketId,
+      applicationId: application.id,
+      studentId: application.studentId,
+      businessId: posting.businessId,
+      weekStarting,
+      hours,
+      summary: notesFor(posting.id, index),
+      status,
+      submittedOn: new Date(
+        DEMO_NOW.getTime() - (index + 1) * 7 * 86_400_000 + 5 * 86_400_000,
+      ).toISOString(),
+      version: 1,
+      ...extra,
+    });
+  };
+
+  // Most recent week first: anything still awaiting review is the newest, and
+  // the approved history runs backwards from there.
+  let index = 0;
+  const pending = logged - approved;
+  if (pending > 0) {
+    push(index++, pending, "submitted");
+  }
+
+  for (const hours of weeklyChunks(approved)) {
+    push(index++, hours, "approved", {
+      reviewedOn: daysAgo(index * 7 - 2),
+      reviewedByUserId: "u-dana",
+    });
+  }
+
+  // One placement carries a sent-back week, so the demo shows all three states
+  // and the correction path is visible rather than theoretical. Rejected hours
+  // are excluded from both totals by `timesheetTotals`, so this cannot put the
+  // generated rows out of step with the cached numbers.
+  if (application.id === "app-1") {
+    push(index++, 12, "rejected", {
+      reviewedOn: daysAgo(index * 7 - 2),
+      reviewedByUserId: "u-dana",
+      reviewNote:
+        "This week duplicates hours already logged for the previous week. Please resubmit with the correct dates.",
+    });
+  }
+
+  return rows;
 });
 
 // ---------------------------------------------------------------------------

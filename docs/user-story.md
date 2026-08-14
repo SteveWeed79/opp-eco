@@ -1,4 +1,4 @@
-# Opportunity Ecosystem — End-to-End User Story
+# CCLN — End-to-End User Story
 
 **Status:** Draft, under active revision.
 **Purpose:** Pin down the complete lifecycle before writing application code, so the domain model and state machine are built once.
@@ -104,7 +104,25 @@ Admin's reporting job is therefore partly **budget stewardship**: how much of th
 
 ### Hours logging is load-bearing
 
-Because reimbursement is hourly, **logged hours are the basis of a funding claim** — not just an academic record. If the platform is the system of record for hours, it feeds both the credit award and the board's reimbursement. That raises the bar on hour logging considerably: supervisor approval, immutability after approval, correction with an audit trail. **[Q19]** — is the platform the system of record for reimbursement hours, or does the board track those separately?
+Because reimbursement is hourly, **logged hours are the basis of a funding claim** — not just an academic record. If the platform is the system of record for hours, it feeds both the credit award and the board's reimbursement. That raises the bar on hour logging considerably: supervisor approval, immutability after approval, correction with an audit trail.
+
+**[Q19] is resolved: the platform is the system of record.** Which settles the shape, because hours turn out to be the one record every party needs and none of them owns alone:
+
+| Party | Role | What they need from it |
+|---|---|---|
+| Student | Logs the week | To be able to correct a week that was sent back |
+| Employer | **Validates it** | The work description, to approve against |
+| College | Awards credit | The work description, because credit is a judgement about work done |
+| Board | Reimburses | Hours and periods, priced against the authorization |
+
+The employer's approval is the whole evidentiary basis. They are the only party who can attest the student was there — not the college, which awards credit but was not present, and not the board, which pays but was not present either. Self-reported hours that nobody countersigns are not something public money can be reimbursed against, which is why logging and approving are two actions by two roles rather than one.
+
+Two consequences that were not obvious before building it:
+
+- **Approved hours can exceed the authorized cap.** A supervisor approving a genuine week does not know what the board committed three months earlier, and telling them to refuse real work because a budget line ran out would be both wrong and unenforceable. So the overage is surfaced, not prevented — and the employer carries it. Silently reimbursing past the cap overspends the allocation; silently dropping the hours hides a bill the employer is about to receive.
+- **A placement cannot be completed over unreviewed weeks.** Closing it strands those hours: they reach neither the credit total nor the reimbursement claim, and a student cannot reopen a completed placement to chase them.
+
+**Data minimisation falls out of the same table.** The board sees hours and periods; it does not see the work summaries, because pricing a claim against an hour cap does not take a description of what the student built. Holding one would give a government agency a weekly diary of a named student's activity that it has no need for and that, once held, becomes subject to retention and open-records questions it would rather not answer. Collect once, disclose per purpose.
 
 ---
 
@@ -359,7 +377,6 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | # | Question | Why it matters |
 |---|---|---|
 | **Q18** | Is the program open to all students with subsidy for those who qualify, or only to eligible students? | If subsidy is scarce or restricted, unsubsidized placements need a real path, not a dead end |
-| **Q19** | Is the platform the system of record for reimbursement hours? | Raises hour logging from academic record to funding claim, with the rigor that implies |
 | **Q20** | Does the board have a fixed annual budget the program draws down? | If yes, the market has capacity limits and Admin's job includes allocating scarce subsidy |
 | **Q16** | Naming for the market entity; one board to many colleges? | Model root; WIOA areas and college service areas don't align cleanly |
 | **Q21** | **How does a 5–40 hour micro-internship earn 1 credit?** Stack them, enlarge the track, or drop credit from it | A single micro-internship falls short of the ~45-hour credit threshold. If they stack, `CreditAward` is many-to-many with placements from day one |
@@ -381,7 +398,7 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 ### Resolved
 
-**Q2** clearance is per applicant per job, not portable · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers · **Q13** micro-internships are unsubsidized — a fixed project fee has no hours for an hourly reimbursement to attach to
+**Q2** clearance is per applicant per job, not portable · **Q4** the gate sits after mutual interest, before placement · **Q7** transportation is the student's responsibility · **Q8** no adult job seekers · **Q13** micro-internships are unsubsidized — a fixed project fee has no hours for an hourly reimbursement to attach to · **Q19** the platform is the system of record for hours; the student logs, the supervising employer validates, and the college and board each read what their own decision requires
 
 ---
 

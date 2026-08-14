@@ -24,6 +24,7 @@ import type {
   AuditEvent,
 } from "@/domain/types";
 import { attemptTransition, isTerminal } from "@/domain/workflow";
+import { timesheetTotals } from "@/domain/timesheet";
 import { repositories } from "@/data/memory";
 import { marketRemainingBudget } from "@/lib/queries";
 import {
@@ -127,6 +128,12 @@ export async function executeTransition(
       student,
       remainingBudget: marketRemainingBudget(actor, market),
       postingOwnerId: posting.businessId,
+      // Counted here rather than trusted from the caller. The page renders a
+      // button using its own count, but the button is not the authority — a
+      // direct POST arrives with no count at all.
+      unreviewedWeeks: timesheetTotals(
+        repositories.timeEntries.forApplication(actor, existing.id),
+      ).unreviewedWeeks,
     },
     command.to,
     command.reason,

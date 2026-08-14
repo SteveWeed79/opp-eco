@@ -73,6 +73,22 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  saveOrganization(organization: import("@/domain/types").Organization) {
+    const index = seed.organizations.findIndex((o) => o.id === organization.id);
+    if (index === -1) throw new Error(`Unknown organization ${organization.id}`);
+    this.effects.push(() => {
+      seed.organizations[index] = organization;
+    });
+  }
+
+  savePosting(posting: import("@/domain/types").Posting) {
+    const index = seed.postings.findIndex((p) => p.id === posting.id);
+    if (index === -1) throw new Error(`Unknown posting ${posting.id}`);
+    this.effects.push(() => {
+      seed.postings[index] = posting;
+    });
+  }
+
   saveInterviewSlot(slot: import("@/domain/types").InterviewSlot, expectedVersion: number) {
     const current = seed.slotOverrides.get(slot.id);
     const version = current?.version ?? 1;
@@ -81,6 +97,28 @@ class MemoryUnitOfWork implements UnitOfWork {
     }
     this.effects.push(() => {
       seed.slotOverrides.set(slot.id, { ...slot, version: expectedVersion + 1 });
+    });
+  }
+
+  createTimeEntry(entry: import("@/domain/types").TimeEntry) {
+    if (seed.timeEntries.some((e) => e.id === entry.id)) {
+      throw new Error(`Time entry ${entry.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.timeEntries.push(entry);
+    });
+  }
+
+  saveTimeEntry(entry: import("@/domain/types").TimeEntry, expectedVersion: number) {
+    const index = seed.timeEntries.findIndex((e) => e.id === entry.id);
+    if (index === -1) throw new Error(`Unknown time entry ${entry.id}`);
+    if (seed.timeEntries[index].version !== expectedVersion) {
+      // Two supervisors clearing the same queue is exactly as routine as two
+      // students racing for an interview slot.
+      throw new ConcurrencyError("Time entry", entry.id);
+    }
+    this.effects.push(() => {
+      seed.timeEntries[index] = { ...entry, version: expectedVersion + 1 };
     });
   }
 

@@ -86,7 +86,9 @@ export function Shell({
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
               <span
-                className="w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden"
+                className={`w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden ${markTextSize(
+                  themed ? theme.monogram : brand.monogram,
+                )}`}
                 style={
                   themed && theme.hasAccent
                     ? { boxShadow: "0 0 0 2px var(--color-accent)" }
@@ -104,11 +106,17 @@ export function Shell({
                   (themed ? theme.monogram : brand.monogram)
                 )}
               </span>
-              <span className="hidden sm:block">
-                <span className="text-lg font-extrabold tracking-tight text-ink-950">
+              {/* Stacked rather than inline. On one line the full name ran the
+                  header to 1390px against 1280 of viewport — measured, not
+                  guessed — and it is the themed pages that overflow first,
+                  because those also carry the "Themed for" attribution. Two
+                  lines keeps the whole name next to the mark instead of
+                  trading it for an acronym. */}
+              <span className="hidden sm:block leading-tight">
+                <span className="block text-sm font-extrabold tracking-tight text-ink-950">
                   {brand.lead}
                 </span>
-                <span className="text-lg font-extrabold text-brand-700 ml-1">
+                <span className="block text-sm font-extrabold text-brand-700">
                   {brand.accent}
                 </span>
               </span>
@@ -259,6 +267,21 @@ export function Shell({
       </div>
     </ToastProvider>
   );
+}
+
+/**
+ * Type size for the square mark, chosen by how much is in it.
+ *
+ * Partner monograms are two letters; the platform's is four, because the
+ * programme goes by its initialism rather than a shortening of its words. One
+ * fixed size cannot serve both — "CCLN" at the two-letter size spills out of a
+ * 40px box, and shrinking every mark to fit it would make a partner's initials
+ * look apologetic next to their own colours.
+ */
+function markTextSize(monogram: string): string {
+  if (monogram.length >= 4) return "text-[11px] tracking-tight";
+  if (monogram.length === 3) return "text-sm";
+  return "text-lg";
 }
 
 /**
