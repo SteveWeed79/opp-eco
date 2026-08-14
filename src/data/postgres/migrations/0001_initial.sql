@@ -1,4 +1,8 @@
--- Opportunity Ecosystem — initial schema
+-- Initial schema.
+--
+-- Deliberately does not name the product. SQL cannot import from `@/brand`, so
+-- a name written here is a name that survives the next rename — which is
+-- exactly what happened to the last one.
 --
 -- Written against the domain types in src/domain/types.ts. The app does not
 -- connect to a database yet; this exists so the data model is settled and

@@ -79,7 +79,7 @@ export default async function AdminPage() {
       <PageHeader
         dark
         eyebrow="Program administrator"
-        title="Ecosystem Operations"
+        title="Network Operations"
         subtitle={`${liveMarkets.length} live ${liveMarkets.length === 1 ? "market" : "markets"} · ${health.length - liveMarkets.length} in the launch pipeline`}
       />
 

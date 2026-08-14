@@ -1,4 +1,4 @@
-# Opportunity Ecosystem
+# CCLN — Career Connected Learning Network
 
 A workforce-development platform connecting Kansas students, employers, colleges, and local workforce boards around paid internships that earn academic credit.
 

@@ -1,4 +1,4 @@
-# Opportunity Ecosystem — End-to-End User Story
+# CCLN — End-to-End User Story
 
 **Status:** Draft, under active revision.
 **Purpose:** Pin down the complete lifecycle before writing application code, so the domain model and state machine are built once.
