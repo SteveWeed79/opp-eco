@@ -13,17 +13,29 @@ import {
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
+import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
-import { availableTransitions } from "@/domain/workflow";
-import { postingTotalHours } from "@/domain/types";
-import { TransitionActions } from "@/components/TransitionActions";
+import { availableTransitions, isTerminal } from "@/domain/workflow";
+import { postingMachine, studentMachine } from "@/domain/lifecycle";
+import {
+  postingLifecycleAsCollege,
+  studentLifecycle,
+} from "@/app/_actions/lifecycle";
+import { postingTotalHours, type Posting } from "@/domain/types";
+import {
+  TransitionActions,
+  POSTING_CONFIRM,
+  STUDENT_CONFIRM,
+} from "@/components/TransitionActions";
 import { platformTheme } from "@/theme/theme";
 import { collegeTransition } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
+import { WeeklyRecord } from "./WeeklyRecord";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
   const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
   const market = repositories.markets.find(actor, actor.membership.marketId!)!;
@@ -44,6 +56,23 @@ export default async function CollegePage() {
   const activePlacements = repositories.applications
     .list(actor)
     .filter((a) => a.status === "placement_active");
+
+  /**
+   * Publication moves the college may make on a posting right now.
+   *
+   * Read from the machine rather than written out per card: the close guard
+   * counts live applications, so a posting with candidates in it must not
+   * offer "Close" even though the transition exists.
+   */
+  const postingTransitionsFor = (posting: Posting) =>
+    postingMachine
+      .available(actor, {
+        posting,
+        openApplications: repositories.applications
+          .forPosting(actor, posting.id)
+          .filter((a) => !isTerminal(a.status)).length,
+      })
+      .map((t) => ({ to: t.to, label: t.label }));
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
@@ -110,9 +139,15 @@ export default async function CollegePage() {
                       {student.expectedGraduation}
                     </p>
                   </div>
-                  <Button size="sm" variant="primary">
-                    Verify
-                  </Button>
+                  <TransitionActions
+                    id={student.id}
+                    action={studentLifecycle}
+                    subject={student.name}
+                    confirm={STUDENT_CONFIRM}
+                    transitions={studentMachine
+                      .available(actor, { student })
+                      .map((t) => ({ to: t.to, label: t.label }))}
+                  />
                 </li>
               ))}
             </ul>
@@ -146,9 +181,13 @@ export default async function CollegePage() {
                         {organizationName(posting.businessId)} · {posting.county} County
                       </p>
                     </div>
-                    <Button size="sm" variant="dark">
-                      Help draft
-                    </Button>
+                    <TransitionActions
+                      id={posting.id}
+                      action={postingLifecycleAsCollege}
+                      subject={posting.title}
+                      confirm={POSTING_CONFIRM}
+                      transitions={postingTransitionsFor(posting)}
+                    />
                   </div>
                   <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-ink-200 pl-3">
                     &ldquo;{posting.description}&rdquo;
@@ -193,14 +232,13 @@ export default async function CollegePage() {
                         {organizationName(posting.businessId)} · {totalHours} total hours
                       </p>
                     </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost">
-                        Request changes
-                      </Button>
-                      <Button size="sm" variant="primary">
-                        Publish
-                      </Button>
-                    </div>
+                    <TransitionActions
+                      id={posting.id}
+                      action={postingLifecycleAsCollege}
+                      subject={posting.title}
+                      confirm={POSTING_CONFIRM}
+                      transitions={postingTransitionsFor(posting)}
+                    />
                   </div>
                   <div className="mt-3">
                     <Badge tone={selfSufficient ? "good" : "warn"}>
@@ -293,12 +331,26 @@ export default async function CollegePage() {
                                   ? `${application.hoursApproved} hrs approved`
                                   : `${postingTotalHours(posting)} hrs`}
                               </span>
+                              {/* The work behind the number. A college
+                                  awarding academic credit is making a
+                                  judgement about what was done, not about how
+                                  many hours were billed — so the weekly record
+                                  the supervisor signed off is here rather than
+                                  a total it has to take on trust. */}
+                              {application.track === "standard" && (
+                                <WeeklyRecord
+                                  entries={repositories.timeEntries.forApplication(
+                                    actor,
+                                    application.id,
+                                  )}
+                                />
+                              )}
                               {/* Per application, because that is what the
                                   domain models. The aggregate award across
                                   several placements is the open stacking
                                   question — see the note below the list. */}
                               <TransitionActions
-                                applicationId={application.id}
+                                id={application.id}
                                 action={collegeTransition}
                                 subject={`${student.name} — ${posting.title}`}
                                 transitions={availableTransitions(actor, {
@@ -306,6 +358,7 @@ export default async function CollegePage() {
                                   student,
                                   remainingBudget,
                                   postingOwnerId: posting.businessId,
+                                  unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                                 }).map((t) => ({ to: t.to, label: t.label }))}
                               />
                             </span>

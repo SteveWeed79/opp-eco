@@ -75,8 +75,15 @@ function ctx(
   stu = student(),
   remainingBudget = 100_000,
   postingOwnerId = "org-business",
+  unreviewedWeeks = 0,
 ) {
-  return { application: app, student: stu, remainingBudget, postingOwnerId };
+  return {
+    application: app,
+    student: stu,
+    remainingBudget,
+    postingOwnerId,
+    unreviewedWeeks,
+  };
 }
 
 // --- role enforcement ------------------------------------------------------
@@ -262,6 +269,33 @@ describe("guards", () => {
     const result = attemptTransition(actor("business"), ctx(app), "placement_completed");
     expect(result.ok).toBe(false);
     expect(result.error).toContain("No approved hours");
+  });
+
+  it("refuses to complete a placement over the student's unreviewed weeks", () => {
+    // Closing here strands those hours: they never reach the credit total and
+    // never reach the board's claim, and a student cannot reopen a completed
+    // placement to chase them. The employer sitting on the queue is the one
+    // who can clear it.
+    const app = application({ status: "placement_active", hoursApproved: 120 });
+    const result = attemptTransition(
+      actor("business"),
+      ctx(app, student(), 100_000, "org-business", 2),
+      "placement_completed",
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("2 weeks of logged hours still need your approval");
+  });
+
+  it("allows completion once every week has been reviewed", () => {
+    const app = application({ status: "placement_active", hoursApproved: 120 });
+    const result = attemptTransition(
+      actor("business"),
+      ctx(app, student(), 100_000, "org-business", 0),
+      "placement_completed",
+    );
+
+    expect(result.ok).toBe(true);
   });
 
   it("refuses to accept a micro deliverable that was never submitted", () => {

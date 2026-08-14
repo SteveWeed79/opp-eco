@@ -10,7 +10,7 @@
  * enough to make a decision and nothing more until the placement is real.
  */
 
-import type { Application, ApplicationStatus, Student } from "./types";
+import type { Application, ApplicationStatus, Student, TimeEntry } from "./types";
 
 export type DisclosureLevel = "summary" | "full";
 
@@ -55,4 +55,28 @@ export function redactStudent(student: Student, level: DisclosureLevel): Student
     email: "",
     expectedGraduation: "",
   };
+}
+
+/**
+ * A time entry with the work summary removed.
+ *
+ * The workforce board needs hours and periods: it is validating a
+ * reimbursement claim against an hour cap and a rate, and that arithmetic does
+ * not take a description of what the student built. The employer needs the
+ * summary to approve the week, and the college needs it to judge whether the
+ * work earns academic credit — so they see it and the board does not.
+ *
+ * This is the data-minimisation rule applied to the one record that touches
+ * every party: collect once, disclose per purpose. The alternative — one
+ * timesheet visible to everyone because it is simpler — hands a government
+ * agency a weekly diary of a named student's activity that it has no need for
+ * and, once held, becomes subject to retention and open-records questions it
+ * would rather not answer.
+ *
+ * Emptied rather than hidden at the component, for the same reason
+ * `redactStudent` empties: a field withheld on screen but present in the
+ * payload is not withheld.
+ */
+export function redactTimeEntry(entry: TimeEntry): TimeEntry {
+  return { ...entry, summary: "", reviewNote: undefined };
 }

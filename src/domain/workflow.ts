@@ -11,10 +11,14 @@ import type {
   ActorContext,
   Application,
   ApplicationStatus,
-  ActorRole,
   Student,
   Track,
 } from "./types";
+import {
+  createMachine,
+  type StateTransition,
+  type TransitionResult,
+} from "./machine";
 
 export interface TransitionContext {
   application: Application;
@@ -27,25 +31,20 @@ export interface TransitionContext {
    * being in the same market.
    */
   postingOwnerId: string;
+  /**
+   * Weeks the student has logged that the supervisor has not yet reviewed.
+   *
+   * Required rather than optional, so the compiler names every call site
+   * instead of letting one default to zero and quietly get the permissive
+   * answer. Guards that fail open are the ones nobody notices are broken.
+   */
+  unreviewedWeeks: number;
 }
 
-export interface Transition {
-  from: ApplicationStatus;
-  to: ApplicationStatus;
-  /** Roles permitted to perform it. Admin is handled separately. */
-  roles: ActorRole[];
+export interface Transition extends StateTransition<ApplicationStatus, TransitionContext> {
   /** Tracks this transition exists for. Absent means both. */
   tracks?: Track[];
-  label: string;
-  /** Extra precondition beyond role and current state. */
-  guard?: (ctx: TransitionContext) => string | null;
 }
-
-/**
- * Admin can force any transition, because unsticking stalled work is the
- * administrator's core job — but never silently. See `attemptTransition`.
- */
-const ADMIN_OVERRIDE_ROLE: ActorRole = "admin";
 
 export const TRANSITIONS: Transition[] = [
   // --- Business review -----------------------------------------------------
@@ -212,10 +211,20 @@ export const TRANSITIONS: Transition[] = [
     roles: ["business"],
     tracks: ["standard"],
     label: "Mark placement complete",
-    guard: ({ application }) =>
-      (application.hoursApproved ?? 0) > 0
-        ? null
-        : "No approved hours logged for this placement",
+    guard: ({ application, unreviewedWeeks }) => {
+      if ((application.hoursApproved ?? 0) === 0) {
+        return "No approved hours logged for this placement";
+      }
+      // Closing a placement over the student's unreviewed weeks would strand
+      // them: those hours never reach the credit total and never reach the
+      // board's reimbursement claim, and the student has no way to reopen a
+      // completed placement to chase them. The employer sitting on the queue
+      // is the one who can clear it, and this is the moment they notice.
+      if (unreviewedWeeks > 0) {
+        return `${unreviewedWeeks} week${unreviewedWeeks === 1 ? "" : "s"} of logged hours still need your approval — approve or send them back first`;
+      }
+      return null;
+    },
   },
   {
     from: "placement_active",
@@ -278,17 +287,7 @@ export const TRANSITIONS: Transition[] = [
 // Transition resolution
 // ---------------------------------------------------------------------------
 
-export interface TransitionResult {
-  ok: boolean;
-  /** Why the transition was refused. Present only when `ok` is false. */
-  error?: string;
-  /** True when the move was only possible via administrator override. */
-  viaOverride?: boolean;
-}
-
-function trackAllows(transition: Transition, track: Track): boolean {
-  return !transition.tracks || transition.tracks.includes(track);
-}
+export type { TransitionResult };
 
 /**
  * Market membership is not enough. A business may only act on applications
@@ -310,13 +309,31 @@ function ownershipViolation(
   return null;
 }
 
+const machine = createMachine<ApplicationStatus, TransitionContext, Transition>({
+  subject: "application",
+  transitions: TRANSITIONS,
+  statusOf: (ctx) => ctx.application.status,
+  marketIdOf: (ctx) => ctx.application.marketId,
+  ownership: ownershipViolation,
+  // The one place the two tracks diverge structurally: a micro-internship has
+  // no board step at all, so those transitions must not exist for it rather
+  // than merely be refused.
+  applies: (transition, ctx) =>
+    !transition.tracks || transition.tracks.includes(ctx.application.track),
+  // Naming the track matters: "not available for a micro-internship" is a
+  // permanent design fact, while "not available from this status" sounds like
+  // something to wait for.
+  explainMissing: (from, to, ctx) =>
+    `No transition from ${from} to ${to} on the ${ctx.application.track} track`,
+});
+
 /** Transitions defined for a status on a given track, ignoring who is asking. */
 export function transitionsFrom(
   status: ApplicationStatus,
   track: Track,
 ): Transition[] {
   return TRANSITIONS.filter(
-    (t) => t.from === status && trackAllows(t, track),
+    (t) => t.from === status && (!t.tracks || t.tracks.includes(track)),
   );
 }
 
@@ -328,14 +345,7 @@ export function availableTransitions(
   actor: ActorContext,
   ctx: TransitionContext,
 ): Transition[] {
-  const { application } = ctx;
-  const candidates = transitionsFrom(application.status, application.track);
-  if (actor.membership.role === ADMIN_OVERRIDE_ROLE) return candidates;
-  if (actor.membership.marketId !== application.marketId) return [];
-  if (ownershipViolation(actor, ctx)) return [];
-  return candidates.filter(
-    (t) => t.roles.includes(actor.membership.role) && !t.guard?.(ctx),
-  );
+  return machine.available(actor, ctx);
 }
 
 /**
@@ -353,53 +363,7 @@ export function attemptTransition(
   to: ApplicationStatus,
   reason?: string,
 ): TransitionResult {
-  const { application } = ctx;
-  const isAdmin = actor.membership.role === ADMIN_OVERRIDE_ROLE;
-
-  if (!isAdmin && actor.membership.marketId !== application.marketId) {
-    return { ok: false, error: "Actor is not a member of this market" };
-  }
-
-  const ownershipError = ownershipViolation(actor, ctx);
-  if (!isAdmin && ownershipError) return { ok: false, error: ownershipError };
-
-  const transition = TRANSITIONS.find(
-    (t) =>
-      t.from === application.status &&
-      t.to === to &&
-      trackAllows(t, application.track),
-  );
-
-  if (!transition) {
-    return {
-      ok: false,
-      error: `No transition from ${application.status} to ${to} on the ${application.track} track`,
-    };
-  }
-
-  const roleAllowed = transition.roles.includes(actor.membership.role);
-  const guardError = transition.guard?.(ctx) ?? null;
-
-  if (isAdmin && (!roleAllowed || guardError)) {
-    if (!reason) {
-      return {
-        ok: false,
-        error: "Administrator override requires a reason",
-      };
-    }
-    return { ok: true, viaOverride: true };
-  }
-
-  if (!roleAllowed) {
-    return {
-      ok: false,
-      error: `A ${actor.membership.role} may not perform "${transition.label}"`,
-    };
-  }
-
-  if (guardError) return { ok: false, error: guardError };
-
-  return { ok: true };
+  return machine.attempt(actor, ctx, to, reason);
 }
 
 // ---------------------------------------------------------------------------

@@ -230,16 +230,54 @@ describe("policy and templates agree", () => {
   });
 
   it("has a policy entry for every template, so none is dead prose", () => {
-    // The other direction. These four are sent outside the transition path —
-    // a posting submitted for review, and the stalled-application nudges — so
-    // they legitimately have no status entry.
-    const OUT_OF_BAND = new Set(["posting.submitted", "application.stalled"]);
+    // The other direction, and it needs a rule rather than a list.
+    //
+    // `POLICY` maps *application statuses* to messages. Three other entities
+    // have lifecycles of their own — a posting being reviewed, a student being
+    // verified, an organization being vetted — and hours move many times
+    // inside the single `placement_active` status. None of those can have a
+    // status entry, because they are not application statuses.
+    //
+    // So the exemption is by subject, not by name: anything whose kind names
+    // an entity the application policy does not govern. Written as a list this
+    // grew by one line per feature, which is how an orphaned template
+    // eventually gets waved through by someone adding to it out of habit.
+    const OTHER_LIFECYCLES = /^(posting|student|organization|hours)\./;
+    // The one genuine exception to the rule: a nudge about an application that
+    // has sat too long, which no single status can own because it is about the
+    // dwell time in whichever status it is in.
+    const NUDGES = new Set(["application.stalled"]);
+
     const used = new Set(policyKinds());
     const orphans = knownKinds().filter(
-      (kind) => !used.has(kind) && !OUT_OF_BAND.has(kind),
+      (kind) =>
+        !used.has(kind) && !OTHER_LIFECYCLES.test(kind) && !NUDGES.has(kind),
     );
 
     expect(orphans).toEqual([]);
+  });
+
+  it("has a template for every message the other lifecycles send", () => {
+    // The check the rule above gives up in exchange for not being a list: an
+    // entity-lifecycle kind is exempt from the policy table, so nothing else
+    // would notice if its template were missing or misspelled.
+    const templates = new Set(knownKinds());
+    const missing = [
+      "student.verified",
+      "student.rejected",
+      "organization.approved",
+      "organization.info_requested",
+      "organization.rejected",
+      "organization.suspended",
+      "posting.published",
+      "posting.changes_requested",
+      "posting.drafting",
+      "hours.submitted",
+      "hours.approved",
+      "hours.rejected",
+    ].filter((kind) => !templates.has(kind));
+
+    expect(missing).toEqual([]);
   });
 
   it("tells somebody about every status a person is waiting on", () => {

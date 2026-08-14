@@ -5,8 +5,15 @@
  * the same interfaces and nothing above this layer would change.
  */
 
-import type { ActorContext, Application, Organization, Posting } from "@/domain/types";
-import { disclosureFor, redactStudent } from "@/domain/disclosure";
+import type {
+  ActorContext,
+  Application,
+  Organization,
+  Posting,
+  TimeEntry,
+} from "@/domain/types";
+import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
+import { byWeekDescending } from "@/domain/timesheet";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 
@@ -26,6 +33,40 @@ function visibleApplications(actor: ActorContext): Application[] {
   if (actor.membership.role !== "business") return rows;
   const own = postingIdsOwnedBy(actor.membership.organizationId);
   return rows.filter((a) => own.has(a.postingId));
+}
+
+/**
+ * Every time entry the actor may see, already reduced to what their role needs.
+ *
+ * One definition shared by all four accessors, for the same reason
+ * `visibleApplications` exists: applying the narrowing in `awaitingReview` but
+ * not in `find` is how an employer reads a competitor's timesheet by guessing
+ * an id.
+ */
+function visibleTimeEntries(actor: ActorContext): TimeEntry[] {
+  const rows = inScope(actor, seed.timeEntries);
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") {
+    return rows.filter((entry) => entry.businessId === organizationId);
+  }
+
+  if (role === "student") {
+    // Scoped to the signed-in user's own student record rather than to the
+    // market. A student has no business reading a classmate's weeks.
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((entry) => entry.studentId === self.id) : [];
+  }
+
+  if (role === "board") {
+    // The board reimburses every placement in its market, so it sees every
+    // row — but it is validating hours against a cap, not reading a diary.
+    return rows.map(redactTimeEntry);
+  }
+
+  // College and admin. The college awards credit for the work described, so
+  // the summary is exactly what it needs.
+  return rows;
 }
 
 export const repositories: Repositories = {
@@ -113,6 +154,24 @@ export const repositories: Repositories = {
     list: (actor) => inScope(actor, seed.interviewSlotsAt()),
     open: (actor) =>
       inScope(actor, seed.interviewSlotsAt()).filter((s) => s.bookedByStudentId === null),
+  },
+
+  timeEntries: {
+    find: (actor, id) => visibleTimeEntries(actor).find((e) => e.id === id) ?? null,
+    forApplication: (actor, applicationId) =>
+      visibleTimeEntries(actor)
+        .filter((e) => e.applicationId === applicationId)
+        .sort(byWeekDescending),
+    forStudent: (actor, studentId) =>
+      visibleTimeEntries(actor)
+        .filter((e) => e.studentId === studentId)
+        .sort(byWeekDescending),
+    awaitingReview: (actor) =>
+      visibleTimeEntries(actor)
+        .filter((e) => e.status === "submitted")
+        // Oldest first: this is a queue someone works through, and the week a
+        // student has been waiting longest on is the one to clear.
+        .sort((a, b) => a.weekStarting.localeCompare(b.weekStarting)),
   },
 
   creditAwards: {

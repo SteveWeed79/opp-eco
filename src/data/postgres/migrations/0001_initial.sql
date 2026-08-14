@@ -1,4 +1,8 @@
--- Opportunity Ecosystem — initial schema
+-- Initial schema.
+--
+-- Deliberately does not name the product. SQL cannot import from `@/brand`, so
+-- a name written here is a name that survives the next rename — which is
+-- exactly what happened to the last one.
 --
 -- Written against the domain types in src/domain/types.ts. The app does not
 -- connect to a database yet; this exists so the data model is settled and
@@ -55,6 +59,7 @@ CREATE TYPE application_status AS ENUM (
 );
 
 CREATE TYPE credit_award_status AS ENUM ('pending', 'granted', 'denied');
+CREATE TYPE time_entry_status AS ENUM ('submitted', 'approved', 'rejected');
 
 -- ---------------------------------------------------------------------------
 -- Markets — the tenancy root. Every scoped table carries market_id, and every
@@ -323,8 +328,11 @@ CREATE TABLE applications (
   funding_authorized_hours integer,
   funding_authorized_rate_cents integer,
 
-  hours_logged             integer NOT NULL DEFAULT 0,
-  hours_approved           integer NOT NULL DEFAULT 0,
+  -- A cache over `time_entries`, maintained in the same transaction that
+  -- writes an entry. Numeric rather than integer because a timesheet has half
+  -- hours in it, and a total that truncates them loses real work.
+  hours_logged             numeric(6, 1) NOT NULL DEFAULT 0,
+  hours_approved           numeric(6, 1) NOT NULL DEFAULT 0,
   deliverable_submitted    boolean NOT NULL DEFAULT false,
   deliverable_accepted     boolean NOT NULL DEFAULT false,
 
@@ -365,6 +373,117 @@ CREATE INDEX applications_stalled_idx ON applications (market_id, status_since)
     'submitted', 'under_review', 'shortlisted', 'mutual_interest',
     'interview_scheduled', 'interview_completed', 'cleared', 'credit_pending'
   );
+
+-- ---------------------------------------------------------------------------
+-- Hours
+--
+-- The record every party needs and none of them owns alone: the student logs
+-- it, the supervising employer validates it, the college awards credit against
+-- it, and the board reimburses against it.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE time_entries (
+  id               text PRIMARY KEY,
+  market_id        text NOT NULL REFERENCES markets(id) ON DELETE RESTRICT,
+  application_id   text NOT NULL REFERENCES applications(id) ON DELETE RESTRICT,
+  -- Denormalised so a row can be scoped without joining through applications.
+  -- Kept honest by `time_entry_belongs_to_its_placement` below.
+  student_id       text NOT NULL REFERENCES students(id) ON DELETE RESTRICT,
+  business_id      text NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+
+  -- Monday of the week worked. Weekly rather than daily because that is the
+  -- period a board reimburses against.
+  week_starting    date NOT NULL,
+  hours            numeric(4, 1) NOT NULL,
+  -- What the student worked on. Read by the employer approving it and the
+  -- college awarding credit for it; withheld from the board, which is pricing
+  -- a claim rather than judging the work.
+  summary          text NOT NULL,
+
+  status           time_entry_status NOT NULL DEFAULT 'submitted',
+  submitted_on     timestamptz NOT NULL DEFAULT now(),
+  reviewed_on      timestamptz,
+  reviewed_by      text REFERENCES users(id) ON DELETE RESTRICT,
+  review_note      text,
+
+  version          integer NOT NULL DEFAULT 1,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+
+  -- One live claim per placement per week. Partial, so a rejected week is free
+  -- to be corrected and resubmitted — which is the entire point of rejecting
+  -- rather than deleting.
+  CONSTRAINT hours_positive CHECK (hours > 0),
+  -- A ceiling that catches a fat-fingered 400, not a rule about overtime.
+  -- Paired with `MAX_HOURS_PER_WEEK` in `domain/timesheet.ts`; both exist
+  -- because the service is not the only thing that can reach this table.
+  CONSTRAINT hours_within_a_week CHECK (hours <= 60),
+  CONSTRAINT hours_to_the_half CHECK ((hours * 2) = floor(hours * 2)),
+  CONSTRAINT week_starts_on_monday CHECK (EXTRACT(ISODOW FROM week_starting) = 1),
+  CONSTRAINT summary_is_present CHECK (length(btrim(summary)) > 0),
+  -- A reviewed week names who reviewed it and when. An approval nobody is
+  -- accountable for is not the attestation public money is reimbursed against.
+  CONSTRAINT review_is_attributable CHECK (
+    status = 'submitted' OR (reviewed_on IS NOT NULL AND reviewed_by IS NOT NULL)
+  ),
+  -- A week sent back without a reason cannot be corrected by the student.
+  CONSTRAINT rejection_says_why CHECK (
+    status <> 'rejected' OR length(btrim(coalesce(review_note, ''))) > 0
+  )
+);
+
+CREATE UNIQUE INDEX time_entries_one_live_claim_per_week
+  ON time_entries (application_id, week_starting)
+  WHERE status <> 'rejected';
+
+CREATE INDEX time_entries_application_idx ON time_entries (application_id, week_starting DESC);
+CREATE INDEX time_entries_student_idx ON time_entries (student_id, week_starting DESC);
+-- The employer's queue: the one read that happens on every visit to the portal.
+CREATE INDEX time_entries_awaiting_review_idx ON time_entries (business_id, week_starting)
+  WHERE status = 'submitted';
+
+-- The denormalised columns are a performance decision, not a second source of
+-- truth. Without this a row could be scoped to an employer who never
+-- supervised it, which is exactly the disclosure the scoping exists to prevent.
+CREATE OR REPLACE FUNCTION time_entry_matches_its_placement() RETURNS trigger AS $$
+DECLARE
+  expected_student text;
+  expected_business text;
+  expected_market text;
+  expected_track track;
+BEGIN
+  SELECT a.student_id, p.business_id, a.market_id, a.track
+    INTO expected_student, expected_business, expected_market, expected_track
+    FROM applications a
+    JOIN postings p ON p.id = a.posting_id
+   WHERE a.id = NEW.application_id;
+
+  IF NEW.student_id <> expected_student THEN
+    RAISE EXCEPTION 'time entry % names student % but placement % belongs to %',
+      NEW.id, NEW.student_id, NEW.application_id, expected_student;
+  END IF;
+  IF NEW.business_id <> expected_business THEN
+    RAISE EXCEPTION 'time entry % names employer % but placement % is supervised by %',
+      NEW.id, NEW.business_id, NEW.application_id, expected_business;
+  END IF;
+  IF NEW.market_id <> expected_market THEN
+    RAISE EXCEPTION 'time entry % is in market % but placement % is in %',
+      NEW.id, NEW.market_id, NEW.application_id, expected_market;
+  END IF;
+  -- Micro-internships are bought as a deliverable for a fixed fee. Billing one
+  -- by the hour would misstate the agreement in both directions.
+  IF expected_track <> 'standard' THEN
+    RAISE EXCEPTION 'placement % is a micro-internship and has no timesheet',
+      NEW.application_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER time_entry_belongs_to_its_placement
+  BEFORE INSERT OR UPDATE ON time_entries
+  FOR EACH ROW EXECUTE FUNCTION time_entry_matches_its_placement();
 
 -- ---------------------------------------------------------------------------
 -- Credit

@@ -1,10 +1,10 @@
 /**
  * The product's name, in one place.
  *
- * The name is not settled. "Opportunity Ecosystem" is the working title and
- * may be replaced — so the cost of replacing it should be one edit to this
- * file, not a sweep through markup, metadata, seeded records, and email
- * templates.
+ * The name has already changed once — "Opportunity Ecosystem" was the working
+ * title and the programme is now CCLN — and it may change again, so the cost
+ * of replacing it stays one edit to this file rather than a sweep through
+ * markup, metadata, seeded records, and email templates.
  *
  * **The reason this is a module and not a find-and-replace waiting to happen:**
  * "opportunity" is also a domain noun in this product. An employer *posts an
@@ -20,28 +20,35 @@
 
 export const brand = {
   /** Full name, as it appears in prose and titles. */
-  name: "Opportunity Ecosystem",
+  name: "Career Connected Learning Network",
 
   /**
    * The header renders the name in two tones. Kept as parts rather than split
    * at the call site, because a one-word name would break a `split(" ")` and
    * the next name might be one word.
    */
-  lead: "Opportunity",
-  accent: "Ecosystem",
+  lead: "Career Connected",
+  accent: "Learning Network",
 
-  /** The square mark in the header. One or two characters. */
-  monogram: "OE",
+  /**
+   * The square mark in the header.
+   *
+   * Four characters here where partner monograms are two, because the
+   * programme is known by its initialism rather than by a shortening of its
+   * words — nobody calls it "CC". The mark sizes its own text, so a two-letter
+   * partner monogram and a four-letter platform one both fit the same box.
+   */
+  monogram: "CCLN",
 
   /**
    * Bare domain, used to build addresses. `.example` is reserved by RFC 2606
    * so nothing addressed here can be delivered — deliberate for a demo whose
    * organizations are invented.
    */
-  domain: "opportunityecosystem.example",
+  domain: "ccln.example",
 
   /** What the platform operator's own organization is called in-product. */
-  operatorName: "Opportunity Ecosystem",
+  operatorName: "Career Connected Learning Network",
 
   /**
    * Programme framing shown in metadata. Deliberately separate from the name:

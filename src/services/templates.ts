@@ -46,6 +46,18 @@ function when(value: unknown): string {
   });
 }
 
+/** A week-starting date as something a person reads. */
+function week(value: unknown): string {
+  if (typeof value !== "string") return "that week";
+  const at = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(at.getTime())) return "that week";
+  return at.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export const TEMPLATES: Record<string, Template> = {
   // --- Application received ------------------------------------------------
   "application.submitted.student": (p) => ({
@@ -281,6 +293,106 @@ export const TEMPLATES: Record<string, Template> = {
         ? `It clears your hours-per-credit threshold on its own.`
         : `It is below your threshold, so it will need to stack with other work to carry credit.`),
     action: { label: "Review the posting", path: "/college" },
+  }),
+
+  // --- Hours ---------------------------------------------------------------
+  // The one exchange that repeats every week of a placement, which makes the
+  // wording matter more than it does for a one-off status change. A supervisor
+  // who has to open a portal to find out what they are approving will approve
+  // it unread, and an approval nobody looked at is not a validation.
+  "hours.submitted": (p) => ({
+    subject: `${str(p.studentName)} logged ${num(p.hours) ?? "some"} hours — week of ${week(p.weekStarting)}`,
+    body:
+      `${str(p.studentName)} submitted ${num(p.hours) ?? "some"} hours for ${str(p.postingTitle)}, week beginning ${week(p.weekStarting)}. ` +
+      `Approving confirms they worked those hours. It is what the workforce board reimburses against and what the college counts toward credit, ` +
+      `so please send it back if anything looks wrong rather than approving to clear the queue.`,
+    action: { label: "Review the week", path: "/business" },
+  }),
+  "hours.approved": (p) => ({
+    subject: `${num(p.hours) ?? "Your"} hours approved — week of ${week(p.weekStarting)}`,
+    body:
+      `Your supervisor approved ${num(p.hours) ?? "your"} hours for the week beginning ${week(p.weekStarting)}. ` +
+      `They now count toward your credit total. Nothing is needed from you.`,
+    action: { label: "View your hours", path: "/student" },
+  }),
+  "hours.rejected": (p) => ({
+    subject: `Please correct your hours — week of ${week(p.weekStarting)}`,
+    body:
+      `Your supervisor sent back the ${num(p.hours) ?? ""} hours you logged for the week beginning ${week(p.weekStarting)}.` +
+      (str(p.note) ? `\n\nWhat they said: "${str(p.note)}"` : "") +
+      `\n\nYou can log that week again with the correction. Sent-back hours do not count toward your credit until they are resubmitted and approved.`,
+    action: { label: "Correct the week", path: "/student" },
+  }),
+
+  // --- Verification --------------------------------------------------------
+  "student.verified": (p) => ({
+    subject: "You're verified — you can start applying",
+    body:
+      `${str(p.collegeName, "Your college")} has verified your enrollment, which is what employers rely on when they look at your application. ` +
+      `You can now apply to any published opportunity in your market.`,
+    action: { label: "Browse opportunities", path: "/student" },
+  }),
+  "student.rejected": (p) => ({
+    subject: "Your verification needs another look",
+    body:
+      `${str(p.collegeName, "Your college")} could not verify your enrollment as submitted.` +
+      (str(p.reason) ? `\n\nWhat they said: "${str(p.reason)}"` : "") +
+      `\n\nThis is not final — correct what they mentioned and submit again. Your profile and any applications you have already made are unaffected.`,
+    action: { label: "Open your profile", path: "/student" },
+  }),
+
+  // --- Vetting -------------------------------------------------------------
+  "organization.approved": (p) => ({
+    subject: `${str(p.organizationName)} is approved`,
+    body:
+      `Vetting is complete and ${str(p.organizationName)} can now take part in the program. ` +
+      `You can post opportunities, review candidates, and approve intern hours.`,
+    action: { label: "Open your portal", path: "/business" },
+  }),
+  "organization.info_requested": (p) => ({
+    subject: `More information needed for ${str(p.organizationName)}`,
+    body:
+      `The program administrator needs something more before vetting can finish.` +
+      (str(p.reason) ? `\n\nWhat they asked for: "${str(p.reason)}"` : "") +
+      `\n\nNothing can transact until this is resolved.`,
+  }),
+  "organization.rejected": (p) => ({
+    subject: `${str(p.organizationName)} was not approved`,
+    body:
+      `The program administrator has not approved ${str(p.organizationName)} to take part.` +
+      (str(p.reason) ? `\n\nReason given: "${str(p.reason)}"` : "") +
+      `\n\nIf you believe this is a mistake, reply to this message and it will reach the administrator.`,
+  }),
+  "organization.suspended": (p) => ({
+    subject: `${str(p.organizationName)} has been suspended`,
+    body:
+      `Activity for ${str(p.organizationName)} is paused. Existing placements are unaffected, but no new postings or approvals can be made.` +
+      (str(p.reason) ? `\n\nReason given: "${str(p.reason)}"` : "") +
+      `\n\nContact the program administrator to resolve this.`,
+  }),
+
+  // --- Publication ---------------------------------------------------------
+  "posting.published": (p) => ({
+    subject: `"${str(p.postingTitle)}" is live`,
+    body:
+      `The college has reviewed and published your posting. Students in your market can see and apply to it now. ` +
+      `You will hear from us when someone applies — there is no queue to keep checking.`,
+    action: { label: "View your postings", path: "/business" },
+  }),
+  "posting.changes_requested": (p) => ({
+    subject: `"${str(p.postingTitle)}" needs a change before it goes live`,
+    body:
+      `The college reviewed your posting and asked for something to be adjusted.` +
+      (str(p.reason) ? `\n\nWhat they asked for: "${str(p.reason)}"` : "") +
+      `\n\nStudents cannot see it until it is resubmitted and published.`,
+    action: { label: "Edit the posting", path: "/business" },
+  }),
+  "posting.drafting": (p) => ({
+    subject: `The college is scoping "${str(p.postingTitle)}" with you`,
+    body:
+      `Someone at the college has picked up your request and is turning it into a posting students can apply to. ` +
+      `They may be in touch about the work you want done.`,
+    action: { label: "View your postings", path: "/business" },
   }),
 
   // --- Nudges --------------------------------------------------------------

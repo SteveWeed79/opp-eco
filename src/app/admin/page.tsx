@@ -25,6 +25,12 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
+import { organizationMachine } from "@/domain/lifecycle";
+import { organizationLifecycle } from "@/app/_actions/lifecycle";
+import {
+  TransitionActions,
+  ORGANIZATION_CONFIRM,
+} from "@/components/TransitionActions";
 import { actorForPortal } from "@/auth/session";
 import {
   allMarketHealth,
@@ -73,7 +79,7 @@ export default async function AdminPage() {
       <PageHeader
         dark
         eyebrow="Program administrator"
-        title="Ecosystem Operations"
+        title="Network Operations"
         subtitle={`${liveMarkets.length} live ${liveMarkets.length === 1 ? "market" : "markets"} · ${health.length - liveMarkets.length} in the launch pipeline`}
       />
 
@@ -312,21 +318,37 @@ export default async function AdminPage() {
                       {org.county} County · {org.contactName}
                     </p>
                   </div>
-                  <Badge
-                    tone={
-                      org.status === "info_requested"
-                        ? "warn"
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      tone={
+                        org.status === "info_requested"
+                          ? "warn"
+                          : org.status === "under_review"
+                            ? "brand"
+                            : "neutral"
+                      }
+                    >
+                      {org.status === "info_requested"
+                        ? "Info requested"
                         : org.status === "under_review"
-                          ? "brand"
-                          : "neutral"
-                    }
-                  >
-                    {org.status === "info_requested"
-                      ? "Info requested"
-                      : org.status === "under_review"
-                        ? "Under review"
-                        : "New"}
-                  </Badge>
+                          ? "Under review"
+                          : "New"}
+                    </Badge>
+                    {/* Vetting is the gate everything else depends on: an
+                        unapproved organization cannot post, take applications,
+                        or have hours approved against it. Until this queue
+                        could move, that sentence in the subtitle was not
+                        true of anything. */}
+                    <TransitionActions
+                      id={org.id}
+                      action={organizationLifecycle}
+                      subject={org.name}
+                      confirm={ORGANIZATION_CONFIRM}
+                      transitions={organizationMachine
+                        .available(admin, { organization: org })
+                        .map((t) => ({ to: t.to, label: t.label }))}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>

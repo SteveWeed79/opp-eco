@@ -17,6 +17,7 @@ import type {
   PostingStatus,
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
+import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
 import { repositories } from "@/data/memory";
 import { memoryStore } from "@/data/memory-store";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -70,6 +71,32 @@ export async function submitApplication(
   const student = repositories.students.forUser(actor, actor.user.id);
   if (!student) {
     return { ok: false, error: "No student record for this account.", code: "not_found" };
+  }
+
+  // The college portal has always said students cannot apply until verified.
+  // Nothing enforced it — verification was a status the college could not
+  // change and no code read. An unverified student in an employer's candidate
+  // list defeats the only reason the list is trustworthy: that a college
+  // stood behind the enrolment.
+  if (!canApply(student)) {
+    return {
+      ok: false,
+      error:
+        "Your college has not verified your enrollment yet. Applications open once they do.",
+      code: "forbidden",
+    };
+  }
+
+  // Likewise for the employer's side of the transaction. A business still in
+  // vetting could take applications, take a student onto their site, and
+  // approve hours a board would reimburse.
+  const employer = repositories.organizations.find(actor, posting.businessId);
+  if (employer && !canTransact(employer)) {
+    return {
+      ok: false,
+      error: "That employer is not currently able to take applications.",
+      code: "forbidden",
+    };
   }
 
   // One application per student per posting. Applying twice is a mistake, not
@@ -159,6 +186,18 @@ export async function createPosting(
   const { organizationId, marketId } = actor.membership;
   if (!organizationId || !marketId) {
     return { ok: false, error: "This account has no organization.", code: "forbidden" };
+  }
+
+  // "Nothing transacts until an organization is approved" was written on the
+  // admin console and enforced nowhere. Posting is the first thing an
+  // unvetted employer would do.
+  const employer = repositories.organizations.find(actor, organizationId);
+  if (!employer) {
+    return { ok: false, error: "This account has no organization.", code: "forbidden" };
+  }
+  const blocked = transactBlockReason(employer);
+  if (blocked) {
+    return { ok: false, error: blocked, code: "forbidden" };
   }
 
   const at = deps.now().toISOString();
