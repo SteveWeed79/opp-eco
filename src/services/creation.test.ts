@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { submitApplication, createPosting } from "./creation";
+import { submitApplication, createPosting, offerMentorship } from "./creation";
 import { contextFor } from "@/data/session";
 import * as seed from "@/data/seed";
 import { pendingNotifications } from "@/data/memory-store";
@@ -11,15 +11,22 @@ import { pendingNotifications } from "@/data/memory-store";
  * and removes it again — otherwise the counts every other suite asserts on
  * drift depending on what ran first.
  */
-const added: { applications: string[]; postings: string[] } = {
+const added: {
+  applications: string[];
+  postings: string[];
+  mentorshipOffers: string[];
+} = {
   applications: [],
   postings: [],
+  mentorshipOffers: [],
 };
+
+type Tracked = keyof typeof added;
 
 /** Generic so the discriminated union survives — `result.ok` must still narrow. */
 function track<T extends { ok: boolean; created?: { id: string } }>(
   result: T,
-  kind: "applications" | "postings",
+  kind: Tracked,
 ): T {
   if (result.created) added[kind].push(result.created.id);
   return result;
@@ -34,8 +41,13 @@ beforeEach(() => {
     const i = seed.postings.findIndex((p) => p.id === id);
     if (i !== -1) seed.postings.splice(i, 1);
   }
+  for (const id of added.mentorshipOffers) {
+    const i = seed.mentorshipOffers.findIndex((o) => o.id === id);
+    if (i !== -1) seed.mentorshipOffers.splice(i, 1);
+  }
   added.applications = [];
   added.postings = [];
+  added.mentorshipOffers = [];
   pendingNotifications.length = 0;
 });
 
@@ -250,5 +262,97 @@ describe("creating a posting", () => {
     );
 
     expect(pendingNotifications).toHaveLength(1);
+  });
+});
+
+const validOffer = {
+  format: "portfolio_review" as const,
+  mentorName: "Dana Reyes",
+  mentorRole: "Director of Engineering",
+  topics: ["Robotics"],
+  description: "An hour going through a student's portfolio the way a hiring manager would.",
+  capacity: 2,
+};
+
+describe("offering to mentor", () => {
+  it("goes live immediately rather than waiting on the college", async () => {
+    const result = track(await offerMentorship(business(), validOffer), "mentorshipOffers");
+
+    expect(result.ok).toBe(true);
+    // The one place this deliberately differs from a posting. A posting waits
+    // at `pending_review` because the college is underwriting an academic
+    // claim; a mentorship carries no credit, no wage, and no public money, so
+    // there is nothing for a review to decide.
+    if (result.ok) expect(result.created.status).toBe("open");
+  });
+
+  it("takes the owner from the membership, not the request", async () => {
+    const result = track(
+      await offerMentorship(business(), {
+        ...validOffer,
+        ...({ businessId: "org-cherokee", marketId: "mkt-elsewhere" } as object),
+      }),
+      "mentorshipOffers",
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.created.businessId).toBe("org-apex");
+      expect(result.created.marketId).toBe("mkt-pittsburg");
+    }
+  });
+
+  it("refuses a non-employer", async () => {
+    const result = await offerMentorship(student(), validOffer);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("forbidden");
+  });
+
+  it("refuses an employer still in vetting", async () => {
+    // Mentorship puts an adult in front of a student with no supervisor, no
+    // timesheet, and no board interview in between. Every check that surrounds
+    // a placement is absent here, which leaves vetting doing all the work — so
+    // skipping college review must not mean skipping this too.
+    const employer = seed.organizations.find((o) => o.id === "org-apex")!;
+    const original = employer.status;
+    employer.status = "under_review";
+
+    try {
+      const result = await offerMentorship(business(), validOffer);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain("still being vetted");
+    } finally {
+      employer.status = original;
+    }
+  });
+
+  it("tells the college, in the same transaction", async () => {
+    // The college makes the introductions, so an offer it was never told about
+    // is a name in a list nobody reads.
+    track(
+      await offerMentorship(business(), validOffer, (offer) => [
+        {
+          marketId: offer.marketId,
+          recipientUserId: "u-ellen",
+          kind: "mentorship.offered",
+          payload: { mentorName: offer.mentorName },
+        },
+      ]),
+      "mentorshipOffers",
+    );
+
+    expect(pendingNotifications.some((n) => n.kind === "mentorship.offered")).toBe(true);
+  });
+
+  it("audits the offer coming into existence", async () => {
+    const result = track(await offerMentorship(business(), validOffer), "mentorshipOffers");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const event = seed.auditEvents.find((e) => e.entityId === result.created.id);
+    expect(event?.entityType).toBe("mentorship_offer");
+    expect(event?.to).toBe("open");
   });
 });

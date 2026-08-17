@@ -16,6 +16,7 @@ import type {
   AuditEvent,
   CreditAward,
   InterviewSlot,
+  MentorshipOffer,
   Organization,
   Posting,
   Student,
@@ -68,6 +69,17 @@ export interface UnitOfWork {
    */
   saveOrganization(organization: Organization): void;
   savePosting(posting: Posting): void;
+  /**
+   * A standing offer of mentorship, and the employer's own availability
+   * changes on it.
+   *
+   * Unversioned, on the same reasoning as postings and vetting: an offer has a
+   * single desk. The employer who wrote it is the only party who can pause,
+   * reopen, or withdraw it, so there is no second writer for a version check
+   * to catch.
+   */
+  createMentorshipOffer(offer: MentorshipOffer): void;
+  saveMentorshipOffer(offer: MentorshipOffer): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
   /** Insert a week of logged hours. Same create/save split as applications. */
   createTimeEntry(entry: TimeEntry): void;

@@ -242,7 +242,7 @@ describe("policy and templates agree", () => {
     // an entity the application policy does not govern. Written as a list this
     // grew by one line per feature, which is how an orphaned template
     // eventually gets waved through by someone adding to it out of habit.
-    const OTHER_LIFECYCLES = /^(posting|student|organization|hours)\./;
+    const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship)\./;
     // The one genuine exception to the rule: a nudge about an application that
     // has sat too long, which no single status can own because it is about the
     // dwell time in whichever status it is in.
@@ -272,6 +272,7 @@ describe("policy and templates agree", () => {
       "posting.published",
       "posting.changes_requested",
       "posting.drafting",
+      "mentorship.offered",
       "hours.submitted",
       "hours.approved",
       "hours.rejected",
