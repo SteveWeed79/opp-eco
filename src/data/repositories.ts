@@ -17,6 +17,7 @@ import type {
   CreditAward,
   InterviewSlot,
   Market,
+  MentorshipOffer,
   Organization,
   Posting,
   Student,
@@ -60,6 +61,20 @@ export interface PostingRepository {
   find(actor: ActorContext, id: string): Posting | null;
   published(actor: ActorContext): Posting[];
   awaitingCollegeHelp(actor: ActorContext): Posting[];
+}
+
+/**
+ * Mentorship offers, narrowed the same way postings are.
+ *
+ * `list` is an employer managing their own; `openInMarket` is the market's
+ * mentor list, which every role may read — a college makes the introductions
+ * and a student is the audience, so a list only its author can see would be an
+ * offer made to nobody.
+ */
+export interface MentorshipOfferRepository {
+  list(actor: ActorContext): MentorshipOffer[];
+  find(actor: ActorContext, id: string): MentorshipOffer | null;
+  openInMarket(actor: ActorContext): MentorshipOffer[];
 }
 
 export interface ApplicationRepository {
@@ -110,6 +125,7 @@ export interface Repositories {
   organizations: OrganizationRepository;
   students: StudentRepository;
   postings: PostingRepository;
+  mentorshipOffers: MentorshipOfferRepository;
   applications: ApplicationRepository;
   interviewSlots: InterviewSlotRepository;
   timeEntries: TimeEntryRepository;

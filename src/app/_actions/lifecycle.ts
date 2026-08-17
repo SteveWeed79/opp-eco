@@ -5,6 +5,7 @@ import type { ActorRole } from "@/domain/types";
 import type { ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import {
+  transitionMentorshipOffer,
   transitionOrganization,
   transitionPosting,
   transitionStudent,
@@ -15,7 +16,7 @@ import { logger } from "@/services/logging";
 import { drainPending } from "@/services/outbox";
 
 /**
- * Server Actions for the three gating machines.
+ * Server Actions for every machine except the application's.
  *
  * The same shape as `runTransition`, and for the same reason: **the portal is
  * hardcoded per action**, never taken from the request. A caller who could
@@ -28,12 +29,13 @@ import { drainPending } from "@/services/outbox";
  * else is derived server-side.
  */
 
-type Entity = "student" | "posting" | "organization";
+type Entity = "student" | "posting" | "organization" | "mentorship";
 
 const MOVERS = {
   student: transitionStudent,
   posting: transitionPosting,
   organization: transitionOrganization,
+  mentorship: transitionMentorshipOffer,
 } as const;
 
 /**
@@ -48,6 +50,10 @@ const AFFECTED: Record<Entity, string[]> = {
   student: ["/college", "/student", "/admin"],
   posting: ["/college", "/business", "/student", "/admin"],
   organization: ["/admin", "/business", "/college", "/board"],
+  // A paused offer has to leave the student's mentor list in the same breath
+  // it leaves the employer's own screen, or the employer is still listed as
+  // available on the only surface where that matters.
+  mentorship: ["/business", "/student"],
 };
 
 async function move(
@@ -123,6 +129,15 @@ export async function postingLifecycleAsBusiness(
   reason?: unknown,
 ): Promise<ActionResult> {
   return move("posting", "business", { id, to, reason });
+}
+
+/** The employer pauses, reopens, or withdraws their own offer to mentor. */
+export async function mentorshipLifecycleAsBusiness(
+  id: unknown,
+  to: unknown,
+  reason?: unknown,
+): Promise<ActionResult> {
+  return move("mentorship", "business", { id, to, reason });
 }
 
 /** The administrator vets an organization. */

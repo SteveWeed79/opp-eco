@@ -78,6 +78,22 @@ export const POSTING_CONFIRM: ConfirmPolicy = {
 };
 
 /**
+ * Pausing and reopening ask for nothing. An employer saying "not this month"
+ * about their own listing is a reversible choice, and a dialog demanding they
+ * justify it is how a product turns a pause into a withdrawal.
+ *
+ * Withdrawing is the ending, and takes a reason like every other ending here.
+ * Not for a counterparty — an unpaired offer has none — but because a market
+ * whose mentor list is emptying out is something the administrator has to be
+ * able to read a cause for, and "the named mentor left" and "we were never
+ * asked for anyone" call for opposite responses.
+ */
+export const MENTORSHIP_CONFIRM: ConfirmPolicy = {
+  needsReason: new Set(["withdrawn"]),
+  destructive: new Set(["withdrawn"]),
+};
+
+/**
  * Every vetting refusal reaches a real organization waiting on an answer, so
  * all three carry a reason. Only rejection and suspension stop them.
  */

@@ -1,20 +1,22 @@
 /**
- * The write path for the three gating machines.
+ * The write path for every machine other than the application's.
  *
  * `transitions.ts` does this for applications and is much larger, because an
  * application carries a notification policy, a furthest-status watermark, and
- * optimistic concurrency across five portals. These three are simpler in the
- * same shape: load the record, ask the machine, save, audit, tell whoever was
+ * optimistic concurrency across five portals. These are simpler in the same
+ * shape: load the record, ask the machine, save, audit, tell whoever was
  * waiting.
  *
- * One module rather than three, because the differences between them are two
+ * One module rather than four, because the differences between them are two
  * lines each — which repository to read and which `UnitOfWork` method to call —
- * and three files would mean three places to fix the next time the audit shape
+ * and four files would mean four places to fix the next time the audit shape
  * changes.
  */
 
 import type {
   ActorContext,
+  MentorshipOffer,
+  MentorshipOfferStatus,
   Organization,
   OrganizationStatus,
   Posting,
@@ -27,6 +29,7 @@ import {
   postingMachine,
   studentMachine,
 } from "@/domain/lifecycle";
+import { mentorshipMachine } from "@/domain/mentorship";
 import { isTerminal } from "@/domain/workflow";
 import { repositories } from "@/data/memory";
 import { memoryStore } from "@/data/memory-store";
@@ -222,6 +225,56 @@ function openApplicationsFor(actor: ActorContext, postingId: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Mentorship offers
+// ---------------------------------------------------------------------------
+
+/**
+ * Pause, reopen, or withdraw a standing offer of mentorship.
+ *
+ * The shortest of these, and silent: nobody is waiting on the answer. A
+ * mentorship offer has no counterparty until an introduction is made, so
+ * pausing one is an employer editing their own listing rather than a decision
+ * somebody needs to hear about. The offer leaving the market's mentor list is
+ * the entire effect.
+ */
+export async function transitionMentorshipOffer(
+  actor: ActorContext,
+  offerId: string,
+  to: MentorshipOfferStatus,
+  reason?: string,
+  deps: LifecycleDeps = defaultDeps,
+): Promise<LifecycleResult<MentorshipOffer>> {
+  const offer = repositories.mentorshipOffers.find(actor, offerId);
+  if (!offer) {
+    return { ok: false, error: "Mentorship offer not found.", code: "not_found" };
+  }
+
+  const verdict = mentorshipMachine.attempt(actor, { offer }, to, reason);
+  if (!verdict.ok) {
+    return { ok: false, error: verdict.error ?? "Refused", code: "forbidden" };
+  }
+
+  const at = deps.now().toISOString();
+  const updated: MentorshipOffer = { ...offer, status: to };
+
+  await deps.store.transaction((uow) => {
+    uow.saveMentorshipOffer(updated);
+    audit(uow, actor, {
+      marketId: offer.marketId,
+      at,
+      entityType: "mentorship_offer",
+      entityId: offer.id,
+      from: offer.status,
+      to,
+      reason,
+      viaOverride: Boolean(verdict.viaOverride),
+    });
+  });
+
+  return { ok: true, value: updated, viaOverride: Boolean(verdict.viaOverride) };
+}
+
+// ---------------------------------------------------------------------------
 // Organizations
 // ---------------------------------------------------------------------------
 
@@ -302,7 +355,7 @@ function audit(
   event: {
     marketId: string;
     at: string;
-    entityType: "student" | "posting" | "organization";
+    entityType: "student" | "posting" | "organization" | "mentorship_offer";
     entityId: string;
     from: string;
     to: string;

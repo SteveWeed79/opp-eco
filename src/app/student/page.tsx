@@ -2,6 +2,7 @@ import {
   BadgeCheck,
   CalendarClock,
   Clock,
+  HandHeart,
   Layers,
   Sparkles,
   TrendingUp,
@@ -29,6 +30,7 @@ import { LogHours } from "./LogHours";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
+import { mentorshipFormatLabel } from "@/domain/mentorship";
 import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
 import { TransitionActions } from "@/components/TransitionActions";
@@ -97,6 +99,11 @@ export default async function StudentPage() {
     });
 
   const needsAction = applications.filter((a) => optionsFor(a).length > 0);
+
+  // Employers offering time rather than a placement. Paused and withdrawn
+  // offers are absent by the repository's definition of "open", so a mentor
+  // mid-installation is not someone the student is invited to ask for.
+  const mentors = repositories.mentorshipOffers.openInMarket(actor);
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
@@ -420,6 +427,48 @@ export default async function StudentPage() {
               ))}
             </div>
           </Card>
+
+          {/* -------------------------------------------------------------- */}
+          {/* Employers offering time rather than a placement                 */}
+          {/*                                                                 */}
+          {/* Read-only, and no "request" button, because there is no pairing */}
+          {/* record behind it — the college makes the introduction. A button */}
+          {/* that submitted nothing would be worse than the sentence saying  */}
+          {/* who to ask.                                                     */}
+          {/* -------------------------------------------------------------- */}
+          {mentors.length > 0 && (
+            <Card>
+              <CardHeader
+                icon={<HandHeart className="w-5 h-5" />}
+                title="Mentors in your market"
+                subtitle="Employers offering time — no application, no credit"
+              />
+              <ul className="divide-y divide-ink-100">
+                {mentors.map((offer) => (
+                  <li key={offer.id} className="px-6 py-4">
+                    <p className="font-semibold text-sm text-ink-950">
+                      {offer.mentorName}
+                      <span className="font-normal text-ink-500">
+                        {" · "}
+                        {offer.mentorRole}
+                      </span>
+                    </p>
+                    <p className="text-xs text-ink-500 mt-0.5">
+                      {organizationName(offer.businessId)}
+                    </p>
+                    <div className="mt-2">
+                      <Badge tone="brand">{mentorshipFormatLabel(offer.format)}</Badge>
+                    </div>
+                    <p className="text-xs text-ink-600 mt-2">{offer.description}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="px-6 pb-5 text-xs text-ink-500">
+                Ask {college?.name ?? "your college"} to introduce you. None of these
+                affect your applications or your credit.
+              </p>
+            </Card>
+          )}
         </div>
       </div>
     </div>
