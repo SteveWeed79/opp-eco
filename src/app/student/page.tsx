@@ -24,7 +24,8 @@ import {
   ToneCard,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
@@ -42,30 +43,44 @@ import { studentTransition } from "./actions";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
-  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
+  const { organizationName } = await nameLookups(actor);
+  const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   // Resolved from the session rather than hardcoded.
   const student = studentForUser(actor.user.id)!;
   const STUDENT_ID = student.id;
 
-  const applications = repositories.applications
-    .forStudent(actor, STUDENT_ID)
-    .filter((a) => !isTerminal(a.status));
-  const openSlots = repositories.interviewSlots.open(actor);
-  const college = repositories.organizations.find(actor, student.collegeId);
-  const market = repositories.markets.find(actor, student.marketId)!;
-  const progress = studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45);
-  const remainingBudget = marketRemainingBudget(actor, market);
-  const boardName = organizationName(market.boardId);
+  const [ownApplications, openSlots, college, market, published] = await Promise.all([
+    await repositories.applications.forStudent(actor, STUDENT_ID),
+    await repositories.interviewSlots.open(actor),
+    await repositories.organizations.find(actor, student.collegeId),
+    await repositories.markets.find(actor, student.marketId),
+    await repositories.postings.published(actor),
+  ]);
+  const applications = ownApplications.filter((a) => !isTerminal(a.status));
+  const [progress, remainingBudget] = await Promise.all([
+    studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
+    marketRemainingBudget(actor, market!),
+  ]);
+  const boardName = organizationName(market!.boardId);
 
   // Timesheets for placements currently running. Only the standard track has
   // one — a micro project is bought as a deliverable for a fixed fee.
-  const timesheets = applications
-    .filter((a) => a.status === "placement_active" && a.track === "standard")
-    .map((application) => ({
-      application,
-      posting: repositories.postings.find(actor, application.postingId)!,
-      entries: repositories.timeEntries.forApplication(actor, application.id),
-    }))
+  //
+  // Every posting and week these rows need, resolved before the render. A
+  // student sees only their own applications, so this is a handful of rows,
+  // but the shape matters: awaiting inside `.map` is not something a component
+  // can do, and one query per placement is one too many.
+  const timesheets = (
+    await Promise.all(
+      applications
+        .filter((a) => a.status === "placement_active" && a.track === "standard")
+        .map(async (application) => ({
+          application,
+          posting: (await repositories.postings.find(actor, application.postingId))!,
+          entries: await repositories.timeEntries.forApplication(actor, application.id),
+        })),
+    )
+  )
     .map((row) => ({
       ...row,
       openWeeks: openWeeksFor(
@@ -76,11 +91,12 @@ export default async function StudentPage() {
     }));
 
   // Opportunities the student hasn't applied to yet, best match first
-  const applied = new Set(
-    repositories.applications.forStudent(actor, STUDENT_ID).map((a) => a.postingId),
-  );
-  const recommended = repositories.postings
-    .published(actor)
+  const creditsEarned = (await repositories.creditAwards.forStudent(actor, STUDENT_ID))
+    .filter((c) => c.status === "granted")
+    .reduce((sum, c) => sum + c.creditHours, 0);
+
+  const applied = new Set(ownApplications.map((a) => a.postingId));
+  const recommended = published
     .filter((p) => !applied.has(p.id))
     .map((posting) => ({
       posting,
@@ -91,13 +107,21 @@ export default async function StudentPage() {
 
   // Only what the student can actually act on. An application waiting on the
   // business belongs in the list below, not in a card called "Needs you".
+  const ownPostings = await Promise.all(
+    Array.from(new Set(applications.map((a) => a.postingId))).map((id) =>
+      repositories.postings.find(actor, id),
+    ),
+  );
+  const postingById = new Map(
+    ownPostings.filter((p) => p !== null).map((p) => [p.id, p]),
+  );
+
   const optionsFor = (application: (typeof applications)[number]) =>
     availableTransitions(actor, {
       application,
       student,
       remainingBudget,
-      postingOwnerId:
-        repositories.postings.find(actor, application.postingId)?.businessId ?? "",
+      postingOwnerId: postingById.get(application.postingId)?.businessId ?? "",
       unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
     });
 
@@ -106,7 +130,7 @@ export default async function StudentPage() {
   // Employers offering time rather than a placement. Paused and withdrawn
   // offers are absent by the repository's definition of "open", so a mentor
   // mid-installation is not someone the student is invited to ask for.
-  const mentors = repositories.mentorshipOffers.openInMarket(actor);
+  const mentors = await repositories.mentorshipOffers.openInMarket(actor);
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
@@ -151,7 +175,7 @@ export default async function StudentPage() {
           />
           <ul className="row-list divide-y divide-line">
             {needsAction.map((application) => {
-              const posting = repositories.postings.find(actor, application.postingId)!;
+              const posting = postingById.get(application.postingId)!;
               const days = daysInStatus(application, DEMO_NOW);
               const options = optionsFor(application);
               // Show the booking panel only when booking is a move the state
@@ -186,7 +210,7 @@ export default async function StudentPage() {
                       applicationId={application.id}
                       slots={openSlots}
                       boardName={boardName}
-                      ratePerHour={market.subsidyRatePerHour}
+                      ratePerHour={market!.subsidyRatePerHour}
                     />
                   )}
 
@@ -230,10 +254,7 @@ export default async function StudentPage() {
             ) : (
               <ul className="row-list divide-y divide-line">
                 {applications.map((application) => {
-                  const posting = repositories.postings.find(
-                    actor,
-                    application.postingId,
-                  )!;
+                  const posting = postingById.get(application.postingId)!;
                   return (
                     <li key={application.id} className="px-6 py-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -318,12 +339,7 @@ export default async function StudentPage() {
         <div className="space-y-6">
           <Stat
             label="Credits earned"
-            value={String(
-              repositories.creditAwards
-                .forStudent(actor, STUDENT_ID)
-                .filter((c) => c.status === "granted")
-                .reduce((s, c) => s + c.creditHours, 0),
-            )}
+            value={String(creditsEarned)}
             hint="Verified by your college and the state"
             tone="good"
           />

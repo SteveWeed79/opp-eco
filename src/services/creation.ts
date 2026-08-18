@@ -20,8 +20,8 @@ import type {
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
-import { repositories } from "@/data/memory";
-import { memoryStore } from "@/data/memory-store";
+import { repositories } from "@/data/backend";
+import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
 
 export type CreateResult<T> =
@@ -37,7 +37,7 @@ export interface CreationDeps {
 
 let sequence = 0;
 const defaultDeps: CreationDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
   id: (prefix) => `${prefix}-${Date.now().toString(36)}${(++sequence).toString(36)}`,
 };
@@ -58,7 +58,7 @@ export async function submitApplication(
     return { ok: false, error: "Only students can apply.", code: "forbidden" };
   }
 
-  const posting = repositories.postings.find(actor, postingId);
+  const posting = await repositories.postings.find(actor, postingId);
   if (!posting) {
     return { ok: false, error: "That opportunity is no longer listed.", code: "not_found" };
   }
@@ -70,7 +70,7 @@ export async function submitApplication(
     };
   }
 
-  const student = repositories.students.forUser(actor, actor.user.id);
+  const student = await repositories.students.forUser(actor, actor.user.id);
   if (!student) {
     return { ok: false, error: "No student record for this account.", code: "not_found" };
   }
@@ -92,7 +92,7 @@ export async function submitApplication(
   // Likewise for the employer's side of the transaction. A business still in
   // vetting could take applications, take a student onto their site, and
   // approve hours a board would reimburse.
-  const employer = repositories.organizations.find(actor, posting.businessId);
+  const employer = await repositories.organizations.find(actor, posting.businessId);
   if (employer && !canTransact(employer)) {
     return {
       ok: false,
@@ -103,9 +103,9 @@ export async function submitApplication(
 
   // One application per student per posting. Applying twice is a mistake, not
   // a second candidacy, and it would double-count in every funnel.
-  const existing = repositories.applications
-    .list(actor)
-    .find((a) => a.postingId === postingId && a.studentId === student.id);
+  const existing = (await repositories.applications.list(actor)).find(
+    (a) => a.postingId === postingId && a.studentId === student.id,
+  );
   if (existing) {
     return {
       ok: false,
@@ -114,7 +114,7 @@ export async function submitApplication(
     };
   }
 
-  const college = repositories.organizations.find(actor, student.collegeId);
+  const college = await repositories.organizations.find(actor, student.collegeId);
   const at = deps.now().toISOString();
 
   const application: Application = {
@@ -193,7 +193,7 @@ export async function createPosting(
   // "Nothing transacts until an organization is approved" was written on the
   // admin console and enforced nowhere. Posting is the first thing an
   // unvetted employer would do.
-  const employer = repositories.organizations.find(actor, organizationId);
+  const employer = await repositories.organizations.find(actor, organizationId);
   if (!employer) {
     return { ok: false, error: "This account has no organization.", code: "forbidden" };
   }
@@ -268,7 +268,7 @@ export async function offerMentorship(
     return { ok: false, error: "This account has no organization.", code: "forbidden" };
   }
 
-  const employer = repositories.organizations.find(actor, organizationId);
+  const employer = await repositories.organizations.find(actor, organizationId);
   if (!employer) {
     return { ok: false, error: "This account has no organization.", code: "forbidden" };
   }

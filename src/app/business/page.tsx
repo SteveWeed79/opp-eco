@@ -39,7 +39,8 @@ import {
   mentorshipLifecycleAsBusiness,
   postingLifecycleAsBusiness,
 } from "@/app/_actions/lifecycle";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
 import { ApproveHours } from "./ApproveHours";
@@ -52,15 +53,18 @@ import { OfferMentorship } from "./OfferMentorship";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
-  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
-  const hoursQueue = reviewQueue(actor);
-  const org = repositories.organizations.find(actor, actor.membership.organizationId!)!;
-  const market = repositories.markets.find(actor, actor.membership.marketId!)!;
+  const { organizationName } = await nameLookups(actor);
+  const [unreviewedWeeks, hoursQueue] = await Promise.all([
+    unreviewedWeeksByApplication(actor),
+    reviewQueue(actor),
+  ]);
+  const org = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
+  const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
   const boardName = organizationName(market.boardId);
-  const postings = repositories.postings.list(actor);
-  const applications = repositories.applications
-    .list(actor)
-    .filter((a) => !isTerminal(a.status));
+  const postings = await repositories.postings.list(actor);
+  const applications = (await repositories.applications.list(actor)).filter(
+    (a) => !isTerminal(a.status),
+  );
 
   const active = applications.filter((a) =>
     ["placement_active", "funding_authorized"].includes(a.status),
@@ -70,7 +74,7 @@ export default async function BusinessPage() {
   // Part of the transition context every row needs. No employer transition is
   // budget-guarded today, but the state machine asks for it, and computing it
   // once here keeps it out of the row loop.
-  const remainingBudget = marketRemainingBudget(actor, market);
+  const remainingBudget = await marketRemainingBudget(actor, market);
 
   // Skills already in use across this market's postings, offered as the
   // vocabulary for a new one. Free-text tags sprawl into "JS", "Javascript",
@@ -82,9 +86,9 @@ export default async function BusinessPage() {
   // This employer's own offers to mentor. Withdrawn ones are gone rather than
   // greyed out: the machine has no move away from withdrawn, so a row with no
   // buttons and no way back is a tombstone the employer cannot act on.
-  const mentorshipOffers = repositories.mentorshipOffers
-    .list(actor)
-    .filter((o) => o.status !== "withdrawn");
+  const mentorshipOffers = (await repositories.mentorshipOffers.list(actor)).filter(
+    (o) => o.status !== "withdrawn",
+  );
   // Mentorship topics converge on the same vocabulary as posting skills, plus
   // whatever other mentors in this market already named. A separate free-text
   // field would sprawl into "UX", "UX design", and "User experience" exactly
@@ -92,23 +96,71 @@ export default async function BusinessPage() {
   const topicVocabulary = Array.from(
     new Set([
       ...skillVocabulary,
-      ...repositories.mentorshipOffers.openInMarket(actor).flatMap((o) => o.topics),
+      ...(await repositories.mentorshipOffers.openInMarket(actor)).flatMap((o) => o.topics),
       ...mentorshipOffers.flatMap((o) => o.topics),
     ]),
   ).sort();
-  const college = repositories.organizations
-    .list(actor, { kind: "college" })
-    .find((o) => o.marketId === market.id);
+  const college = (
+    await repositories.organizations.list(actor, { kind: "college" })
+  ).find((o) => o.marketId === market.id);
   const hoursPerCredit = college?.hoursPerCredit ?? 45;
 
   /**
    * Live candidates against a posting — what the close guard reads, so the
    * button and the service agree about whether closing would strand anyone.
    */
-  const openApplicationsFor = (postingId: string) =>
-    repositories.applications
-      .forPosting(actor, postingId)
-      .filter((a) => !isTerminal(a.status)).length;
+  const openCounts = new Map(
+    await Promise.all(
+      postings.map(
+        async (posting) =>
+          [
+            posting.id,
+            (await repositories.applications.forPosting(actor, posting.id)).filter(
+              (a) => !isTerminal(a.status),
+            ).length,
+          ] as const,
+      ),
+    ),
+  );
+  const openApplicationsFor = (postingId: string) => openCounts.get(postingId) ?? 0;
+
+  /**
+   * The student behind each candidate row, resolved before the table renders.
+   *
+   * Keyed by *application* and read through `forApplication`, not through a
+   * flat map of `students.list`. That is the whole point: this repository
+   * method redacts an employer's view down to what the placement's current
+   * stage discloses, and a listing would hand this page the unredacted record
+   * for every student in the market. Same call per row as before, just made
+   * where a component is still allowed to await.
+   */
+  const studentByApplication = new Map(
+    await Promise.all(
+      applications.map(
+        async (application) =>
+          [
+            application.id,
+            await repositories.students.forApplication(actor, application),
+          ] as const,
+      ),
+    ),
+  );
+  const postingById = new Map(postings.map((p) => [p.id, p]));
+
+  // Total interest per posting, as opposed to `openCounts` which excludes
+  // terminal applications. Counted once here because the micro-project card
+  // asked for it three times per row.
+  const interestCounts = new Map(
+    await Promise.all(
+      postings.map(
+        async (posting) =>
+          [
+            posting.id,
+            (await repositories.applications.forPosting(actor, posting.id)).length,
+          ] as const,
+      ),
+    ),
+  );
 
 
 
@@ -316,14 +368,9 @@ export default async function BusinessPage() {
                 {applications.map((application) => {
                   // Redacted at the repository, not in the markup — withheld
                   // fields never reach this page in the first place.
-                  const student = repositories.students.forApplication(
-                    actor,
-                    application,
-                  )!;
-                  const posting = repositories.postings.find(
-                    actor,
-                    application.postingId,
-                  )!;
+                  const student = studentByApplication.get(application.id) ?? null;
+                  const posting = postingById.get(application.postingId) ?? null;
+                  if (!student || !posting) return null;
                   const commitment = fundingCommitment(application);
 
                   return (
@@ -513,16 +560,13 @@ export default async function BusinessPage() {
                   </p>
                   <div className="mt-2">
                     <ProgressBar
-                      value={
-                        repositories.applications.forPosting(actor, posting.id).length
-                      }
+                      value={interestCounts.get(posting.id) ?? 0}
                       label={`Interest in ${posting.title}`}
-                      max={Math.max(3, repositories.applications.forPosting(actor, posting.id).length)}
+                      max={Math.max(3, interestCounts.get(posting.id) ?? 0)}
                       tone="brand"
                     />
                     <p className="text-xs text-ink-600 mt-1">
-                      {repositories.applications.forPosting(actor, posting.id).length}{" "}
-                      interested
+                      {interestCounts.get(posting.id) ?? 0} interested
                     </p>
                   </div>
                 </div>

@@ -26,8 +26,8 @@ import {
   timesheetTotals,
   weekStartingFor,
 } from "@/domain/timesheet";
-import { repositories } from "@/data/memory";
-import { memoryStore } from "@/data/memory-store";
+import { repositories } from "@/data/backend";
+import { store } from "@/data/backend";
 import type { Store, UnitOfWork } from "@/data/store";
 
 export type TimesheetResult<T> =
@@ -46,7 +46,7 @@ export interface TimesheetDeps {
 
 let sequence = 0;
 const defaultDeps: TimesheetDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
   id: (prefix) => `${prefix}-${Date.now().toString(36)}${(++sequence).toString(36)}`,
 };
@@ -76,12 +76,12 @@ export async function logHours(
     return { ok: false, error: "Only students log hours.", code: "forbidden" };
   }
 
-  const student = repositories.students.forUser(actor, actor.user.id);
+  const student = await repositories.students.forUser(actor, actor.user.id);
   if (!student) {
     return { ok: false, error: "No student record for this account.", code: "not_found" };
   }
 
-  const application = repositories.applications.find(actor, input.applicationId);
+  const application = await repositories.applications.find(actor, input.applicationId);
   if (!application || application.studentId !== student.id) {
     return { ok: false, error: "No such placement.", code: "not_found" };
   }
@@ -106,7 +106,7 @@ export async function logHours(
     };
   }
 
-  const posting = repositories.postings.find(actor, application.postingId);
+  const posting = await repositories.postings.find(actor, application.postingId);
   if (!posting) {
     return { ok: false, error: "No such placement.", code: "not_found" };
   }
@@ -135,7 +135,7 @@ export async function logHours(
     return { ok: false, error: "That week has not happened yet.", code: "invalid" };
   }
 
-  const existing = repositories.timeEntries.forApplication(actor, application.id);
+  const existing = await repositories.timeEntries.forApplication(actor, application.id);
   if (claimedWeeks(existing).has(weekStarting)) {
     return {
       ok: false,
@@ -232,7 +232,7 @@ export async function reviewHours(
     };
   }
 
-  const entry = repositories.timeEntries.find(actor, input.entryId);
+  const entry = await repositories.timeEntries.find(actor, input.entryId);
   if (!entry) {
     return { ok: false, error: "No such timesheet entry.", code: "not_found" };
   }
@@ -259,14 +259,14 @@ export async function reviewHours(
     };
   }
 
-  const application = repositories.applications.find(actor, entry.applicationId);
+  const application = await repositories.applications.find(actor, entry.applicationId);
   if (!application) {
     return { ok: false, error: "No such placement.", code: "not_found" };
   }
 
   // Read off the record rather than derived from the student id. Deriving it
   // is what produced `u-stu-omar` once already — see `userIdForStudent`.
-  const student = repositories.students.forApplication(actor, application);
+  const student = await repositories.students.forApplication(actor, application);
   if (!student) {
     return { ok: false, error: "No student on that placement.", code: "not_found" };
   }
@@ -281,9 +281,9 @@ export async function reviewHours(
     reviewNote: note.length > 0 ? note : undefined,
   };
 
-  const siblings = repositories.timeEntries
-    .forApplication(actor, entry.applicationId)
-    .map((row) => (row.id === reviewed.id ? reviewed : row));
+  const siblings = (
+    await repositories.timeEntries.forApplication(actor, entry.applicationId)
+  ).map((row) => (row.id === reviewed.id ? reviewed : row));
 
   try {
     await deps.store.transaction((uow) => {
@@ -362,11 +362,11 @@ function conflictOrThrow(error: unknown): TimesheetResult<never> {
  * Scoping falls out of the repository: an employer gets their own placements,
  * a student their own weeks, the college and board their market.
  */
-export function unreviewedWeeksByApplication(
+export async function unreviewedWeeksByApplication(
   actor: ActorContext,
-): Map<string, number> {
+): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  for (const entry of repositories.timeEntries.awaitingReview(actor)) {
+  for (const entry of await repositories.timeEntries.awaitingReview(actor)) {
     counts.set(entry.applicationId, (counts.get(entry.applicationId) ?? 0) + 1);
   }
   return counts;
@@ -380,17 +380,19 @@ export interface ReviewQueueItem {
   studentName: string;
 }
 
-export function reviewQueue(actor: ActorContext): ReviewQueueItem[] {
+export async function reviewQueue(
+  actor: ActorContext,
+): Promise<ReviewQueueItem[]> {
   const items: ReviewQueueItem[] = [];
 
-  for (const entry of repositories.timeEntries.awaitingReview(actor)) {
-    const application = repositories.applications.find(actor, entry.applicationId);
+  for (const entry of await repositories.timeEntries.awaitingReview(actor)) {
+    const application = await repositories.applications.find(actor, entry.applicationId);
     if (!application) continue;
-    const posting = repositories.postings.find(actor, application.postingId);
+    const posting = await repositories.postings.find(actor, application.postingId);
     if (!posting) continue;
     // Through `forApplication`, so an employer sees the name at the disclosure
     // level this placement's stage permits rather than the raw record.
-    const student = repositories.students.forApplication(actor, application);
+    const student = await repositories.students.forApplication(actor, application);
 
     items.push({
       entry,

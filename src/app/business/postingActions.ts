@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actorForPortal } from "@/auth/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { createPosting } from "@/services/creation";
 import { postingInput, validate } from "@/services/validation";
@@ -46,10 +46,10 @@ export async function submitPosting(fields: unknown): Promise<ActionResult> {
   // so the notification can be enqueued inside the same transaction — a
   // posting that exists with nobody told is the queue-nobody-watches failure
   // this platform is built around.
-  const college = repositories.organizations
-    .list(actor, { kind: "college" })
-    .find((o) => o.marketId === actor.membership.marketId);
-  const business = repositories.organizations.find(
+  const college = (
+    await repositories.organizations.list(actor, { kind: "college" })
+  ).find((o) => o.marketId === actor.membership.marketId);
+  const business = await repositories.organizations.find(
     actor,
     actor.membership.organizationId ?? "",
   );

@@ -73,8 +73,8 @@ function visibleTimeEntries(actor: ActorContext): TimeEntry[] {
 
 export const repositories: Repositories = {
   markets: {
-    list: (actor) => inScope(actor, seed.markets.map((m) => ({ ...m, marketId: m.id }))),
-    find: (actor, id) => {
+    list: async (actor) => inScope(actor, seed.markets.map((m) => ({ ...m, marketId: m.id }))),
+    find: async (actor, id) => {
       const market = seed.markets.find((m) => m.id === id);
       if (!market) return null;
       if (actor.membership.role !== "admin" && actor.membership.marketId !== id) {
@@ -85,28 +85,28 @@ export const repositories: Repositories = {
   },
 
   organizations: {
-    list: (actor, filter) => {
+    list: async (actor, filter) => {
       let rows = inScope(actor, seed.organizations);
       if (filter?.kind) rows = rows.filter((o) => o.kind === filter.kind);
       return rows;
     },
-    find: (actor, id) => inScope(actor, seed.organizations).find((o) => o.id === id) ?? null,
-    pendingVetting: (actor) =>
+    find: async (actor, id) => inScope(actor, seed.organizations).find((o) => o.id === id) ?? null,
+    pendingVetting: async (actor) =>
       inScope(actor, seed.organizations).filter((o) =>
         ["applied", "under_review", "info_requested"].includes(o.status),
       ),
   },
 
   students: {
-    list: (actor) => inScope(actor, seed.students),
-    find: (actor, id) => inScope(actor, seed.students).find((s) => s.id === id) ?? null,
-    pendingVerification: (actor) =>
+    list: async (actor) => inScope(actor, seed.students),
+    find: async (actor, id) => inScope(actor, seed.students).find((s) => s.id === id) ?? null,
+    pendingVerification: async (actor) =>
       inScope(actor, seed.students).filter(
         (s) => s.status === "pending_verification" || s.status === "profile_complete",
       ),
-    forUser: (actor, userId) =>
+    forUser: async (actor, userId) =>
       inScope(actor, seed.students).find((s) => s.userId === userId) ?? null,
-    forApplication: (actor, application) => {
+    forApplication: async (actor, application) => {
       const student =
         inScope(actor, seed.students).find((s) => s.id === application.studentId) ?? null;
       if (!student) return null;
@@ -118,35 +118,35 @@ export const repositories: Repositories = {
   },
 
   postings: {
-    list: (actor, filter) => {
+    list: async (actor, filter) => {
       let rows = ownedByActor<Posting>(actor, seed.postings, (p) => p.businessId);
       if (filter?.status) rows = rows.filter((p) => p.status === filter.status);
       return rows;
     },
-    find: (actor, id) =>
+    find: async (actor, id) =>
       ownedByActor<Posting>(actor, seed.postings, (p) => p.businessId).find(
         (p) => p.id === id,
       ) ?? null,
-    published: (actor) =>
+    published: async (actor) =>
       // Published postings are the market's shopfront — every role in the
       // market may browse them, including businesses looking at competitors'.
       inScope(actor, seed.postings).filter((p) => p.status === "published"),
-    awaitingCollegeHelp: (actor) =>
+    awaitingCollegeHelp: async (actor) =>
       inScope(actor, seed.postings).filter(
         (p) => p.status === "help_requested" || p.status === "college_drafting",
       ),
   },
 
   mentorshipOffers: {
-    list: (actor) =>
+    list: async (actor) =>
       ownedByActor<MentorshipOffer>(actor, seed.mentorshipOffers, (o) => o.businessId),
-    find: (actor, id) =>
+    find: async (actor, id) =>
       ownedByActor<MentorshipOffer>(
         actor,
         seed.mentorshipOffers,
         (o) => o.businessId,
       ).find((o) => o.id === id) ?? null,
-    openInMarket: (actor) =>
+    openInMarket: async (actor) =>
       // Like `postings.published`, this is the market's shopfront rather than
       // an employer's own records, so it is scoped by market and not by owner.
       // A paused or withdrawn offer is absent here by definition: an employer
@@ -162,31 +162,31 @@ export const repositories: Repositories = {
    * id it did not own.
    */
   applications: {
-    list: (actor) => visibleApplications(actor),
-    find: (actor, id) => visibleApplications(actor).find((a) => a.id === id) ?? null,
-    forStudent: (actor, studentId) =>
+    list: async (actor) => visibleApplications(actor),
+    find: async (actor, id) => visibleApplications(actor).find((a) => a.id === id) ?? null,
+    forStudent: async (actor, studentId) =>
       visibleApplications(actor).filter((a) => a.studentId === studentId),
-    forPosting: (actor, postingId) =>
+    forPosting: async (actor, postingId) =>
       visibleApplications(actor).filter((a) => a.postingId === postingId),
   },
 
   interviewSlots: {
-    list: (actor) => inScope(actor, seed.interviewSlotsAt()),
-    open: (actor) =>
+    list: async (actor) => inScope(actor, seed.interviewSlotsAt()),
+    open: async (actor) =>
       inScope(actor, seed.interviewSlotsAt()).filter((s) => s.bookedByStudentId === null),
   },
 
   timeEntries: {
-    find: (actor, id) => visibleTimeEntries(actor).find((e) => e.id === id) ?? null,
-    forApplication: (actor, applicationId) =>
+    find: async (actor, id) => visibleTimeEntries(actor).find((e) => e.id === id) ?? null,
+    forApplication: async (actor, applicationId) =>
       visibleTimeEntries(actor)
         .filter((e) => e.applicationId === applicationId)
         .sort(byWeekDescending),
-    forStudent: (actor, studentId) =>
+    forStudent: async (actor, studentId) =>
       visibleTimeEntries(actor)
         .filter((e) => e.studentId === studentId)
         .sort(byWeekDescending),
-    awaitingReview: (actor) =>
+    awaitingReview: async (actor) =>
       visibleTimeEntries(actor)
         .filter((e) => e.status === "submitted")
         // Oldest first: this is a queue someone works through, and the week a
@@ -195,13 +195,13 @@ export const repositories: Repositories = {
   },
 
   creditAwards: {
-    list: (actor) => inScope(actor, seed.creditAwards),
-    forStudent: (actor, studentId) =>
+    list: async (actor) => inScope(actor, seed.creditAwards),
+    forStudent: async (actor, studentId) =>
       inScope(actor, seed.creditAwards).filter((c) => c.studentId === studentId),
   },
 
   auditEvents: {
-    list: (actor, filter) => {
+    list: async (actor, filter) => {
       let rows = inScope(actor, seed.auditEvents);
       if (filter?.entityId) rows = rows.filter((e) => e.entityId === filter.entityId);
       return rows.slice().sort((a, b) => b.at.localeCompare(a.at));
@@ -209,7 +209,7 @@ export const repositories: Repositories = {
   },
 
   users: {
-    find: (id) => seed.users.find((u) => u.id === id) ?? null,
+    find: async (id) => seed.users.find((u) => u.id === id) ?? null,
   },
 };
 

@@ -10,20 +10,19 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge, Card, Money } from "@/components/ui";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { allMarketHealth } from "@/lib/queries";
 
-export default function LandingPage() {
+export default async function LandingPage() {
   // Public totals are a system read, not somebody's session — naming it that
   // way keeps it from looking like an administrator context leaking onto a
   // page anyone can load.
   const admin = systemContext();
-  const health = allMarketHealth(admin);
+  const health = await allMarketHealth(admin);
   const live = health.filter((h) => h.market.stage === "live");
   const upcoming = health.filter((h) => h.market.stage !== "live");
-  const credits = repositories.creditAwards
-    .list(admin)
+  const credits = (await repositories.creditAwards.list(admin))
     .filter((c) => c.status === "granted")
     .reduce((s, c) => s + c.creditHours, 0);
   const placements = health.reduce((s, h) => s + h.placements, 0);

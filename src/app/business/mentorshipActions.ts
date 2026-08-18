@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actorForPortal } from "@/auth/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { mentorshipFormatLabel } from "@/domain/mentorship";
 import { offerMentorship } from "@/services/creation";
 import { mentorshipOfferInput, validate } from "@/services/validation";
@@ -48,10 +48,10 @@ export async function submitMentorshipOffer(fields: unknown): Promise<ActionResu
   // hear about this. Resolved before the write so the message can be enqueued
   // inside the same transaction — an offer sitting in a list nobody was told
   // about is the queue-nobody-watches failure this platform is built around.
-  const college = repositories.organizations
-    .list(actor, { kind: "college" })
-    .find((o) => o.marketId === actor.membership.marketId);
-  const business = repositories.organizations.find(
+  const college = (
+    await repositories.organizations.list(actor, { kind: "college" })
+  ).find((o) => o.marketId === actor.membership.marketId);
+  const business = await repositories.organizations.find(
     actor,
     actor.membership.organizationId ?? "",
   );
