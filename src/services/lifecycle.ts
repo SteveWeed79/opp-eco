@@ -67,7 +67,7 @@ export async function transitionStudent(
   reason?: string,
   deps: LifecycleDeps = defaultDeps,
 ): Promise<LifecycleResult<Student>> {
-  const student = repositories.students.find(actor, studentId);
+  const student = await repositories.students.find(actor, studentId);
   if (!student) {
     return { ok: false, error: "Student not found.", code: "not_found" };
   }
@@ -133,14 +133,17 @@ export async function transitionPosting(
   reason?: string,
   deps: LifecycleDeps = defaultDeps,
 ): Promise<LifecycleResult<Posting>> {
-  const posting = repositories.postings.find(actor, postingId);
+  const posting = await repositories.postings.find(actor, postingId);
   if (!posting) {
     return { ok: false, error: "Posting not found.", code: "not_found" };
   }
 
   const verdict = postingMachine.attempt(
     actor,
-    { posting, openApplications: openApplicationsFor(actor, posting.id) },
+    {
+      posting,
+      openApplications: await openApplicationsFor(actor, posting.id),
+    },
     to,
     reason,
   );
@@ -218,10 +221,13 @@ function postingNotifications(
 }
 
 /** Live applications against a posting — what the close guard reads. */
-function openApplicationsFor(actor: ActorContext, postingId: string): number {
-  return repositories.applications
-    .forPosting(actor, postingId)
-    .filter((a) => !isTerminal(a.status)).length;
+async function openApplicationsFor(
+  actor: ActorContext,
+  postingId: string,
+): Promise<number> {
+  return (await repositories.applications.forPosting(actor, postingId)).filter(
+    (a) => !isTerminal(a.status),
+  ).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +250,7 @@ export async function transitionMentorshipOffer(
   reason?: string,
   deps: LifecycleDeps = defaultDeps,
 ): Promise<LifecycleResult<MentorshipOffer>> {
-  const offer = repositories.mentorshipOffers.find(actor, offerId);
+  const offer = await repositories.mentorshipOffers.find(actor, offerId);
   if (!offer) {
     return { ok: false, error: "Mentorship offer not found.", code: "not_found" };
   }
@@ -292,7 +298,7 @@ export async function transitionOrganization(
   reason?: string,
   deps: LifecycleDeps = defaultDeps,
 ): Promise<LifecycleResult<Organization>> {
-  const organization = repositories.organizations.find(actor, organizationId);
+  const organization = await repositories.organizations.find(actor, organizationId);
   if (!organization) {
     return { ok: false, error: "Organization not found.", code: "not_found" };
   }
@@ -377,6 +383,6 @@ function audit(
   });
 }
 
-function organizationName(actor: ActorContext, id: string): string {
-  return repositories.organizations.find(actor, id)?.name ?? "your college";
+async function organizationName(actor: ActorContext, id: string): Promise<string> {
+  return (await repositories.organizations.find(actor, id))?.name ?? "your college";
 }

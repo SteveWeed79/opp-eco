@@ -58,9 +58,9 @@ export async function bookInterviewSlot(
     };
   }
 
-  const slot = repositories.interviewSlots
-    .list(actor)
-    .find((s) => s.id === input.data.slotId);
+  const slot = (await repositories.interviewSlots.list(actor)).find(
+    (s) => s.id === input.data.slotId,
+  );
 
   if (!slot) {
     return { ok: false, error: "That interview slot is no longer listed." };
@@ -69,7 +69,7 @@ export async function bookInterviewSlot(
     return { ok: false, error: "Someone booked that slot first. Pick another." };
   }
 
-  const application = repositories.applications.find(actor, input.data.applicationId);
+  const application = await repositories.applications.find(actor, input.data.applicationId);
   if (!application) {
     return { ok: false, error: "Application not found." };
   }

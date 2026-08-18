@@ -15,7 +15,13 @@ import { actorForPortal } from "@/auth/session";
 
 export default async function AuditPage() {
   const admin = await actorForPortal("admin");
-  const events = repositories.auditEvents.list(admin);
+  const events = await repositories.auditEvents.list(admin);
+
+  // The acting user for each row, fetched once per distinct actor rather than
+  // once per event — an audit log is the longest list in the app.
+  const actorIds = Array.from(new Set(events.map((e) => e.actorUserId)));
+  const actors = await Promise.all(actorIds.map((id) => repositories.users.find(id)));
+  const userById = new Map(actorIds.map((id, i) => [id, actors[i]]));
 
   return (
     <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 space-y-6">
@@ -53,7 +59,7 @@ export default async function AuditPage() {
               </thead>
               <tbody className="row-list divide-y divide-line">
                 {events.map((event) => {
-                  const user = repositories.users.find(event.actorUserId);
+                  const user = userById.get(event.actorUserId) ?? null;
                   return (
                     <tr key={event.id}>
                       <Td className="whitespace-nowrap text-xs">

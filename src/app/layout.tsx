@@ -29,7 +29,7 @@ export default async function RootLayout({
   const actor = await getActor();
   // Resolved here rather than in the shell because it reads the repositories.
   // The shell decides whether to *apply* it, since only it knows the route.
-  const theme = resolvePartnerTheme(actor);
+  const theme = await resolvePartnerTheme(actor);
 
   return (
     <html lang="en">

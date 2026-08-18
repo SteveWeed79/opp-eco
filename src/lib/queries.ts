@@ -54,33 +54,43 @@ const BLOCKED_ON: Record<string, string> = {
  * Exception-first: what is stuck and who is sitting on it. Sorted by dwell
  * time, with the pause weighted heaviest because that is where placements die.
  */
-export function stalledApplications(
+export async function stalledApplications(
   actor: ActorContext,
   thresholdDays = 5,
-): StalledItem[] {
-  const applications = repositories.applications.list(actor);
-  const items: StalledItem[] = [];
+): Promise<StalledItem[]> {
+  const applications = await repositories.applications.list(actor);
 
-  for (const application of applications) {
-    if (isTerminal(application.status)) continue;
-    if (!WAITING_STATUSES.includes(application.status)) continue;
+  // Filter before reading anything else, so the per-application lookups below
+  // run only for rows that will actually be returned.
+  const candidates = applications.filter(
+    (application) =>
+      !isTerminal(application.status) &&
+      WAITING_STATUSES.includes(application.status) &&
+      daysInStatus(application, DEMO_NOW) >= thresholdDays,
+  );
 
-    const days = daysInStatus(application, DEMO_NOW);
-    if (days < thresholdDays) continue;
+  // Resolved together rather than in sequence. Against the in-memory store the
+  // difference is nothing; against Postgres this is the loop that would
+  // otherwise issue two round trips per stalled application, one after another.
+  const resolved = await Promise.all(
+    candidates.map(async (application) => {
+      const [posting, student] = await Promise.all([
+        await repositories.postings.find(actor, application.postingId),
+        await repositories.students.find(actor, application.studentId),
+      ]);
+      if (!posting || !student) return null;
+      return {
+        application,
+        posting,
+        student,
+        days: daysInStatus(application, DEMO_NOW),
+        blockedOn: BLOCKED_ON[application.status] ?? "—",
+        inPause: PAUSE_STATUSES.includes(application.status),
+      };
+    }),
+  );
 
-    const posting = repositories.postings.find(actor, application.postingId);
-    const student = repositories.students.find(actor, application.studentId);
-    if (!posting || !student) continue;
-
-    items.push({
-      application,
-      posting,
-      student,
-      days,
-      blockedOn: BLOCKED_ON[application.status] ?? "—",
-      inPause: PAUSE_STATUSES.includes(application.status),
-    });
-  }
+  const items = resolved.filter((item): item is StalledItem => item !== null);
 
   return items.sort((a, b) => {
     if (a.inPause !== b.inPause) return a.inPause ? -1 : 1;
@@ -101,30 +111,40 @@ export interface MarketHealth {
   creditHoursGranted: number;
 }
 
-export function marketHealth(actor: ActorContext, market: Market): MarketHealth {
-  const applications = repositories.applications
-    .list(actor)
-    .filter((a) => a.marketId === market.id);
+export async function marketHealth(
+  actor: ActorContext,
+  market: Market,
+): Promise<MarketHealth> {
+  const [allApplications, allCredits, students, businesses, published] =
+    await Promise.all([
+      await repositories.applications.list(actor),
+      await repositories.creditAwards.list(actor),
+      await repositories.students.list(actor),
+      await repositories.organizations.list(actor, { kind: "business" }),
+      await repositories.postings.published(actor),
+    ]);
+
+  const applications = allApplications.filter((a) => a.marketId === market.id);
 
   const committed = applications
     .filter((a) => !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
 
-  const credits = repositories.creditAwards
-    .list(actor)
-    .filter((c) => c.marketId === market.id && c.status === "granted");
+  const credits = allCredits.filter(
+    (c) => c.marketId === market.id && c.status === "granted",
+  );
 
   return {
     market,
-    activeStudents: repositories.students
-      .list(actor)
-      .filter((s) => s.marketId === market.id && s.status === "verified").length,
-    activeBusinesses: repositories.organizations
-      .list(actor, { kind: "business" })
-      .filter((o) => o.marketId === market.id && o.status === "active").length,
-    openPostings: repositories.postings
-      .published(actor)
-      .filter((p) => p.marketId === market.id && p.status === "published").length,
+    activeStudents: students.filter(
+      (s) => s.marketId === market.id && s.status === "verified",
+    ).length,
+    activeBusinesses: businesses.filter(
+      (o) => o.marketId === market.id && o.status === "active",
+    ).length,
+    openPostings: published.filter(
+      (p) => p.marketId === market.id && p.status === "published",
+    ).length,
     liveApplications: applications.filter((a) => !isTerminal(a.status)).length,
     inPause: applications.filter((a) => PAUSE_STATUSES.includes(a.status)).length,
     committed,
@@ -141,14 +161,19 @@ export function marketHealth(actor: ActorContext, market: Market): MarketHealth 
   };
 }
 
-export function allMarketHealth(actor: ActorContext): MarketHealth[] {
-  return repositories.markets.list(actor).map((m) => marketHealth(actor, m));
+export async function allMarketHealth(
+  actor: ActorContext,
+): Promise<MarketHealth[]> {
+  const markets = await repositories.markets.list(actor);
+  return Promise.all(markets.map((m) => marketHealth(actor, m)));
 }
 
 /** Uncommitted allocation left in a market's program year. */
-export function marketRemainingBudget(actor: ActorContext, market: Market): number {
-  const committed = repositories.applications
-    .list(actor)
+export async function marketRemainingBudget(
+  actor: ActorContext,
+  market: Market,
+): Promise<number> {
+  const committed = (await repositories.applications.list(actor))
     .filter((a) => a.marketId === market.id && !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
   return market.subsidyBudget - committed;
@@ -161,10 +186,10 @@ export function marketRemainingBudget(actor: ActorContext, market: Market): numb
  * the fixtures carry no per-transition history, and a number derived from
  * submission dates would look precise while meaning nothing.
  */
-export function averagePauseDays(actor: ActorContext): number {
-  const inPause = repositories.applications
-    .list(actor)
-    .filter((a) => PAUSE_STATUSES.includes(a.status));
+export async function averagePauseDays(actor: ActorContext): Promise<number> {
+  const inPause = (await repositories.applications.list(actor)).filter((a) =>
+    PAUSE_STATUSES.includes(a.status),
+  );
   if (inPause.length === 0) return 0;
   const total = inPause.reduce((sum, a) => sum + daysInStatus(a, DEMO_NOW), 0);
   return Math.round(total / inPause.length);
@@ -182,8 +207,8 @@ export interface FunnelStage {
  * statuses per stage meant an application dropped out of every stage the
  * instant it closed, so the funnel appeared to collapse as work finished.
  */
-export function funnel(actor: ActorContext): FunnelStage[] {
-  const applications = repositories.applications.list(actor);
+export async function funnel(actor: ActorContext): Promise<FunnelStage[]> {
+  const applications = await repositories.applications.list(actor);
 
   const atLeast = (stage: FunnelRank) =>
     applications.filter((a) => furthestRank(a) >= stage).length;
@@ -240,30 +265,33 @@ function furthestRank(application: Application): FunnelRank {
 }
 
 /** Banked micro-internship hours not yet converted into a credit award. */
-export function studentCreditProgress(
+export async function studentCreditProgress(
   actor: ActorContext,
   studentId: string,
   hoursPerCredit = DEFAULT_HOURS_PER_CREDIT,
 ) {
-  const applications = repositories.applications
-    .forStudent(actor, studentId)
-    .filter((a) =>
-      ["placement_completed", "credit_pending", "credit_granted"].includes(a.status),
-    );
+  const applications = (
+    await repositories.applications.forStudent(actor, studentId)
+  ).filter((a) =>
+    ["placement_completed", "credit_pending", "credit_granted"].includes(a.status),
+  );
 
-  const completed = applications
-    .map((application) => {
-      const posting = repositories.postings.find(actor, application.postingId);
+  const resolved = await Promise.all(
+    applications.map(async (application) => {
+      const posting = await repositories.postings.find(actor, application.postingId);
       return posting ? { application, posting } : null;
-    })
-    .filter((x): x is { application: Application; posting: Posting } => x !== null);
+    }),
+  );
+
+  const completed = resolved.filter(
+    (x): x is { application: Application; posting: Posting } => x !== null,
+  );
 
   return creditProgress(completed, hoursPerCredit);
 }
 
-export function subsidyDeployed(actor: ActorContext): number {
-  return repositories.applications
-    .list(actor)
+export async function subsidyDeployed(actor: ActorContext): Promise<number> {
+  return (await repositories.applications.list(actor))
     .filter((a) => !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
 }

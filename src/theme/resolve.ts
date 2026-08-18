@@ -28,8 +28,10 @@ export interface ResolvedTheme {
   hasAccent: boolean;
 }
 
-export function resolvePartnerTheme(actor: ActorContext | null): ResolvedTheme {
-  const organization = educationOrganizationFor(actor);
+export async function resolvePartnerTheme(
+  actor: ActorContext | null,
+): Promise<ResolvedTheme> {
+  const organization = await educationOrganizationFor(actor);
   const theme = themeFor(organization);
 
   return {
@@ -51,17 +53,19 @@ export function resolvePartnerTheme(actor: ActorContext | null): ResolvedTheme {
  * demonstration would only show theming to someone who signed in first, which
  * is the one thing most visitors never do.
  */
-function educationOrganizationFor(actor: ActorContext | null): Organization | null {
+async function educationOrganizationFor(
+  actor: ActorContext | null,
+): Promise<Organization | null> {
   const system = systemContext();
 
   if (actor?.membership.role === "college" && actor.membership.organizationId) {
-    return repositories.organizations.find(system, actor.membership.organizationId);
+    return await repositories.organizations.find(system, actor.membership.organizationId);
   }
 
   if (actor?.membership.role === "student") {
-    const student = repositories.students.forUser(actor, actor.user.id);
+    const student = await repositories.students.forUser(actor, actor.user.id);
     return student
-      ? repositories.organizations.find(system, student.collegeId)
+      ? await repositories.organizations.find(system, student.collegeId)
       : null;
   }
 
@@ -72,8 +76,8 @@ function educationOrganizationFor(actor: ActorContext | null): Organization | nu
   // college keeps signed-out browsing themed.
   if (actor) return null;
 
-  const demoStudent = repositories.students.list(system)[0];
+  const demoStudent = (await repositories.students.list(system))[0];
   return demoStudent
-    ? repositories.organizations.find(system, demoStudent.collegeId)
+    ? await repositories.organizations.find(system, demoStudent.collegeId)
     : null;
 }

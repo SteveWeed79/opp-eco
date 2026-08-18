@@ -61,7 +61,7 @@ export async function GET(
   const stored = await fileStore.get(key);
   if (!stored) return notFound();
 
-  const decision = canRetrieve(actor, stored.meta);
+  const decision = await canRetrieve(actor, stored.meta);
   if (!decision.ok) {
     logger.warn("download.refused", {
       key,

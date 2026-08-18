@@ -33,23 +33,23 @@ function recordingChannel(): NotificationChannel & { sent: RenderedNotification[
 }
 
 describe("rendering", () => {
-  it("resolves the recipient's real address", () => {
-    const rendered = render(intent())!;
+  it("resolves the recipient's real address", async () => {
+    const rendered = (await render(intent()))!;
     expect(rendered.recipientEmail).toContain("@");
   });
 
-  it("names what happened and who it concerns", () => {
-    const rendered = render(intent())!;
+  it("names what happened and who it concerns", async () => {
+    const rendered = (await render(intent()))!;
     expect(rendered.subject).toContain("Omar Haddad");
     expect(rendered.body).toContain("Web Developer Trainee");
   });
 
-  it("returns nothing for an unknown template rather than sending an empty message", () => {
-    expect(render(intent({ kind: "nonsense.kind" }))).toBeNull();
+  it("returns nothing for an unknown template rather than sending an empty message", async () => {
+    expect(await render(intent({ kind: "nonsense.kind" }))).toBeNull();
   });
 
-  it("returns nothing for a recipient who does not exist", () => {
-    expect(render(intent({ recipientUserId: "u-ghost" }))).toBeNull();
+  it("returns nothing for a recipient who does not exist", async () => {
+    expect(await render(intent({ recipientUserId: "u-ghost" }))).toBeNull();
   });
 });
 

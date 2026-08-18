@@ -22,7 +22,7 @@ const admin = contextFor("admin");
 /** Snapshot and restore, so tests stay independent of execution order. */
 let snapshot: Application[];
 
-beforeEach(() => {
+beforeEach(async () => {
   snapshot = seed.applications.map((a) => ({ ...a }));
   seed.slotOverrides.clear();
   pendingNotifications.length = 0;
@@ -216,7 +216,7 @@ describe("a successful transition writes everything together", () => {
 
 describe("side effects share the transaction", () => {
   it("claims the slot and moves the application together", async () => {
-    const slot = repositories.interviewSlots.open(student)[0];
+    const slot = (await repositories.interviewSlots.open(student))[0];
     await executeTransition(student, {
       applicationId: "app-4",
       to: "interview_scheduled",
@@ -229,14 +229,14 @@ describe("side effects share the transaction", () => {
     });
 
     expect(find("app-4").status).toBe("interview_scheduled");
-    const booked = repositories.interviewSlots
-      .list(student)
+    const booked = (await repositories.interviewSlots
+      .list(student))
       .find((s) => s.id === slot.id);
     expect(booked?.bookedByStudentId).toBe("stu-omar");
   });
 
   it("rolls the application back when a side effect fails", async () => {
-    const slot = repositories.interviewSlots.open(student)[0];
+    const slot = (await repositories.interviewSlots.open(student))[0];
     const before = { ...find("app-4") };
 
     await expect(

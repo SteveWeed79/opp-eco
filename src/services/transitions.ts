@@ -99,13 +99,13 @@ export async function executeTransition(
 ): Promise<TransitionResult> {
   // Read through the actor's own scope. A caller who cannot see an application
   // cannot move it, and this is where that is decided.
-  const existing = repositories.applications.find(actor, command.applicationId);
+  const existing = await repositories.applications.find(actor, command.applicationId);
   if (!existing) {
     return { ok: false, error: "Application not found", code: "not_found" };
   }
 
-  const student = repositories.students.find(actor, existing.studentId);
-  const posting = repositories.postings.find(actor, existing.postingId);
+  const student = await repositories.students.find(actor, existing.studentId);
+  const posting = await repositories.postings.find(actor, existing.postingId);
   if (!student || !posting) {
     return {
       ok: false,
@@ -114,7 +114,7 @@ export async function executeTransition(
     };
   }
 
-  const market = repositories.markets.find(actor, existing.marketId);
+  const market = await repositories.markets.find(actor, existing.marketId);
   if (!market) {
     return { ok: false, error: "Market not found", code: "not_found" };
   }
@@ -126,13 +126,13 @@ export async function executeTransition(
     {
       application: proposed,
       student,
-      remainingBudget: marketRemainingBudget(actor, market),
+      remainingBudget: await marketRemainingBudget(actor, market),
       postingOwnerId: posting.businessId,
       // Counted here rather than trusted from the caller. The page renders a
       // button using its own count, but the button is not the authority — a
       // direct POST arrives with no count at all.
       unreviewedWeeks: timesheetTotals(
-        repositories.timeEntries.forApplication(actor, existing.id),
+        await repositories.timeEntries.forApplication(actor, existing.id),
       ).unreviewedWeeks,
     },
     command.to,
@@ -167,6 +167,20 @@ export async function executeTransition(
     viaOverride: verdict.viaOverride ?? false,
   };
 
+  // Loaded before the transaction opens, not inside it. The unit of work is a
+  // synchronous callback — deliberately, so nothing can await mid-transaction
+  // and hold a connection open on a network round trip — which means every
+  // read a notification needs has to already be in hand. Fetched together
+  // because they are independent.
+  const [college, employer, board] = await Promise.all([
+    await repositories.organizations.find(actor, student.collegeId),
+    await repositories.organizations.find(actor, posting.businessId),
+    market.boardId
+      ? await repositories.organizations.find(actor, market.boardId)
+      : Promise.resolve(null),
+  ]);
+  const parties = { college, employer, board };
+
   try {
     await deps.store.transaction((uow) => {
       uow.saveApplication(updated, existing.version);
@@ -182,11 +196,9 @@ export async function executeTransition(
             posting,
             student,
             market,
-            college: repositories.organizations.find(actor, student.collegeId),
-            employer: repositories.organizations.find(actor, posting.businessId),
-            board: market.boardId
-              ? repositories.organizations.find(actor, market.boardId)
-              : null,
+            college: parties.college,
+            employer: parties.employer,
+            board: parties.board,
           });
 
       const seen = new Set<string>();

@@ -43,12 +43,12 @@ export async function authorizeFunding(
 
   const application =
     typeof applicationId === "string"
-      ? repositories.applications.find(actor, applicationId)
+      ? await repositories.applications.find(actor, applicationId)
       : null;
   if (!application) return { ok: false, error: "Application not found." };
 
-  const market = repositories.markets.find(actor, application.marketId);
-  const posting = repositories.postings.find(actor, application.postingId);
+  const market = await repositories.markets.find(actor, application.marketId);
+  const posting = await repositories.postings.find(actor, application.postingId);
   if (!market || !posting) {
     return { ok: false, error: "Application is missing its market or posting." };
   }

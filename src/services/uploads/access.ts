@@ -32,16 +32,16 @@ export interface FileAttachment {
   applicationId?: string;
 }
 
-export function canRetrieve(
+export async function canRetrieve(
   actor: ActorContext,
   meta: StoredFile,
   attachment: FileAttachment = { key: meta.key, studentId: meta.studentId, applicationId: meta.applicationId },
-): AccessDecision {
+): Promise<AccessDecision> {
   // Quarantine outranks everything. An unscanned file is not retrievable by
   // its owner, an administrator, or anyone else.
   if (meta.scan !== "clean") return { ok: false, reason: "quarantined" };
 
-  const student = repositories.students.find(actor, attachment.studentId);
+  const student = await repositories.students.find(actor, attachment.studentId);
   // Not visible through the actor's own scope means not theirs to open —
   // this is where market and organisation scoping is inherited rather than
   // reimplemented.
@@ -65,7 +65,7 @@ export function canRetrieve(
       // Only against an application they own, and only once the placement has
       // progressed far enough to release the student's details.
       if (!attachment.applicationId) return { ok: false, reason: "forbidden" };
-      const application = repositories.applications.find(
+      const application = await repositories.applications.find(
         actor,
         attachment.applicationId,
       );
