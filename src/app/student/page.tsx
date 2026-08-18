@@ -16,6 +16,7 @@ import {
   Empty,
   Money,
   PageHeader,
+  PageSection,
   ProgressBar,
   Stat,
   StatusBadge,
@@ -207,10 +208,18 @@ export default async function StudentPage() {
         </Card>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-3">
+      {/* ------------------------------------------------------------------ */}
+      {/* Zone — what is already under way                                    */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Your placements"
+        description="What you have in flight, the hours behind it, and what it is adding up to."
+      >
+      <div className="grid gap-8 lg:grid-cols-3 items-start">
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader
+              level={3}
               title="Active applications"
               subtitle={`${applications.length} in flight`}
             />
@@ -275,6 +284,7 @@ export default async function StudentPage() {
           {timesheets.length > 0 && (
             <Card>
               <CardHeader
+                level={3}
                 icon={<Clock className="w-5 h-5" />}
                 title="Log your hours"
                 subtitle="Your supervisor approves each week before it counts toward credit"
@@ -298,9 +308,95 @@ export default async function StudentPage() {
               ))}
             </Card>
           )}
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Credit banking — the micro track's defining mechanic              */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="space-y-6">
+          <Stat
+            label="Credits earned"
+            value={String(
+              repositories.creditAwards
+                .forStudent(actor, STUDENT_ID)
+                .filter((c) => c.status === "granted")
+                .reduce((s, c) => s + c.creditHours, 0),
+            )}
+            hint="Verified by your college and the state"
+            tone="good"
+          />
 
           <Card>
             <CardHeader
+              level={3}
+              icon={<Layers className="w-5 h-5" />}
+              title="Credit bank"
+              subtitle="Micro-internships stack until they reach a credit"
+            />
+            <div className="px-6 py-5">
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="text-sm text-ink-600">Banked hours</span>
+                <span className="text-2xl font-black text-ink-950 tabular">
+                  {progress.bankedHours}
+                  <span className="text-sm font-normal text-ink-500">
+                    {" "}
+                    / {progress.hoursPerCredit}
+                  </span>
+                </span>
+              </div>
+              <ProgressBar
+                value={progress.bankedHours % progress.hoursPerCredit}
+                max={progress.hoursPerCredit}
+                      label="Micro-internship hours banked toward the next credit"
+                tone={progress.microCredits > 0 ? "good" : "brand"}
+              />
+              <p className="text-xs text-ink-500 mt-2">
+                {progress.microCredits > 0
+                  ? `${progress.microCredits} credit ready to claim`
+                  : `${progress.hoursToNextCredit} more hours to your next credit`}
+              </p>
+              <Assumption>
+                A single micro-internship runs 5–40 hours, short of the ~45 needed for one
+                credit, so they stack (Q21). Change that and this panel changes with it.
+              </Assumption>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              level={3}
+              icon={<TrendingUp className="w-5 h-5" />}
+              title="Your skills"
+              subtitle="What employers match against"
+            />
+            <div className="px-6 py-5 flex flex-wrap gap-2">
+              {student.skills.map((skill: string) => (
+                <Badge key={skill}>{skill}</Badge>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Zone — browsing, as opposed to the work already under way.          */}
+      {/*                                                                     */}
+      {/* Recommendations and mentors are the same act from the student's     */}
+      {/* side: looking at what this market has for them. Split across a      */}
+      {/* column boundary they were 1,300px apart, with mentors last in a     */}
+      {/* sidebar that had already run out — so the smallest, least           */}
+      {/* intimidating thing on the page was the hardest to find.             */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Explore"
+        description="Opportunities matched to your profile, and employers offering time without an application."
+      >
+        <div className="grid gap-6 lg:grid-cols-3 items-start">
+          <div className="lg:col-span-2">
+          <Card>
+            <CardHeader
+              level={3}
               icon={<Sparkles className="w-5 h-5" />}
               title="Recommended for you"
               subtitle="Match scores sort your list — they never hide anything from an employer"
@@ -362,72 +458,8 @@ export default async function StudentPage() {
               ))}
             </ul>
           </Card>
-        </div>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Credit banking — the micro track's defining mechanic              */}
-        {/* ---------------------------------------------------------------- */}
-        <div className="space-y-6">
-          <Stat
-            label="Credits earned"
-            value={String(
-              repositories.creditAwards
-                .forStudent(actor, STUDENT_ID)
-                .filter((c) => c.status === "granted")
-                .reduce((s, c) => s + c.creditHours, 0),
-            )}
-            hint="Verified by your college and the state"
-            tone="good"
-          />
-
-          <Card>
-            <CardHeader
-              icon={<Layers className="w-5 h-5" />}
-              title="Credit bank"
-              subtitle="Micro-internships stack until they reach a credit"
-            />
-            <div className="px-6 py-5">
-              <div className="flex items-baseline justify-between mb-2">
-                <span className="text-sm text-ink-600">Banked hours</span>
-                <span className="text-2xl font-black text-ink-950 tabular">
-                  {progress.bankedHours}
-                  <span className="text-sm font-normal text-ink-500">
-                    {" "}
-                    / {progress.hoursPerCredit}
-                  </span>
-                </span>
-              </div>
-              <ProgressBar
-                value={progress.bankedHours % progress.hoursPerCredit}
-                max={progress.hoursPerCredit}
-                      label="Micro-internship hours banked toward the next credit"
-                tone={progress.microCredits > 0 ? "good" : "brand"}
-              />
-              <p className="text-xs text-ink-500 mt-2">
-                {progress.microCredits > 0
-                  ? `${progress.microCredits} credit ready to claim`
-                  : `${progress.hoursToNextCredit} more hours to your next credit`}
-              </p>
-              <Assumption>
-                A single micro-internship runs 5–40 hours, short of the ~45 needed for one
-                credit, so they stack (Q21). Change that and this panel changes with it.
-              </Assumption>
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader
-              icon={<TrendingUp className="w-5 h-5" />}
-              title="Your skills"
-              subtitle="What employers match against"
-            />
-            <div className="px-6 py-5 flex flex-wrap gap-2">
-              {student.skills.map((skill: string) => (
-                <Badge key={skill}>{skill}</Badge>
-              ))}
-            </div>
-          </Card>
-
+          </div>
+          <div>
           {/* -------------------------------------------------------------- */}
           {/* Employers offering time rather than a placement                 */}
           {/*                                                                 */}
@@ -439,6 +471,7 @@ export default async function StudentPage() {
           {mentors.length > 0 && (
             <Card>
               <CardHeader
+                level={3}
                 icon={<HandHeart className="w-5 h-5" />}
                 title="Mentors in your market"
                 subtitle="Employers offering time — no application, no credit"
@@ -469,8 +502,9 @@ export default async function StudentPage() {
               </p>
             </Card>
           )}
+          </div>
         </div>
-      </div>
+      </PageSection>
     </div>
   );
 }

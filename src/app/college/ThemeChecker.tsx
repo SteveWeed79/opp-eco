@@ -38,6 +38,7 @@ export function ThemeChecker({
   return (
     <Card>
       <CardHeader
+        level={3}
         icon={<Palette className="w-5 h-5" />}
         title="Your colours"
         subtitle={`How ${organizationName} appears to its students`}

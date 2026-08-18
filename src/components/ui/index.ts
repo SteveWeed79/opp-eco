@@ -30,6 +30,7 @@ export {
   Card,
   CardHeader,
   PageHeader,
+  PageSection,
   Stat,
   Badge,
   TrackBadge,

@@ -16,6 +16,7 @@ import {
   FileUpload,
   Modal,
   Money,
+  PageSection,
   Pagination,
   paginate,
   PersonChip,
@@ -325,6 +326,27 @@ function StatusSection() {
 
   return (
     <>
+      <Section
+        title="Page sections"
+        note="Portals are named zones, not a flat stack of cards — and settings are recessed so configuration stops reading like work"
+      >
+        <div className="space-y-2">
+          <PageSection
+            title="Needs you today"
+            description="Work only this actor can clear. Every portal opens on one of these."
+          >
+            <Card className="p-5 text-sm text-ink-600">A queue lives here.</Card>
+          </PageSection>
+          <PageSection
+            title="Institution settings"
+            description="Rarely changed, and deliberately quieter than the work above it."
+            tone="settings"
+          >
+            <Card className="p-5 text-sm text-ink-600">Configuration lives here.</Card>
+          </PageSection>
+        </div>
+      </Section>
+
       <Section title="Stat tiles" note="Tone carries meaning: a stalled count is not neutral">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Stat label="Stalled in the pause" value="5" hint="Waiting on the board" tone="crit" />
