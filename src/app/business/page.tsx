@@ -2,6 +2,7 @@ import {
   CircleDollarSign,
   Clock,
   FileText,
+  HandHeart,
   HelpCircle,
   Users,
   Zap,
@@ -15,6 +16,7 @@ import {
   Empty,
   Money,
   PageHeader,
+  PageSection,
   ProgressBar,
   Stat,
   StatusBadge,
@@ -25,10 +27,15 @@ import {
 } from "@/components/ui";
 import {
   TransitionActions,
+  MENTORSHIP_CONFIRM,
   POSTING_CONFIRM,
 } from "@/components/TransitionActions";
 import { postingMachine } from "@/domain/lifecycle";
-import { postingLifecycleAsBusiness } from "@/app/_actions/lifecycle";
+import { mentorshipFormatLabel, mentorshipMachine } from "@/domain/mentorship";
+import {
+  mentorshipLifecycleAsBusiness,
+  postingLifecycleAsBusiness,
+} from "@/app/_actions/lifecycle";
 import { repositories, organizationName } from "@/data/memory";
 import { actorForPortal } from "@/auth/session";
 import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
@@ -38,6 +45,7 @@ import { postingTotalHours } from "@/domain/types";
 import { marketRemainingBudget } from "@/lib/queries";
 import { businessTransition } from "./actions";
 import { NewPosting } from "./NewPosting";
+import { OfferMentorship } from "./OfferMentorship";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
@@ -66,6 +74,24 @@ export default async function BusinessPage() {
   // and "JavaScript", and match scoring compares them literally.
   const skillVocabulary = Array.from(
     new Set(postings.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
+  ).sort();
+
+  // This employer's own offers to mentor. Withdrawn ones are gone rather than
+  // greyed out: the machine has no move away from withdrawn, so a row with no
+  // buttons and no way back is a tombstone the employer cannot act on.
+  const mentorshipOffers = repositories.mentorshipOffers
+    .list(actor)
+    .filter((o) => o.status !== "withdrawn");
+  // Mentorship topics converge on the same vocabulary as posting skills, plus
+  // whatever other mentors in this market already named. A separate free-text
+  // field would sprawl into "UX", "UX design", and "User experience" exactly
+  // the way skill tags do.
+  const topicVocabulary = Array.from(
+    new Set([
+      ...skillVocabulary,
+      ...repositories.mentorshipOffers.openInMarket(actor).flatMap((o) => o.topics),
+      ...mentorshipOffers.flatMap((o) => o.topics),
+    ]),
   ).sort();
   const college = repositories.organizations
     .list(actor, { kind: "college" })
@@ -153,8 +179,12 @@ export default async function BusinessPage() {
         <Stat label="Live postings" value={String(postings.filter((p) => p.status === "published").length)} />
         <Stat label="Candidates in pipeline" value={String(applications.length)} />
         <Stat label="Interns on site" value={String(active.length)} tone="good" />
+        {/* "Awaiting your review" sat directly above a card headed "Hours
+            awaiting your approval" showing two rows while this read 0. Both
+            were right — they count different things — which is exactly why one
+            of them had to say which. */}
         <Stat
-          label="Awaiting your review"
+          label="Candidates to review"
           value={String(
             applications.filter((a) => ["submitted", "under_review"].includes(a.status))
               .length,
@@ -169,11 +199,25 @@ export default async function BusinessPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Zone 1 — work that is blocking somebody else.                       */}
+      {/*                                                                     */}
+      {/* Rendered only when there is something in it. A permanent empty      */}
+      {/* "needs you" heading teaches an employer that the heading means      */}
+      {/* nothing, which is exactly the habit that loses the queue.           */}
+      {/* ------------------------------------------------------------------ */}
+      {(needsHelp.length > 0 || hoursQueue.length > 0) && (
+        <PageSection
+          title="Needs you today"
+          description="A student cannot be paid, earn credit, or close out a placement until you clear these."
+        >
+
+      {/* ------------------------------------------------------------------ */}
       {/* Assisted drafting — a business that doesn't know how to scope work  */}
       {/* ------------------------------------------------------------------ */}
       {needsHelp.length > 0 && (
         <Card className="border-warn-100 ring-1 ring-warn-100">
           <CardHeader
+            level={3}
             icon={<HelpCircle className="w-5 h-5 text-warn-600" />}
             title="Drafts you asked the college to help with"
             subtitle={`${organizationName(market.collegeIds[0])} will scope these into postings students can actually apply to`}
@@ -210,6 +254,7 @@ export default async function BusinessPage() {
       {hoursQueue.length > 0 && (
         <Card className="border-warn-100 ring-1 ring-warn-100">
           <CardHeader
+            level={3}
             icon={<Clock className="w-5 h-5 text-warn-600" />}
             title="Hours awaiting your approval"
             subtitle="The board reimburses against these, and the college counts them toward credit"
@@ -252,11 +297,19 @@ export default async function BusinessPage() {
         </Card>
       )}
 
+        </PageSection>
+      )}
+
       {/* ------------------------------------------------------------------ */}
-      {/* Candidate pipeline                                                  */}
+      {/* Zone 2 — who is in flight                                           */}
       {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Your candidates"
+        description="Everyone currently moving toward a placement with you, and the move each one is waiting on."
+      >
       <Card>
         <CardHeader
+          level={3}
           icon={<Users className="w-5 h-5" />}
           title="Candidate pipeline"
           subtitle="Contact details unlock after board clearance"
@@ -298,9 +351,14 @@ export default async function BusinessPage() {
                           {student.programOfStudy} · {student.classStanding}
                         </span>
                       </Td>
+                      {/* The widest cell, and the one that can afford to give.
+                          Held on one line it pushed the action column 106px
+                          past the card, so the buttons at the end of every row
+                          were half-visible until you scrolled a table nobody
+                          expects to scroll. A wrapped job title costs nothing. */}
                       <Td>
-                        <div className="flex items-center gap-2">
-                          <span className="whitespace-nowrap">{posting.title}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{posting.title}</span>
                           <TrackBadge track={application.track} posting={posting} />
                         </div>
                       </Td>
@@ -352,15 +410,29 @@ export default async function BusinessPage() {
         )}
       </Card>
 
+      </PageSection>
+
       {/* ------------------------------------------------------------------ */}
-      {/* Your postings, and where each one is                                */}
+      {/* Zone 3 — the three ways to take part, in one place.                 */}
       {/*                                                                     */}
-      {/* The college can send a posting back asking for a change. Without a  */}
-      {/* surface where the employer sees that and can resubmit, "request     */}
-      {/* changes" is a dead end that looks like a decision.                  */}
+      {/* These used to be three cards scattered down the page with three     */}
+      {/* differently-styled create buttons: "Post an opportunity" in the     */}
+      {/* page header, "Post a project" buried inside the micro card, and     */}
+      {/* "Offer to mentor" at the very bottom, 2,100px down. An employer     */}
+      {/* who could not take an intern never reached the two things they      */}
+      {/* could have said yes to.                                             */}
+      {/*                                                                     */}
+      {/* Grouped, they read as one decision with three sizes — which is what */}
+      {/* they are — and the smallest commitment is no longer the hardest to  */}
+      {/* find.                                                               */}
       {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="What you're offering"
+        description="Three sizes of the same thing: a semester of paid work, a scoped project, or an hour of your time. You can do any of them, and pause any of them."
+      >
       <Card>
         <CardHeader
+          level={3}
           icon={<FileText className="w-5 h-5" />}
           title="Your postings"
           subtitle="Nothing reaches students until the college has reviewed it"
@@ -411,15 +483,24 @@ export default async function BusinessPage() {
       </Card>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Micro as the on-ramp — the working interview                        */}
+      {/* The two lighter commitments, as siblings rather than as a stack.    */}
+      {/*                                                                     */}
+      {/* Stacked full-width they ran to roughly 600px, which put mentorship  */}
+      {/* below the fold on every screen. Side by side they are half that and */}
+      {/* read as what they are: two alternatives to the same "I can't take   */}
+      {/* an intern this term", not two unrelated afterthoughts.              */}
       {/* ------------------------------------------------------------------ */}
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
       <Card>
         <CardHeader
+          level={3}
           icon={<Zap className="w-5 h-5 text-micro-600" />}
           title="Not ready for a full semester?"
           subtitle="Start with a project, see the work, then convert"
         />
-        <div className="px-6 py-5 grid gap-6 md:grid-cols-2">
+        {/* One column: this card is half-width now, so the old two-up split
+            gave each side about 200px and broke the copy into ladders. */}
+        <div className="px-6 py-5 space-y-5">
           <div>
             <p className="text-sm text-ink-600">
               A micro-internship is a 5–40 hour project with a fixed fee and a defined
@@ -471,6 +552,83 @@ export default async function BusinessPage() {
           </Assumption>
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Time, with nothing else attached — the smallest thing on the page   */}
+      {/* an employer can say yes to, and so the one that must not be last.   */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader
+          level={3}
+          icon={<HandHeart className="w-5 h-5 text-brand-700" />}
+          title="Can't take an intern? Offer an hour"
+          subtitle="Mentorship, job shadows, and portfolio reviews — no wage, no credit, no board interview"
+          action={<OfferMentorship topicVocabulary={topicVocabulary} />}
+        />
+        {mentorshipOffers.length === 0 ? (
+          <div className="px-6 py-5">
+            <p className="text-sm text-ink-600 max-w-2xl">
+              Every other way of taking part on this page asks you to supervise
+              somebody. This one asks for an hour of your time and nothing else —{" "}
+              {organizationName(market.collegeIds[0])} handles the introduction, and
+              students across {market.name} see who is offering. You can pause it
+              whenever the quarter gets busy.
+            </p>
+            <Empty>You haven&rsquo;t offered to mentor anyone yet.</Empty>
+          </div>
+        ) : (
+          <ul className="divide-y divide-ink-100">
+            {mentorshipOffers.map((offer) => (
+              <li key={offer.id} className="px-6 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-ink-950">
+                        {offer.mentorName}
+                      </span>
+                      <span className="text-xs text-ink-500">{offer.mentorRole}</span>
+                      <Badge tone="brand">{mentorshipFormatLabel(offer.format)}</Badge>
+                      {/* Paused says so plainly. An employer who cannot tell a
+                          paused offer from a live one will assume the silence
+                          means nobody wanted them. */}
+                      {offer.status === "paused" && (
+                        <Badge tone="warn">Paused — students can&rsquo;t see this</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-ink-600 mt-1 max-w-xl">
+                      {offer.description}
+                    </p>
+                    <p className="text-xs text-ink-500 mt-1">
+                      Up to {offer.capacity} student{offer.capacity === 1 ? "" : "s"} at
+                      once
+                      {offer.topics.length > 0 && ` · ${offer.topics.join(" · ")}`}
+                    </p>
+                  </div>
+                  <TransitionActions
+                    id={offer.id}
+                    action={mentorshipLifecycleAsBusiness}
+                    subject={`${offer.mentorName} — ${mentorshipFormatLabel(offer.format)}`}
+                    confirm={MENTORSHIP_CONFIRM}
+                    transitions={mentorshipMachine
+                      .available(actor, { offer })
+                      .map((t) => ({ to: t.to, label: t.label }))}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="px-6 pb-5">
+          <Assumption>
+            Mentorship carries no credit and no reimbursement, so nothing here goes to
+            the college for review — there is no academic claim to underwrite. Who
+            starts a pairing is unsettled (Q22), so the introduction still happens
+            off-platform through {organizationName(market.collegeIds[0])}.
+          </Assumption>
+        </div>
+      </Card>
+      </div>
+      </PageSection>
     </div>
   );
 }

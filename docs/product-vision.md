@@ -121,7 +121,8 @@ Recorded so the vision is not quietly read as a description of what exists.
 
 | Claim | Reality |
 |---|---|
-| Supports several experience forms | Two are modelled — standard and micro. `Track` is a two-value enum, not the dimensional model described above. |
+| Supports several experience forms | Three are modelled — standard, micro, and mentorship. Still not the dimensional model described above: `Track` remains a two-value enum, and mentorship sits beside it as its own entity rather than as a configuration of paid/credit/clearance/output. Sustained placements and project-based work are each represented by one form, not the several listed. |
+| Relational experiences are supported | Partly. An employer can offer job shadows, portfolio reviews, group sessions, and one-to-one mentoring, and students see who is offering — but the pairing itself is off-platform, so nothing records that a mentorship happened or counts toward the outcome the platform measures. |
 | Scope is defined by credit, not school | True of the concept; the model has no way to record that a student attends a high school. `organization_kind` is `('business','college','board')` and `Student` carries only a `collegeId`. |
 | Minor status governs consent and hours | Not modelled. Nothing distinguishes a dual-enrolled sixteen-year-old from a college sophomore, so nothing can decline a placement it should. |
 | Measures transitions into employment | Not modelled. The lifecycle currently ends at credit granted or closed. |

@@ -295,6 +295,19 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "Review the posting", path: "/college" },
   }),
 
+  // --- Mentorship ----------------------------------------------------------
+  // Addressed to the college, because it is the only party that can act on it.
+  // A mentorship has no application to review and no student attached yet —
+  // what exists is an employer willing to spend an hour, and an intermediary
+  // who knows which student needs it.
+  "mentorship.offered": (p) => ({
+    subject: `${str(p.businessName)} is offering to mentor students`,
+    body:
+      `${str(p.mentorName)} (${str(p.mentorRole)}) at ${str(p.businessName)} has offered ${str(p.formatLabel).toLowerCase()}, for up to ${num(p.capacity) ?? "a few"} student${num(p.capacity) === 1 ? "" : "s"}. ` +
+      `This carries no credit, no wage, and no board clearance, so nothing needs approving — it is a name to put in front of the students who have been asking for one.`,
+    action: { label: "See who is offering", path: "/college" },
+  }),
+
   // --- Hours ---------------------------------------------------------------
   // The one exchange that repeats every week of a placement, which makes the
   // wording matter more than it does for a one-off status change. A supervisor

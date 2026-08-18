@@ -8,11 +8,13 @@
 import type {
   ActorContext,
   Application,
+  MentorshipOffer,
   Organization,
   Posting,
   TimeEntry,
 } from "@/domain/types";
 import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
+import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekDescending } from "@/domain/timesheet";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
@@ -133,6 +135,24 @@ export const repositories: Repositories = {
       inScope(actor, seed.postings).filter(
         (p) => p.status === "help_requested" || p.status === "college_drafting",
       ),
+  },
+
+  mentorshipOffers: {
+    list: (actor) =>
+      ownedByActor<MentorshipOffer>(actor, seed.mentorshipOffers, (o) => o.businessId),
+    find: (actor, id) =>
+      ownedByActor<MentorshipOffer>(
+        actor,
+        seed.mentorshipOffers,
+        (o) => o.businessId,
+      ).find((o) => o.id === id) ?? null,
+    openInMarket: (actor) =>
+      // Like `postings.published`, this is the market's shopfront rather than
+      // an employer's own records, so it is scoped by market and not by owner.
+      // A paused or withdrawn offer is absent here by definition: an employer
+      // who paused and still appeared on the student's mentor list would be
+      // fielding introductions they said they could not take.
+      inScope(actor, seed.mentorshipOffers).filter(isOfferedToStudents),
   },
 
   /**

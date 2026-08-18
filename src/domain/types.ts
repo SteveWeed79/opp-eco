@@ -216,6 +216,64 @@ export function postingTotalHours(posting: Posting): number {
 }
 
 // ---------------------------------------------------------------------------
+// Mentorship
+// ---------------------------------------------------------------------------
+
+/**
+ * How an employer is willing to give time.
+ *
+ * The product vision names job shadows and mentorships as career-connected
+ * learning in its relational form, alongside placements and projects. They sit
+ * on the same dimensions the platform already models, with every one of them
+ * turned off: unpaid, no credit, no funding clearance, nothing produced.
+ */
+export type MentorshipFormat =
+  | "one_to_one"
+  | "job_shadow"
+  | "portfolio_review"
+  | "group_session";
+
+/**
+ * `withdrawn` is separate from `paused` because they answer different
+ * questions. A busy quarter is a pause and the offer comes back; withdrawn is
+ * the employer leaving the mentor list, and an offer that could only be paused
+ * would leave stale names in front of students forever.
+ */
+export type MentorshipOfferStatus = "open" | "paused" | "withdrawn";
+
+/**
+ * An employer's standing offer to spend time with students.
+ *
+ * Deliberately carries no wage, no credit hours, and no timesheet. A mentorship
+ * is not a small internship — nobody is paid, no board reimburses it, and no
+ * college awards credit for it, so giving it any of those fields would invite
+ * the reimbursement and credit machinery to attach to something that must not
+ * reach either.
+ */
+export interface MentorshipOffer {
+  id: string;
+  marketId: string;
+  businessId: string;
+  format: MentorshipFormat;
+  /**
+   * The person who would actually meet the student, and what they do.
+   *
+   * Required for the same reason a standard posting names a supervisor: an
+   * offer of mentorship from a company with no human attached to it is a logo,
+   * and a student cannot be introduced to a logo.
+   */
+  mentorName: string;
+  mentorRole: string;
+  /** What they can usefully talk about. Drawn from the market's skill vocabulary. */
+  topics: string[];
+  description: string;
+  /** Students this mentor will take at once. A declaration, not a reservation. */
+  capacity: number;
+  status: MentorshipOfferStatus;
+  createdOn: string;
+}
+
+// ---------------------------------------------------------------------------
 // Applications and placements
 // ---------------------------------------------------------------------------
 
@@ -418,7 +476,8 @@ export interface AuditEvent {
     | "posting"
     | "application"
     | "credit"
-    | "time_entry";
+    | "time_entry"
+    | "mentorship_offer";
   entityId: string;
   from: string | null;
   to: string;

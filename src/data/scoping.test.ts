@@ -93,6 +93,48 @@ describe("business ownership", () => {
   });
 });
 
+describe("mentorship offers", () => {
+  const FOREIGN_OFFER = "men-cherokee-shadow"; // Cherokee Valley's
+
+  it("lists only its own offers to an employer", () => {
+    const foreign = repositories.mentorshipOffers
+      .list(business)
+      .filter((o) => o.businessId !== APEX);
+    expect(foreign).toHaveLength(0);
+  });
+
+  it("cannot fetch a competitor's offer by id", () => {
+    // Same narrowing as postings, applied to every accessor rather than only
+    // to `list` — that omission is the bug this file exists to pin.
+    expect(repositories.mentorshipOffers.find(business, FOREIGN_OFFER)).toBeNull();
+  });
+
+  it("still browses the market's mentor list", () => {
+    // The mentor list is a shopfront like published postings. An offer only
+    // its author can see is an offer made to nobody.
+    const open = repositories.mentorshipOffers.openInMarket(business);
+    expect(open.some((o) => o.businessId !== APEX)).toBe(true);
+  });
+
+  it("shows students the open offers and nothing else", () => {
+    const open = repositories.mentorshipOffers.openInMarket(student);
+
+    expect(open.length).toBeGreaterThan(0);
+    // Paused and withdrawn are absent by definition: an employer who paused
+    // and still appeared here would field introductions they cannot take.
+    expect(open.every((o) => o.status === "open")).toBe(true);
+    expect(open.some((o) => o.id === "men-apex-shadow")).toBe(false);
+    expect(open.some((o) => o.id === "men-apex-retired")).toBe(false);
+  });
+
+  it("keeps the mentor list inside the actor's market", () => {
+    const outside = repositories.mentorshipOffers
+      .openInMarket(college)
+      .filter((o) => o.marketId !== college.membership.marketId);
+    expect(outside).toHaveLength(0);
+  });
+});
+
 describe("college scope", () => {
   it("sees every posting in its market, since it operates the market", () => {
     const all = seed.postings.filter((p) => p.marketId === college.membership.marketId);

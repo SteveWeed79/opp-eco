@@ -83,6 +83,67 @@ test("the micro track asks different questions than the standard track", async (
   await page.keyboard.press("Escape");
 });
 
+test("an employer offers to mentor, and it reaches students without a review", async ({
+  page,
+}) => {
+  await page.goto("/business");
+
+  await page.getByRole("button", { name: /Offer to mentor/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // None of the fields a placement needs are here. That absence is the
+  // feature: an employer reaching this card has already declined a semester
+  // of supervision, and asking them for a wage would be asking again.
+  await expect(dialog.getByLabel("Wage per hour")).toHaveCount(0);
+  await expect(dialog.getByLabel("Credit hours")).toHaveCount(0);
+
+  await dialog.getByLabel("Who the student meets").fill("Alex Moreno");
+  await dialog.getByLabel("Their role").fill("Systems Architect");
+  await dialog
+    .getByLabel("What it looks like")
+    .fill("Half an hour a fortnight over coffee, on whatever they are stuck on.");
+
+  await dialog.getByRole("button", { name: "Add me to the list" }).click();
+
+  // Live immediately, unlike a posting. A mentorship carries no credit and no
+  // public money, so there is no academic claim for the college to underwrite
+  // and nothing for a review queue to decide.
+  await expect(page.getByRole("status").first()).toContainText("mentor list");
+  await expect(page.getByText("Alex Moreno").first()).toBeVisible();
+
+  // The college still hears about it, because it is the party that makes the
+  // introduction — an offer nobody was told about is a name in a dead list.
+  await page.goto("/admin/outbox");
+  await expect(page.getByText("offering to mentor").first()).toBeVisible();
+
+  // And a student can see who is offering.
+  await page.goto("/student");
+  await expect(page.getByText("Mentors in your market")).toBeVisible();
+  await expect(page.getByText("Alex Moreno").first()).toBeVisible();
+});
+
+test("pausing an offer takes it off the student's mentor list", async ({ page }) => {
+  await page.goto("/business");
+
+  // Pausing is the reversible half of the machine, so it goes through without
+  // a confirmation — an employer saying "not this month" about their own
+  // listing is not an ending.
+  const row = page.locator("li").filter({ hasText: "Alex Moreno" });
+  await row.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByRole("status").first()).toContainText("Pause");
+
+  // The employer still sees it, labelled, with a way back. A paused offer that
+  // vanished from its owner's screen would look like it had been deleted.
+  await expect(row.getByText("Paused")).toBeVisible();
+  await expect(row.getByRole("button", { name: "Reopen" })).toBeVisible();
+
+  // The student does not. An employer who paused and stayed on the list would
+  // field introductions they had just said they could not take.
+  await page.goto("/student");
+  await expect(page.getByText("Alex Moreno")).toHaveCount(0);
+});
+
 test("an employer moves a candidate through the state machine", async ({ page }) => {
   await page.goto("/business");
 

@@ -18,6 +18,7 @@ import type {
   CreditAward,
   InterviewSlot,
   Market,
+  MentorshipOffer,
   Organization,
   Posting,
   Student,
@@ -785,6 +786,95 @@ export const postings: Posting[] = [
     weeks: 14,
     creditHours: 3,
     supervisorName: "Priya Raman",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Mentorship offers — employers giving time rather than a placement
+// ---------------------------------------------------------------------------
+
+/**
+ * Covers all three states, including the two an employer's own portal has to
+ * handle: a paused offer that needs a way back, and a withdrawn one that must
+ * disappear from both the mentor list and the employer's own screen.
+ *
+ * Spread across three employers on purpose. Every other fixture in this file
+ * is anchored on Apex Robotics because that is who the demo signs in as, but a
+ * mentor list showing one company would not demonstrate a list at all.
+ */
+export const mentorshipOffers: MentorshipOffer[] = [
+  {
+    id: "men-apex-controls",
+    marketId: "mkt-pittsburg",
+    businessId: "org-apex",
+    format: "one_to_one",
+    mentorName: "Dana Reyes",
+    mentorRole: "Director of Engineering",
+    topics: ["Robotics", "PLC programming", "Career planning"],
+    description:
+      "Monthly hour with a student thinking about controls engineering — what the work is actually like, which classes matter, and what a first job asks for.",
+    capacity: 2,
+    status: "open",
+    createdOn: daysAgo(64),
+  },
+  {
+    id: "men-apex-shadow",
+    marketId: "mkt-pittsburg",
+    businessId: "org-apex",
+    format: "job_shadow",
+    mentorName: "Miguel Santos",
+    mentorRole: "Automation Technician",
+    topics: ["Robotics", "Manufacturing"],
+    description:
+      "Half a day on the floor watching a cell get commissioned. Steel-toe boots provided.",
+    capacity: 4,
+    // Paused rather than withdrawn: the shop is mid-installation, and this
+    // comes back. The employer portal has to offer a way back.
+    status: "paused",
+    createdOn: daysAgo(41),
+  },
+  {
+    id: "men-cherokee-shadow",
+    marketId: "mkt-pittsburg",
+    businessId: "org-cherokee",
+    format: "group_session",
+    mentorName: "Ray Buchanan",
+    mentorRole: "Plant Manager",
+    topics: ["Manufacturing", "Quality control"],
+    description:
+      "Plant tour and Q&A for a class, arranged with the college. Groups of up to fifteen.",
+    capacity: 15,
+    status: "open",
+    createdOn: daysAgo(30),
+  },
+  {
+    id: "men-bluestem-portfolio",
+    marketId: "mkt-pittsburg",
+    businessId: "org-bluestem",
+    format: "portfolio_review",
+    mentorName: "Tom Okafor",
+    mentorRole: "Creative Director",
+    topics: ["Web development", "UX design", "Portfolio"],
+    description:
+      "An hour going through a student's portfolio the way a hiring manager would, with the notes they would not normally hear.",
+    capacity: 3,
+    status: "open",
+    createdOn: daysAgo(12),
+  },
+  {
+    id: "men-apex-retired",
+    marketId: "mkt-pittsburg",
+    businessId: "org-apex",
+    format: "portfolio_review",
+    mentorName: "Karen Liu",
+    mentorRole: "Former Quality Lead",
+    topics: ["Quality control"],
+    description: "Résumé reviews for students heading into quality roles.",
+    // Withdrawn because the named mentor left. Present in the fixtures so both
+    // surfaces are exercised against a terminal offer that must not render.
+    status: "withdrawn",
+    capacity: 1,
+    createdOn: daysAgo(150),
   },
 ];
 

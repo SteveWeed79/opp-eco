@@ -278,6 +278,10 @@ A local business joins the market, is vetted, and posts — with college help if
 
 **[Q1]** Does Admin or the college review postings before publication? Given the college is the local operator, college review seems more natural than admin review — and it pairs with the assistance flow.
 
+**Mentorship offers** carry a format, the named person a student would actually meet and their role, topics, and how many students at once. They go live without college review, because review is what makes a posting credit-bearing and there is no academic claim here to underwrite — but vetting still gates them, and gates them harder: mentorship is the one form with no supervisor, no timesheet, and no board interview standing between an adult and a student.
+
+**[Q22]** Who initiates a pairing — the student asking the mentor, or the college introducing them? The offer is modelled and visible; the introduction is not. A request queue makes the employer work a second inbox and puts an unvetted first contact between an adult and a student, while routing through the college keeps the intermediary in place but is a step nobody is currently prompted to take. Until this is settled there is no pairing record, so declared capacity cannot be reconciled against mentorships actually running, and a mentorship cannot count toward the employment outcome the platform says it measures.
+
 ---
 
 ## Phase 3 — Discovery, application, mutual interest
@@ -380,6 +384,7 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q20** | Does the board have a fixed annual budget the program draws down? | If yes, the market has capacity limits and Admin's job includes allocating scarce subsidy |
 | **Q16** | Naming for the market entity; one board to many colleges? | Model root; WIOA areas and college service areas don't align cleanly |
 | **Q21** | **How does a 5–40 hour micro-internship earn 1 credit?** Stack them, enlarge the track, or drop credit from it | A single micro-internship falls short of the ~45-hour credit threshold. If they stack, `CreditAward` is many-to-many with placements from day one |
+| **Q22** | **Who initiates a mentorship pairing — the student, or the college?** | Decides whether a pairing record exists at all. Without one, declared capacity is a claim nobody reconciles, and mentorship contributes nothing to the employment outcome the platform measures |
 
 ### Carried forward
 

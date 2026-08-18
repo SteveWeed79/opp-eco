@@ -16,6 +16,7 @@ import {
   Empty,
   Money,
   PageHeader,
+  PageSection,
   ProgressBar,
   Stat,
   StatusBadge,
@@ -169,15 +170,15 @@ export default async function AdminPage() {
 
       {/* ------------------------------------------------------------------ */}
       {/* Market pipeline — the business the administrator is actually in     */}
+      {/*                                                                     */}
+      {/* This page invented the zone pattern first, as a bare <section> with */}
+      {/* a hand-rolled heading, and then used it exactly once. It is the     */}
+      {/* shared primitive now, so every portal groups the same way.          */}
       {/* ------------------------------------------------------------------ */}
-      <section>
-        <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-xl font-extrabold text-ink-950">Market pipeline</h2>
-          <p className="text-sm text-ink-500">
-            Board first, then college, then the market opens
-          </p>
-        </div>
-
+      <PageSection
+        title="Market pipeline"
+        description="Board first, then college, then the market opens."
+      >
         <div className="grid gap-4 lg:grid-cols-2">
           {health
             .slice()
@@ -291,14 +292,19 @@ export default async function AdminPage() {
               );
             })}
         </div>
-      </section>
+      </PageSection>
 
       {/* ------------------------------------------------------------------ */}
       {/* Vetting + funnel                                                    */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <PageSection
+        title="Gatekeeping and conversion"
+        description="Who is waiting to join, and how far the ones already here are getting."
+      >
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
         <Card>
           <CardHeader
+            level={3}
             icon={<ClipboardCheck className="w-5 h-5" />}
             title="Awaiting vetting"
             subtitle="Nothing transacts until an organization is approved"
@@ -357,6 +363,7 @@ export default async function AdminPage() {
 
         <Card>
           <CardHeader
+            level={3}
             icon={<TrendingUp className="w-5 h-5" />}
             title="Funnel"
             subtitle={`Applications in the pause have been waiting ${averagePauseDays(admin)} days on average`}
@@ -398,6 +405,7 @@ export default async function AdminPage() {
           </div>
         </Card>
       </div>
+      </PageSection>
 
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">

@@ -1,4 +1,4 @@
-import { Award, FileEdit, PenLine, UserCheck } from "lucide-react";
+import { Award, FileEdit, HandHeart, PenLine, UserCheck } from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -7,6 +7,7 @@ import {
   CardHeader,
   Empty,
   PageHeader,
+  PageSection,
   ProgressBar,
   Stat,
   TrackBadge,
@@ -18,6 +19,7 @@ import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { availableTransitions, isTerminal } from "@/domain/workflow";
 import { postingMachine, studentMachine } from "@/domain/lifecycle";
+import { mentorshipFormatLabel } from "@/domain/mentorship";
 import {
   postingLifecycleAsCollege,
   studentLifecycle,
@@ -56,6 +58,10 @@ export default async function CollegePage() {
   const activePlacements = repositories.applications
     .list(actor)
     .filter((a) => a.status === "placement_active");
+
+  // The employers currently offering time. The college is told when one is
+  // made and the message links here, so this is the page that has to show it.
+  const mentors = repositories.mentorshipOffers.openInMarket(actor);
 
   /**
    * Publication moves the college may make on a posting right now.
@@ -113,12 +119,22 @@ export default async function CollegePage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* ------------------------------------------------------------------ */}
+      {/* Zone 1 — the queues. Everything the college is the only party who  */}
+      {/* can clear, named as such so the page opens on work rather than on  */}
+      {/* five cards of equal weight.                                        */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Needs you today"
+        description="Every queue here is one only the college can clear — students cannot apply, postings cannot reach them, and credit cannot be awarded until you act."
+      >
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
         {/* ---------------------------------------------------------------- */}
         {/* Roster verification — the trust gate                              */}
         {/* ---------------------------------------------------------------- */}
         <Card>
           <CardHeader
+            level={3}
             icon={<UserCheck className="w-5 h-5" />}
             title="Student verification"
             subtitle="Confirm enrollment and eligibility for internship credit"
@@ -159,6 +175,7 @@ export default async function CollegePage() {
         {/* ---------------------------------------------------------------- */}
         <Card>
           <CardHeader
+            level={3}
             icon={<PenLine className="w-5 h-5" />}
             title="Businesses needing a hand"
             subtitle="They know they want an intern but not how to scope the work"
@@ -209,6 +226,7 @@ export default async function CollegePage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader
+          level={3}
           icon={<FileEdit className="w-5 h-5" />}
           title="Postings awaiting review"
           subtitle="Nothing reaches students until the college signs off"
@@ -259,6 +277,7 @@ export default async function CollegePage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader
+          level={3}
           icon={<Award className="w-5 h-5" />}
           title="Credit approvals"
           subtitle="Standard placements stand alone; micro-internships arrive stacked"
@@ -407,14 +426,87 @@ export default async function CollegePage() {
         </div>
       </Card>
 
+      </PageSection>
+
       {/* ------------------------------------------------------------------ */}
-      {/* Branding — what the college controls, and what it is told           */}
+      {/* Zone 2 — the market the college operates, rather than work waiting  */}
+      {/* on it. Mentors live here because the college is the party that makes */}
+      {/* the introduction, and the notification it receives says so.         */}
       {/* ------------------------------------------------------------------ */}
-      <ThemeChecker
-        initialBrand={college.brandColor ?? platformTheme().ramp[700]}
-        initialAccent={college.accentColor}
-        organizationName={college.name}
-      />
+      <PageSection
+        title="Your market"
+        description="Nothing here is a queue. It is what the employers in this market are currently offering students."
+      >
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<HandHeart className="w-5 h-5" />}
+            title="Employers offering to mentor"
+            subtitle="No credit, no wage, no board clearance — an hour of somebody's time, and you are who introduces the student"
+          />
+          {mentors.length === 0 ? (
+            <Empty>No employers are offering mentorship yet.</Empty>
+          ) : (
+            <ul className="divide-y divide-ink-100">
+              {mentors.map((offer) => (
+                <li
+                  key={offer.id}
+                  className="px-6 py-4 flex flex-wrap items-start justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-ink-950">
+                        {offer.mentorName}
+                      </span>
+                      <span className="text-xs text-ink-500">{offer.mentorRole}</span>
+                      <Badge tone="brand">{mentorshipFormatLabel(offer.format)}</Badge>
+                    </div>
+                    <p className="text-xs text-ink-500 mt-0.5">
+                      {organizationName(offer.businessId)}
+                    </p>
+                    <p className="text-xs text-ink-600 mt-1 max-w-xl">
+                      {offer.description}
+                    </p>
+                  </div>
+                  <span className="text-xs text-ink-500 whitespace-nowrap">
+                    Up to {offer.capacity} at once
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="px-6 pb-5">
+            <Assumption>
+              Who starts a pairing is unsettled (Q22), so this is a list to introduce
+              students from rather than a queue to work. Nothing here records that a
+              mentorship happened.
+            </Assumption>
+          </div>
+        </Card>
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Zone 3 — settings.                                                  */}
+      {/*                                                                     */}
+      {/* This used to be a seventh anonymous card stapled to the end of an   */}
+      {/* operational page: the tallest thing on the screen, styled exactly   */}
+      {/* like the queues above it, and touched roughly once a year. Recessed */}
+      {/* behind a rule and a muted label, it stops competing with work — and */}
+      {/* stays on this page rather than moving to a route of its own,        */}
+      {/* because the contrast checker is a thing to be *shown*, and nobody   */}
+      {/* clicks into settings during a walkthrough.                          */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Institution settings"
+        description="Rarely changed. How this college appears to its own students."
+        tone="settings"
+      >
+        <ThemeChecker
+          initialBrand={college.brandColor ?? platformTheme().ramp[700]}
+          initialAccent={college.accentColor}
+          organizationName={college.name}
+        />
+      </PageSection>
     </div>
   );
 }

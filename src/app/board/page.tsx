@@ -1,4 +1,10 @@
-import { CalendarPlus, CircleDollarSign, ClipboardList, Wallet } from "lucide-react";
+import {
+  CalendarPlus,
+  CircleDollarSign,
+  ClipboardList,
+  Gavel,
+  Wallet,
+} from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -9,6 +15,7 @@ import {
   Empty,
   Money,
   PageHeader,
+  PageSection,
   ProgressBar,
   Stat,
   StatusBadge,
@@ -154,11 +161,20 @@ export default async function BoardPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Zone 1 — decisions only this board can make                         */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Needs a decision"
+        description="Nothing below moves without you: a student cannot start, and an employer cannot be reimbursed, until the board has determined eligibility and committed funding."
+      >
+
+      {/* ------------------------------------------------------------------ */}
       {/* Students who reached mutual interest and never booked               */}
       {/* ------------------------------------------------------------------ */}
       {unbooked.length > 0 && (
         <Card className="border-crit-100 ring-1 ring-crit-100">
           <CardHeader
+            level={3}
             icon={<ClipboardList className="w-5 h-5 text-crit-600" />}
             title="Reached mutual interest but never booked"
             subtitle="These placements are the most likely in the system to fall apart"
@@ -197,6 +213,10 @@ export default async function BoardPage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader
+          level={3}
+          // The one card header in the product with no icon, which made the
+          // most important queue on the page read as the least considered.
+          icon={<Gavel className="w-5 h-5" />}
           title="On your desk"
           subtitle="Every standard application gets its own interview and its own funding decision"
         />
@@ -333,6 +353,17 @@ export default async function BoardPage() {
         </div>
       </Card>
 
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Zone 2 — the money and the calendar. Reference the board reads,     */}
+      {/* rather than queues it works, so it is named as a separate thing.    */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Your allocation and calendar"
+        description="What has been committed, what is being claimed against it, and the slots students are booking into."
+      >
+
       {/* ------------------------------------------------------------------ */}
       {/* What is actually owed, against what was authorized                  */}
       {/*                                                                     */}
@@ -344,6 +375,7 @@ export default async function BoardPage() {
       {claims.length > 0 && (
         <Card>
           <CardHeader
+            level={3}
             icon={<CircleDollarSign className="w-5 h-5" />}
             title="Reimbursement against authorization"
             subtitle="Hours the supervising employer has signed off, priced at the authorized rate"
@@ -416,6 +448,7 @@ export default async function BoardPage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader
+          level={3}
           icon={<CircleDollarSign className="w-5 h-5" />}
           title="Interview availability"
           subtitle={`${openSlots.length} open of ${slots.length} published — students book these directly`}
@@ -458,6 +491,7 @@ export default async function BoardPage() {
           })}
         </div>
       </Card>
+      </PageSection>
     </div>
   );
 }
