@@ -56,6 +56,7 @@ bookable application. Restart the server to reseed.
 | Scope | College-level credit | Defined by the **credit, not the school** — a dual-enrolled high school student earns college credit and is in scope. The high school itself is not yet modeled |
 | Who participates | Students earning college credit | Includes dual/concurrent-credit high schoolers. No adult job seekers or unaffiliated career-changers |
 | Opportunity tracks | Standard (3 credit) and micro (1 credit) | Micro follows the Parker Dewey project model |
+| Mentorship | A separate entity, not a third track | Unpaid, uncredited, never reimbursed — it is the absence of the placement machinery, so inheriting that machinery would be wrong |
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
 | Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
@@ -93,6 +94,7 @@ Properties worth knowing:
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
 - **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
+- **A portal is named zones, not a stack of cards.** Every page was a flat run of identical `Card`s, so reading order carried no rank — a queue blocking a placement, a reference table, and a settings panel touched once a year all looked the same. Two things followed, and both were live: anything appended to the end became invisible, and the college's brand picker read exactly like a queue. `PageSection` groups a page into two to four named zones, and its `settings` tone recesses configuration behind a rule, because a page that gives equal weight to "four students are waiting on you" and "pick a brand colour" has not decided what it is for.
 
 ## Opportunities have a URL
 
@@ -112,9 +114,9 @@ A page rather than an expander, because the realistic path into this program is 
 
 That distinction is load-bearing. `postings.find` narrows by organization for `business` and by *market* for everyone else — correct for the queues it was written for, and too wide here: it would have let a student open an employer's half-written draft by guessing an id. Nothing had exposed it before, because until this page there was no way to address a posting by id at all. An e2e test asserts a real draft and a nonexistent id return the same status, so the URL cannot become an oracle for what an employer is drafting.
 
-## The four state machines
+## The five state machines
 
-Four things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, and an **organization's** vetting. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
+Five things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, an **organization's** vetting, and an employer's **mentorship offer**. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
 
 | Machine | Owned by | Gates |
 |---|---|---|
@@ -122,6 +124,7 @@ Four things have a status and rules about who may change it: an **application**,
 | Student | the college | whether a student may apply at all |
 | Posting | the college, with the employer's half | what students can see |
 | Organization | the administrator alone | whether anything can transact |
+| Mentorship offer | the employer alone | whether they are currently available |
 
 The application machine was the only one modelled for a long time, and that left two claims in the interface with nothing behind them:
 
@@ -131,6 +134,21 @@ The application machine was the only one modelled for a long time, and that left
 Both were missing for the same reason. The status existed and the queue rendered it, but nothing could move it, so nothing could depend on it either. `canApply` and `canTransact` are now the single definitions, checked in `creation.ts` where applications and postings are made.
 
 **An administrator sees moves they would have to override**, and the refusal names the guard rather than only asking for a reason — on an admin-only machine like vetting, the administrator is the only caller a guard can ever refuse, so without that they are asked to justify a decision the product declined to describe.
+
+## Mentorship
+
+The three ways of taking part that came first all end in a transaction: a standard internship is reimbursed, a micro project is invoiced, both are examined for credit. Every one of them asks an employer to supervise somebody for weeks. In a small market the common answer is not no, it is *not this year* — and a platform whose only reply to that is an empty page has lost an employer who was willing to help.
+
+So an employer can also offer **time**: a portfolio review, a job shadow, a session with a class, or an ongoing one-to-one. The formats are named rather than free text, because "we'd be happy to mentor students" is a sentiment a college cannot make an introduction out of, and because naming them sets the size of the ask — an employer who reads only "ongoing one-to-one" declines all four.
+
+**It is modelled as the absence of everything else.** No wage, no hour cap, no credit hours, no timesheet, no application. That is the argument for a separate entity rather than a third `Track`: a track is a shape of work an application flows through, and clearance, funding, hours, and credit are all meaningless here — a mentorship pretending to be a posting would inherit the lot and have to switch it off one guard at a time.
+
+Two consequences worth stating plainly:
+
+- **No college review.** A posting waits at `pending_review` because review is what makes it credit-bearing — the college is underwriting an academic claim. A mentorship carries no credit, no wage, and no public money, so there is nothing to underwrite, and a queue in front of the one offer an employer makes on impulse would only lose it. The college is still *told*, because it is the party that makes the introduction.
+- **Vetting still applies, and does more work here.** Mentorship puts an adult in front of a student with no supervisor, no timesheet, and no board interview in between. Every check that surrounds a placement is absent, which leaves "is this employer who they say they are" carrying the whole load — so `canTransact` gates creating an offer exactly as it gates posting a job.
+
+`paused` exists so that a busy quarter is not a resignation. An offer whose only exit was `withdrawn` would take an employer off the mentor list permanently the first time they were short-handed, and a paused offer disappears from the student's list in the same request it is paused — an employer still listed after saying they could not take anyone is fielding introductions they just declined.
 
 ## Hours
 
@@ -211,5 +229,6 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
+- **Pairing a student with a mentor.** An employer can offer, and a student can see who is offering; the introduction itself runs through the college off-platform. A pairing record is what would let the mentor list show remaining capacity honestly rather than a declared number, and it needs a decision first about whether a student asks the mentor or the college — which is the difference between a request queue an employer has to work and an intermediary who already knows both people.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

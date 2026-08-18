@@ -164,6 +164,27 @@ export const postingInput = z.discriminatedUnion("track", [
   }),
 ]);
 
+/**
+ * An offer to mentor students.
+ *
+ * Notably short next to `postingInput`, and that is the shape of the thing
+ * rather than a first pass: there is no wage to bound, no hour cap to keep out
+ * of a reimbursement claim, and no fee. What is left is who shows up, what
+ * they can talk about, and how many students they will take.
+ *
+ * `capacity` is bounded generously because a group session legitimately holds a
+ * class, and at 1 because an offer to mentor nobody is a contradiction rather
+ * than a pause — pausing is a state the machine already has.
+ */
+export const mentorshipOfferInput = z.object({
+  format: z.enum(["one_to_one", "job_shadow", "portfolio_review", "group_session"]),
+  mentorName: shortText,
+  mentorRole: shortText,
+  topics: z.array(skill).max(20).default([]),
+  description: longText,
+  capacity: z.number().int().positive().max(50),
+});
+
 export type ValidationFailure = { ok: false; error: string; code: "invalid" };
 
 /**

@@ -40,23 +40,97 @@ export function CardHeader({
   subtitle,
   icon,
   action,
+  level = 2,
 }: {
   title: string;
   subtitle?: string;
   icon?: ReactNode;
   action?: ReactNode;
+  /**
+   * Heading level. Cards sitting inside a `PageSection` are subordinate to its
+   * heading, so they take 3 — a page whose outline says h1 › h2 › h2 tells a
+   * screen-reader user the zone and the card are peers when they are not.
+   */
+  level?: 2 | 3;
 }) {
+  const Heading = level === 3 ? "h3" : "h2";
   return (
     <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-ink-100">
       <div className="flex items-start gap-3">
         {icon && <span className="text-brand-700 mt-0.5">{icon}</span>}
         <div>
-          <h2 className="text-base font-bold text-ink-950 text-balance">{title}</h2>
+          <Heading className="text-base font-bold text-ink-950 text-balance">
+            {title}
+          </Heading>
           {subtitle && <p className="text-sm text-ink-500 mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * A named zone within a portal.
+ *
+ * Every portal was one flat stack of Cards, which meant reading order carried
+ * no rank. A queue blocking a placement, a reference table, and a settings
+ * panel touched once a year all rendered identically — same white, same
+ * radius, same border, same header. Two things follow from that, and both were
+ * live: anything appended to the end became invisible, and configuration read
+ * exactly like work.
+ *
+ * So a portal is now two to four named zones rather than five to seven
+ * anonymous cards, and the name says what the zone is *for* — "needs you
+ * today" is a promise about what is inside it.
+ *
+ * `tone` is the part that does the work. `work` is what the portal exists for;
+ * `settings` is deliberately recessed, because a page that gives equal weight
+ * to "four students are waiting on you" and "pick a brand colour" has not
+ * decided what it is for.
+ */
+export function PageSection({
+  title,
+  description,
+  action,
+  tone = "work",
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  tone?: "work" | "settings";
+  children: ReactNode;
+}) {
+  const settings = tone === "settings";
+
+  return (
+    <section
+      className={
+        settings
+          ? "border-t border-ink-200 pt-8 mt-4"
+          : ""
+      }
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <div>
+          <h2
+            className={
+              settings
+                ? "text-xs font-bold text-ink-500 uppercase tracking-widest"
+                : "text-lg font-black text-ink-950"
+            }
+          >
+            {title}
+          </h2>
+          {description && (
+            <p className="text-sm text-ink-500 mt-1 max-w-2xl">{description}</p>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className="space-y-6">{children}</div>
+    </section>
   );
 }
 
@@ -318,7 +392,12 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`rounded-xl font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]}`}
+      // `whitespace-nowrap` because a button is a target, not a paragraph.
+      // In the narrow action column of a table "End placement early" broke
+      // across three lines and read as a rendering fault; where two buttons
+      // genuinely do not fit, the flex row wraps them onto separate lines
+      // instead, which is legible.
+      className={`whitespace-nowrap rounded-xl font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]}`}
     >
       {children}
     </button>

@@ -13,6 +13,8 @@
 import type {
   ActorContext,
   Application,
+  MentorshipOffer,
+  MentorshipOfferStatus,
   Posting,
   PostingStatus,
 } from "@/domain/types";
@@ -231,4 +233,79 @@ export async function createPosting(
   });
 
   return { ok: true, created: posting };
+}
+
+/**
+ * An employer offers to mentor students.
+ *
+ * It starts `open`, which is the one place this deliberately differs from
+ * `createPosting`. A posting waits at `pending_review` because the college is
+ * underwriting an academic claim; a mentorship carries no credit, no wage and
+ * no public money, so there is nothing for a review to decide and a queue in
+ * front of it would only stall the one offer an employer makes on impulse.
+ *
+ * Vetting still applies, and applies harder if anything. Mentorship puts an
+ * adult in front of a student with no supervisor, no timesheet, and no board
+ * interview in between — the checks that surround a placement are exactly the
+ * ones absent here, which leaves "is this employer who they say they are" doing
+ * all the work.
+ */
+export async function offerMentorship(
+  actor: ActorContext,
+  fields: Omit<
+    MentorshipOffer,
+    "id" | "marketId" | "businessId" | "status" | "createdOn"
+  >,
+  /** Enqueued in the same transaction; the caller cannot know the id yet. */
+  notifications?: (offer: MentorshipOffer) => NotificationIntent[],
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<MentorshipOffer>> {
+  if (actor.membership.role !== "business") {
+    return { ok: false, error: "Only employers can offer mentorship.", code: "forbidden" };
+  }
+  const { organizationId, marketId } = actor.membership;
+  if (!organizationId || !marketId) {
+    return { ok: false, error: "This account has no organization.", code: "forbidden" };
+  }
+
+  const employer = repositories.organizations.find(actor, organizationId);
+  if (!employer) {
+    return { ok: false, error: "This account has no organization.", code: "forbidden" };
+  }
+  const blocked = transactBlockReason(employer);
+  if (blocked) {
+    return { ok: false, error: blocked, code: "forbidden" };
+  }
+
+  const at = deps.now().toISOString();
+  const status: MentorshipOfferStatus = "open";
+
+  const offer: MentorshipOffer = {
+    ...fields,
+    id: deps.id("men"),
+    marketId,
+    businessId: organizationId,
+    status,
+    createdOn: at,
+  };
+
+  await deps.store.transaction((uow) => {
+    uow.createMentorshipOffer(offer);
+    uow.appendAuditEvent({
+      marketId,
+      at,
+      actorUserId: actor.user.id,
+      actorRole: actor.membership.role,
+      entityType: "mentorship_offer",
+      entityId: offer.id,
+      from: null,
+      to: status,
+      viaOverride: false,
+    });
+    for (const intent of notifications?.(offer) ?? []) {
+      uow.enqueueNotification(intent);
+    }
+  });
+
+  return { ok: true, created: offer };
 }

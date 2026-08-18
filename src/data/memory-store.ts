@@ -89,6 +89,23 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createMentorshipOffer(offer: import("@/domain/types").MentorshipOffer) {
+    if (seed.mentorshipOffers.some((o) => o.id === offer.id)) {
+      throw new Error(`Mentorship offer ${offer.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.mentorshipOffers.push(offer);
+    });
+  }
+
+  saveMentorshipOffer(offer: import("@/domain/types").MentorshipOffer) {
+    const index = seed.mentorshipOffers.findIndex((o) => o.id === offer.id);
+    if (index === -1) throw new Error(`Unknown mentorship offer ${offer.id}`);
+    this.effects.push(() => {
+      seed.mentorshipOffers[index] = offer;
+    });
+  }
+
   saveInterviewSlot(slot: import("@/domain/types").InterviewSlot, expectedVersion: number) {
     const current = seed.slotOverrides.get(slot.id);
     const version = current?.version ?? 1;
