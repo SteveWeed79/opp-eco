@@ -314,7 +314,7 @@ function PostingForm({
             A micro project below the threshold still earns hours — it just
             cannot carry a credit on its own. */}
         {Number.isFinite(totalHours) && totalHours > 0 && (
-          <p className="text-xs text-ink-600 bg-ink-50 border border-ink-200 rounded-lg px-3 py-2">
+          <p className="text-xs text-ink-600 bg-ink-50 border border-line-strong rounded-lg px-3 py-2">
             {totalHours} total hours ·{" "}
             {totalHours >= hoursPerCredit
               ? `clears your college's ${hoursPerCredit}-hour threshold, so this can carry credit on its own.`

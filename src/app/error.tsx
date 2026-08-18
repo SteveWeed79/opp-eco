@@ -33,8 +33,8 @@ export default function Error({
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-20">
-      <div className="bg-white rounded-2xl border border-crit-100 shadow-sm p-8">
-        <span className="w-11 h-11 rounded-2xl bg-crit-50 text-crit-600 flex items-center justify-center mb-5">
+      <div className="bg-surface rounded-panel border border-crit-100 shadow-e3 p-8">
+        <span className="w-11 h-11 rounded-card bg-crit-50 text-crit-600 flex items-center justify-center mb-5">
           <AlertTriangle className="w-5 h-5" aria-hidden="true" />
         </span>
         <h1 className="text-2xl font-black text-ink-950 text-balance">
@@ -65,7 +65,7 @@ export default function Error({
           </button>
           <Link
             href="/"
-            className="bg-white text-ink-950 border border-ink-200 font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-ink-50 transition-colors"
+            className="bg-white text-ink-950 border border-line-strong font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-canvas transition-colors"
           >
             Back to the start
           </Link>

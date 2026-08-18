@@ -28,7 +28,18 @@
   --color-ink-100: #f1f5f9;
   --color-ink-200: #e2e8f0;
   --color-ink-400: #94a3b8;
-  --color-ink-500: #64748b;
+  /**
+   * Darkened from slate-500 (#64748b) to clear 4.5:1 on the new ground.
+   *
+   * Secondary text is the app's most-used colour after body ink, and it used
+   * to sit almost exclusively on white, where slate-500 scrapes past at 4.76.
+   * Deepening the canvas so white cards actually lift also moved that text
+   * onto tinted grounds — sunken panels, table headers, hovered rows — where
+   * the same colour measured 4.20 and failed. This clears 4.5 against every
+   * ground in the system, canvas-deep included, and still reads a clear step
+   * lighter than `ink-600` body text.
+   */
+  --color-ink-500: #5b6b7f;
   --color-ink-600: #475569;
   --color-ink-700: #334155;
   --color-ink-950: #020617;
@@ -54,10 +65,90 @@
   --color-micro-100: #ede9fe;
   --color-micro-600: #7c3aed;
   --color-micro-700: #6d28d9;
+
+  /* ----------------------------------------------------------------------- */
+  /* Ground and line                                                          */
+  /* ----------------------------------------------------------------------- */
+
+  /**
+   * The ground cards sit on, and it is deliberately not `ink-50`.
+   *
+   * White-on-#f8fafc is a 3% step: too small for a card to read as sitting on
+   * anything, which is most of why every surface looked pasted onto the page
+   * rather than stacked above it. A deeper, cooler ground gives white
+   * somewhere to lift off from, and gives a nested panel somewhere to sink
+   * into without inventing a second grey.
+   */
+  --color-canvas: #eef1f6;
+  --color-canvas-deep: #e6eaf1;
+  --color-surface: #ffffff;
+  /** A panel *inside* a card — recessed rather than raised. */
+  --color-sunken: #f5f7fa;
+
+  /**
+   * Hairlines. Neutral, not brand-tinted: `border-brand-100` put a pale blue
+   * outline on every surface in the app, which reads as a sticker edge. A
+   * border's job here is to resolve two adjacent planes, and the shadow is
+   * what does the lifting.
+   */
+  --color-line: #e3e8ef;
+  --color-line-strong: #d3dae5;
+
+  /* ----------------------------------------------------------------------- */
+  /* Elevation                                                                */
+  /* ----------------------------------------------------------------------- */
+
+  /**
+   * A real ladder, in place of `shadow-sm` on everything.
+   *
+   * Each rung is two shadows — a tight contact shadow that anchors the edge,
+   * and a wider ambient one that carries the height — because a single blur
+   * reads as a smudge under the box rather than as distance from the page.
+   * Tinted with the slate of `ink-950` rather than pure black, so the shade
+   * belongs to this palette instead of greying it.
+   *
+   * e1 nested and inset things      e3 what the page is actually for
+   * e2 cards at rest                e4 hover, and anything that floats
+   * e5 modals and popovers — off the page entirely
+   */
+  --shadow-e1: 0 1px 2px -1px rgb(15 23 42 / 0.06), 0 1px 1px rgb(15 23 42 / 0.04);
+  --shadow-e2:
+    0 1px 2px -1px rgb(15 23 42 / 0.08), 0 2px 6px -1px rgb(15 23 42 / 0.06),
+    0 0 0 1px rgb(15 23 42 / 0.03);
+  --shadow-e3:
+    0 1px 2px -1px rgb(15 23 42 / 0.08), 0 6px 16px -4px rgb(15 23 42 / 0.1),
+    0 0 0 1px rgb(15 23 42 / 0.04);
+  --shadow-e4:
+    0 2px 4px -2px rgb(15 23 42 / 0.1), 0 12px 28px -8px rgb(15 23 42 / 0.16),
+    0 0 0 1px rgb(15 23 42 / 0.04);
+  --shadow-e5:
+    0 8px 16px -8px rgb(15 23 42 / 0.2), 0 24px 56px -16px rgb(15 23 42 / 0.28);
+
+  /** Dark surfaces need their own, warmer and deeper — a slate shadow under a
+      slate panel is invisible, and the panel floats without weight. */
+  --shadow-dark:
+    0 2px 4px -2px rgb(2 6 23 / 0.4), 0 18px 40px -12px rgb(2 6 23 / 0.45);
+
+  /** Depth *inside* a surface. Used by sunken panels and track grooves. */
+  --shadow-inset: inset 0 1px 2px rgb(15 23 42 / 0.06);
+
+  /* ----------------------------------------------------------------------- */
+  /* Radius                                                                   */
+  /* ----------------------------------------------------------------------- */
+
+  /**
+   * A scale, because nesting two things at the same radius is the other half
+   * of why this looked flat — a `rounded-2xl` chip inside a `rounded-2xl` card
+   * inside a `rounded-2xl` panel has no containment, just repetition. A child
+   * should always be a rung below its parent.
+   */
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+  --radius-hero: 1.75rem;
 }
 
 body {
-  background: var(--color-ink-50);
+  background: var(--color-canvas);
   color: var(--color-ink-950);
   font-family:
     ui-sans-serif,
@@ -71,10 +162,51 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/**
+ * Atmosphere behind the top of every page.
+ *
+ * A single flat fill from the masthead to the footer is what made long portals
+ * read as one undifferentiated sheet. This is a fixed wash rather than a
+ * gradient on the page, so it stays put while content scrolls past it and the
+ * top of the document keeps a horizon.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 60vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(75% 55% at 50% 0%, rgb(255 255 255 / 0.9) 0%, rgb(255 255 255 / 0) 70%),
+    linear-gradient(180deg, rgb(14 165 233 / 0.06) 0%, rgb(14 165 233 / 0) 100%);
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Digits that line up in columns should stay lined up */
 table,
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/**
+ * Headings carry their own tracking.
+ *
+ * Large type set at the default tracking looks loose and unset; the display
+ * sizes here are tightened proportionally rather than by hand at each call
+ * site, which is how the same title ended up with three different treatments.
+ */
+h1,
+h2 {
+  letter-spacing: -0.02em;
+}
+
+h3 {
+  letter-spacing: -0.011em;
 }
 
 /* Keyboard focus must always be visible */
@@ -82,6 +214,47 @@ table,
   outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
   border-radius: 0.5rem;
+}
+
+/**
+ * The portals' workhorse: a list of rows inside a card.
+ *
+ * Every queue in every portal is one of these, and each row is a wide reach —
+ * a name on the left, a status in the middle, a button on the right. Without
+ * a hover tie the eye loses the line halfway across, which is what made the
+ * dense portals read as a wall. Defined here rather than per list because
+ * there are fourteen of them across five portals.
+ */
+.row-list > li {
+  transition: background-color 120ms ease;
+}
+
+.row-list > li:hover {
+  background-color: color-mix(in oklab, var(--color-canvas) 55%, transparent);
+}
+
+/**
+ * A scrollable region that is wider than its frame should say so.
+ *
+ * The board's action column ran past the edge of its card with nothing to
+ * indicate there was more — the content simply stopped. These fades ride the
+ * scroll (via `scroll-driven` background-attachment on the local axis) and
+ * disappear when there is nothing left to reach.
+ */
+.scroll-x {
+  overflow-x: auto;
+  background:
+    linear-gradient(90deg, var(--color-surface) 30%, rgb(255 255 255 / 0)) left center,
+    linear-gradient(90deg, rgb(255 255 255 / 0), var(--color-surface) 70%) right center,
+    radial-gradient(farthest-side at 0 50%, rgb(15 23 42 / 0.12), rgb(15 23 42 / 0)) left center,
+    radial-gradient(farthest-side at 100% 50%, rgb(15 23 42 / 0.12), rgb(15 23 42 / 0)) right center;
+  background-repeat: no-repeat;
+  background-size:
+    40px 100%,
+    40px 100%,
+    14px 100%,
+    14px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 
 @media (prefers-reduced-motion: reduce) {

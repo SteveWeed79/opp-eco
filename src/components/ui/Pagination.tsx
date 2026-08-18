@@ -33,7 +33,7 @@ export function Pagination({
   return (
     <nav
       aria-label={`${label} pagination`}
-      className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-ink-100"
+      className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-line"
     >
       <p className="text-xs text-ink-500 tabular" aria-live="polite">
         {first}–{last} of {total}
@@ -78,7 +78,7 @@ function PageButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="p-2 rounded-lg border border-ink-200 text-ink-700 hover:bg-ink-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      className="p-2 rounded-lg border border-line-strong text-ink-700 hover:bg-canvas disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
     >
       {children}
     </button>

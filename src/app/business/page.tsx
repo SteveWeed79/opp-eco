@@ -25,6 +25,7 @@ import {
   TableWrap,
   Td,
   Th,
+  ToneCard,
   TrackBadge,
 } from "@/components/ui";
 import {
@@ -112,7 +113,7 @@ export default async function BusinessPage() {
 
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         dark
         eyebrow="Employer portal"
@@ -133,7 +134,7 @@ export default async function BusinessPage() {
       <Card className="p-6 bg-good-50 border-good-100">
         <div className="flex flex-wrap items-center justify-between gap-5">
           <div className="flex items-start gap-4">
-            <span className="w-11 h-11 rounded-2xl bg-good-600 text-white flex items-center justify-center shrink-0">
+            <span className="w-11 h-11 rounded-card bg-gradient-to-br from-good-600 to-good-700 text-white shadow-e1 flex items-center justify-center shrink-0">
               <CircleDollarSign className="w-5 h-5" aria-hidden="true" />
             </span>
             <div>
@@ -197,14 +198,14 @@ export default async function BusinessPage() {
       {/* Assisted drafting — a business that doesn't know how to scope work  */}
       {/* ------------------------------------------------------------------ */}
       {needsHelp.length > 0 && (
-        <Card className="border-warn-100 ring-1 ring-warn-100">
+        <ToneCard tone="warn" elevation="floating">
           <CardHeader
             level={3}
             icon={<HelpCircle className="w-5 h-5 text-warn-600" />}
             title="Drafts you asked the college to help with"
             subtitle={`${organizationName(market.collegeIds[0])} will scope these into postings students can actually apply to`}
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {needsHelp.map((posting) => (
               <li
                 key={posting.id}
@@ -223,7 +224,7 @@ export default async function BusinessPage() {
               </li>
             ))}
           </ul>
-        </Card>
+        </ToneCard>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -234,14 +235,14 @@ export default async function BusinessPage() {
       {/* are cleared, and the employer is the only party who can clear them. */}
       {/* ------------------------------------------------------------------ */}
       {hoursQueue.length > 0 && (
-        <Card className="border-warn-100 ring-1 ring-warn-100">
+        <ToneCard tone="warn" elevation="floating">
           <CardHeader
             level={3}
             icon={<Clock className="w-5 h-5 text-warn-600" />}
             title="Hours awaiting your approval"
             subtitle="The board reimburses against these, and the college counts them toward credit"
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {hoursQueue.map(({ entry, posting, studentName }) => (
               <li key={entry.id} className="px-6 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -270,13 +271,13 @@ export default async function BusinessPage() {
                 </div>
                 {/* What they say they did. Approving without it visible is a
                     signature on a blank page. */}
-                <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-ink-200 pl-3">
+                <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-line-strong pl-3">
                   &ldquo;{entry.summary}&rdquo;
                 </p>
               </li>
             ))}
           </ul>
-        </Card>
+        </ToneCard>
       )}
 
         </PageSection>
@@ -301,7 +302,7 @@ export default async function BusinessPage() {
         ) : (
           <TableWrap>
             <table className="w-full">
-              <thead className="border-b border-ink-100">
+              <thead className="border-b border-line">
                 <tr>
                   <Th>Candidate</Th>
                   <Th>Opportunity</Th>
@@ -311,7 +312,7 @@ export default async function BusinessPage() {
                   <Th>Action</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody className="row-list divide-y divide-line">
                 {applications.map((application) => {
                   // Redacted at the repository, not in the markup — withheld
                   // fields never reach this page in the first place.
@@ -422,7 +423,7 @@ export default async function BusinessPage() {
         {postings.length === 0 ? (
           <Empty>No postings yet.</Empty>
         ) : (
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {postings.map((posting) => (
               <li key={posting.id} className="px-6 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -560,7 +561,7 @@ export default async function BusinessPage() {
             <Empty>You haven&rsquo;t offered to mentor anyone yet.</Empty>
           </div>
         ) : (
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {mentorshipOffers.map((offer) => (
               <li key={offer.id} className="px-6 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">

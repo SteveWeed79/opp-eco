@@ -95,7 +95,7 @@ export function Combobox({
       </label>
       {hint && <p className="text-xs text-ink-500">{hint}</p>}
 
-      <div className="rounded-xl border border-ink-200 bg-white focus-within:ring-2 focus-within:ring-brand-500 px-2 py-2">
+      <div className="rounded-xl border border-line-strong bg-white focus-within:ring-2 focus-within:ring-brand-500 px-2 py-2">
         {value.length > 0 && (
           <ul className="flex flex-wrap gap-1.5 mb-2">
             {value.map((selected) => (
@@ -145,7 +145,7 @@ export function Combobox({
             <ul
               id={`${id}-listbox`}
               role="listbox"
-              className="absolute z-20 left-0 right-0 mt-2 bg-white border border-ink-200 rounded-xl shadow-lg overflow-hidden"
+              className="absolute z-20 left-0 right-0 mt-2 bg-white border border-line-strong rounded-card shadow-e4 overflow-hidden"
             >
               {matches.map((option, index) => (
                 <li
