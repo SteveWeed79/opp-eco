@@ -63,16 +63,31 @@ export function DataTable<Row>({
   }
 
   if (rows.length === 0) {
-    return <div className="px-6 py-10 text-center text-sm text-ink-500">{empty}</div>;
+    return (
+      <div className="px-6 py-8">
+        <div className="rounded-card border border-dashed border-line-strong bg-sunken/60 px-6 py-8 text-center text-sm text-ink-500">
+          {empty}
+        </div>
+      </div>
+    );
   }
 
-  const tones = { warn: "bg-warn-50/40", crit: "bg-crit-50/40" };
+  // A left rail rather than a wash across the whole row. The tint alone was
+  // too weak to survive next to the badges it sits beside, and strengthening
+  // it would have fought the status colours in the cells.
+  const tones = {
+    warn: "bg-warn-50/50 shadow-[inset_3px_0_0_var(--color-warn-600)]",
+    crit: "bg-crit-50/50 shadow-[inset_3px_0_0_var(--color-crit-600)]",
+  };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
+    // `scroll-x` fades the edge when a table is wider than its card, which is
+    // how the board's action column used to simply vanish mid-button.
+    <div className="scroll-x">
+      <table className="w-full border-separate border-spacing-0">
         {caption && <caption className="sr-only">{caption}</caption>}
-        <thead className="border-b border-ink-100">
+        {/* Sticky, so the column meanings survive a long queue. */}
+        <thead className="sticky top-0 z-10">
           <tr>
             {columns.map((column) => {
               const active = sort?.key === column.key;
@@ -84,7 +99,7 @@ export function DataTable<Row>({
                   aria-sort={
                     active ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined
                   }
-                  className={`py-3 px-4 text-xs font-extrabold text-ink-600 uppercase tracking-wider whitespace-nowrap ${
+                  className={`py-2.5 px-4 text-[0.7rem] font-extrabold text-ink-500 uppercase tracking-[0.1em] whitespace-nowrap bg-canvas/80 backdrop-blur-sm border-b border-line ${
                     column.align === "right" ? "text-right" : "text-left"
                   } ${column.secondary ? "hidden sm:table-cell" : ""}`}
                 >
@@ -113,15 +128,23 @@ export function DataTable<Row>({
             })}
           </tr>
         </thead>
-        <tbody className="divide-y divide-ink-100">
+        <tbody>
           {sorted.map((row) => {
             const tone = rowTone?.(row);
             return (
-              <tr key={rowKey(row)} className={tone ? tones[tone] : undefined}>
+              <tr
+                key={rowKey(row)}
+                // Hover is what makes a wide row scannable — it ties a name on
+                // the far left to an action on the far right, which is exactly
+                // the reach these tables ask for.
+                className={`transition-colors ${
+                  tone ? tones[tone] : "hover:bg-canvas/60"
+                }`}
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={`py-3.5 px-4 text-sm text-ink-700 ${
+                    className={`py-3.5 px-4 text-sm text-ink-700 border-b border-line/70 ${
                       column.align === "right" ? "text-right" : ""
                     } ${column.secondary ? "hidden sm:table-cell" : ""}`}
                   >

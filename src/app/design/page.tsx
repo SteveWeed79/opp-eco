@@ -19,7 +19,7 @@ export const metadata: Metadata = {
  */
 export default function DesignPage() {
   return (
-    <div className="max-w-6xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-6xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         eyebrow="Internal reference"
         title="Component library"

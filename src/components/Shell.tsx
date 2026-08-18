@@ -79,14 +79,17 @@ export function Shell({
     <ToastProvider>
       <div
         style={themed ? (theme.variables as React.CSSProperties) : undefined}
-        className="min-h-screen bg-ink-50 text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
+        className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
       >
         <DemoNotice />
-        <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-brand-100">
+        {/* A shadow rather than only a hairline: the header has to read as
+            floating above the page it is pinned over, or a card scrolling
+            under it looks like it is passing through it. */}
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-line shadow-[0_1px_3px_rgb(15_23_42/0.04),0_8px_24px_-12px_rgb(15_23_42/0.12)]">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <Link href="/" className="flex items-center gap-3 group shrink-0">
               <span
-                className={`w-10 h-10 rounded-xl bg-brand-700 text-white flex items-center justify-center font-bold shadow-md shadow-brand-700/30 group-hover:bg-ink-950 transition-colors overflow-hidden ${markTextSize(
+                className={`w-10 h-10 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_2px_6px_-1px_rgb(3_105_161/0.5)] group-hover:from-ink-700 group-hover:to-ink-950 transition-all overflow-hidden ${markTextSize(
                   themed ? theme.monogram : brand.monogram,
                 )}`}
                 style={
@@ -124,7 +127,11 @@ export function Shell({
 
             <nav
               aria-label="Demo portal switcher"
-              className="hidden lg:flex items-center gap-1 bg-ink-100 p-1 rounded-full border border-ink-200"
+              // A recessed track with a raised pill riding in it, rather than
+              // a flat grey bar — the segmented control is the one place a
+              // sunken surface genuinely helps, because it explains why the
+              // active item looks like it is sitting on top.
+              className="hidden lg:flex items-center gap-1 bg-canvas-deep p-1 rounded-full border border-line shadow-inset"
             >
               {PORTALS.map((portal) => {
                 const Icon = portal.icon;
@@ -154,12 +161,12 @@ export function Shell({
                     key={portal.role}
                     href={portal.href}
                     aria-current={isActive ? "page" : undefined}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       isActive
                         ? portal.role === "admin"
-                          ? "bg-ink-950 text-white shadow-sm"
-                          : "bg-brand-700 text-white shadow-sm"
-                        : "text-ink-600 hover:text-ink-950"
+                          ? "bg-gradient-to-b from-ink-700 to-ink-950 text-white shadow-[0_1px_0_rgb(255_255_255/0.14)_inset,0_1px_3px_rgb(15_23_42/0.3)]"
+                          : "bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-[0_1px_0_rgb(255_255_255/0.18)_inset,0_1px_3px_rgb(3_105_161/0.4)]"
+                        : "text-ink-600 hover:text-ink-950 hover:bg-white/70"
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5" aria-hidden="true" />
@@ -193,7 +200,7 @@ export function Shell({
                 <form action={signOut}>
                   <button
                     type="submit"
-                    className="border border-ink-200 text-ink-700 px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-ink-50 transition-colors flex items-center gap-2"
+                    className="bg-surface border border-line-strong text-ink-700 px-4 py-2.5 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all flex items-center gap-2"
                   >
                     <LogOut className="w-4 h-4" aria-hidden="true" />
                     Sign out
@@ -204,7 +211,7 @@ export function Shell({
               <button
                 type="button"
                 onClick={() => setSignOnOpen(true)}
-                className="bg-ink-950 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-brand-700 transition-colors flex items-center gap-2 shrink-0"
+                className="bg-gradient-to-b from-ink-700 to-ink-950 text-white px-4 py-2.5 rounded-card font-semibold text-sm shadow-[0_1px_0_rgb(255_255_255/0.14)_inset,0_2px_6px_-1px_rgb(2_6_23/0.4)] hover:from-brand-600 hover:to-brand-700 active:translate-y-px transition-all flex items-center gap-2 shrink-0"
               >
                 <Lock className="w-4 h-4 text-brand-400" aria-hidden="true" />
                 Sign on
@@ -225,7 +232,7 @@ export function Shell({
           )}
 
           {/* Small screens get the switcher as a scrolling row rather than losing it */}
-          <div className="lg:hidden border-t border-ink-100 overflow-x-auto">
+          <div className="lg:hidden border-t border-line overflow-x-auto">
             <div className="flex gap-1 px-4 py-2 min-w-max">
               {PORTALS.map((portal) => {
                 const isActive = active?.role === portal.role;
@@ -259,7 +266,11 @@ export function Shell({
           </div>
         </header>
 
-        <main className="pb-20 flex-1">{children}</main>
+        {/* Bottom padding belongs to each page, not to the frame. A blanket
+            `pb-20` here left a dead band of canvas under the landing page,
+            whose last section is a full-bleed white one and needs to meet the
+            footer directly. */}
+        <main className="flex-1">{children}</main>
 
         <DemoFooter />
 
@@ -295,8 +306,12 @@ function markTextSize(monogram: string): string {
 function DemoNotice() {
   return (
     <div className="bg-ink-950 text-white">
-      <p className="max-w-7xl mx-auto px-6 py-2 text-xs sm:text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="font-bold uppercase tracking-widest text-brand-400">
+      <p className="max-w-7xl mx-auto px-6 py-2 text-xs sm:text-sm flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-400/15 px-2.5 py-0.5 font-bold uppercase tracking-widest text-brand-400 ring-1 ring-inset ring-brand-400/25">
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-1.5 rounded-full bg-brand-400"
+          />
           Demonstration
         </span>
         <span className="text-ink-400">
@@ -311,9 +326,13 @@ function DemoNotice() {
 
 function DemoFooter() {
   return (
-    <footer className="border-t border-ink-200 bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-8 text-sm text-ink-500 space-y-2">
-        <p className="font-bold text-ink-950">
+    <footer className="border-t border-line bg-surface">
+      <div className="max-w-7xl mx-auto px-6 py-10 text-sm text-ink-500 space-y-2.5">
+        <p className="font-bold text-ink-950 flex items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className="h-4 w-1 rounded-full bg-brand-600"
+          />
           {brand.name} — demonstration prototype
         </p>
         <p className="max-w-3xl">

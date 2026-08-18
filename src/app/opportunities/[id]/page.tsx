@@ -111,7 +111,7 @@ export default async function OpportunityPage({
     : false;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 pt-8 space-y-6">
+    <div className="max-w-4xl mx-auto px-6 pt-8 pb-16 space-y-6">
       <Link
         href={actor.membership.role === "business" ? "/business" : "/student"}
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-ink-950 transition-colors"

@@ -21,6 +21,7 @@ import {
   ProgressBar,
   Stat,
   StatusBadge,
+  ToneCard,
   TrackBadge,
 } from "@/components/ui";
 import { repositories, organizationName } from "@/data/memory";
@@ -108,7 +109,7 @@ export default async function StudentPage() {
   const mentors = repositories.mentorshipOffers.openInMarket(actor);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         eyebrow="Student portal"
         title={`Welcome back, ${student.name.split(" ")[0]}`}
@@ -142,13 +143,13 @@ export default async function StudentPage() {
       {/* The pause — surfaced the instant it opens, with slots inline        */}
       {/* ------------------------------------------------------------------ */}
       {needsAction.length > 0 && (
-        <Card className="border-warn-100 ring-1 ring-warn-100">
+        <ToneCard tone="warn" elevation="floating">
           <CardHeader
             icon={<CalendarClock className="w-5 h-5 text-warn-600" />}
             title="Needs you"
             subtitle="These stop moving until you act"
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {needsAction.map((application) => {
               const posting = repositories.postings.find(actor, application.postingId)!;
               const days = daysInStatus(application, DEMO_NOW);
@@ -206,7 +207,7 @@ export default async function StudentPage() {
               );
             })}
           </ul>
-        </Card>
+        </ToneCard>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -227,7 +228,7 @@ export default async function StudentPage() {
             {applications.length === 0 ? (
               <Empty>Nothing in flight. Browse opportunities to get started.</Empty>
             ) : (
-              <ul className="divide-y divide-ink-100">
+              <ul className="row-list divide-y divide-line">
                 {applications.map((application) => {
                   const posting = repositories.postings.find(
                     actor,
@@ -402,7 +403,7 @@ export default async function StudentPage() {
               title="Recommended for you"
               subtitle="Match scores sort your list — they never hide anything from an employer"
             />
-            <ul className="divide-y divide-ink-100">
+            <ul className="row-list divide-y divide-line">
               {recommended.map(({ posting, score }) => (
                 <li key={posting.id} className="px-6 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -492,7 +493,7 @@ export default async function StudentPage() {
                 title="Mentors in your market"
                 subtitle="Employers offering time — no application, no credit"
               />
-              <ul className="divide-y divide-ink-100">
+              <ul className="row-list divide-y divide-line">
                 {mentors.map((offer) => (
                   <li key={offer.id} className="px-6 py-4">
                     <p className="font-semibold text-sm text-ink-950">

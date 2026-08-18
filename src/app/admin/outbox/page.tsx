@@ -40,7 +40,7 @@ export default async function OutboxPage() {
   const sent = delivered.filter((n) => n.state === "sent");
 
   return (
-    <div className="max-w-5xl mx-auto px-6 pt-8 space-y-6">
+    <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 space-y-6">
       <Link
         href="/admin"
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-600 hover:text-ink-950"
@@ -112,7 +112,7 @@ export default async function OutboxPage() {
             title="Undelivered"
             subtitle="Each of these is a person who does not know what they need to know"
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {failed.map((notification, index) => (
               <li key={`${notification.at}-${index}`} className="px-6 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -148,7 +148,7 @@ export default async function OutboxPage() {
             title="Queued"
             subtitle="Committed but not yet sent — these drain on the next transition"
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {pending.map((intent, index) => (
               <li
                 key={`${intent.kind}-${index}`}
@@ -186,7 +186,7 @@ export default async function OutboxPage() {
                   <Th>Kind</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody className="row-list divide-y divide-line">
                 {sent.map((notification, index) => (
                   <tr key={`${notification.at}-${index}`}>
                     <Td className="whitespace-nowrap text-xs text-ink-500 tabular">
