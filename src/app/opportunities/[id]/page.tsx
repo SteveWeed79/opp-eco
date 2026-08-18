@@ -12,7 +12,8 @@ import {
   PostingStatusBadge,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { viewerActor } from "@/auth/session";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { canApply } from "@/domain/lifecycle";
@@ -44,10 +45,13 @@ import { ApplyButton } from "@/app/student/ApplyButton";
  * guessing its id. Nothing exposed that before, because until this page there
  * was no way to address a posting by id at all.
  */
-function visiblePosting(actor: ActorContext, id: string): Posting | null {
+async function visiblePosting(
+  actor: ActorContext,
+  id: string,
+): Promise<Posting | null> {
   // Published postings are the market's shopfront and every role in the market
   // may read one, including a business looking at a competitor's.
-  const published = repositories.postings.published(actor).find((p) => p.id === id);
+  const published = (await repositories.postings.published(actor)).find((p) => p.id === id);
   if (published) return published;
 
   // Work in progress is visible only to the parties with a reason to see it:
@@ -57,7 +61,7 @@ function visiblePosting(actor: ActorContext, id: string): Posting | null {
   const { role, organizationId } = actor.membership;
   if (role !== "business" && role !== "college" && role !== "admin") return null;
 
-  const posting = repositories.postings.find(actor, id);
+  const posting = await repositories.postings.find(actor, id);
   if (!posting) return null;
   // `find` already restricts a business to its own; re-asserted because this
   // is the line that would matter if that ever widened.
@@ -73,14 +77,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const actor = await viewerActor();
-  const posting = visiblePosting(actor, id);
+  const posting = await visiblePosting(actor, id);
+  if (!posting) return { title: pageTitle("Opportunity") };
 
   // A forwarded link's preview is often all the context a second-hand reader
   // gets, so it names the role and the employer rather than the product.
+  const { organizationName } = await nameLookups(actor);
   return {
-    title: posting
-      ? pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`)
-      : pageTitle("Opportunity"),
+    title: pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`),
   };
 }
 
@@ -91,23 +95,24 @@ export default async function OpportunityPage({
 }) {
   const { id } = await params;
   const actor = await viewerActor();
-  const posting = visiblePosting(actor, id);
+  const posting = await visiblePosting(actor, id);
   if (!posting) notFound();
+  const { organizationName } = await nameLookups(actor);
 
-  const college = repositories.organizations
-    .list(actor, { kind: "college" })
-    .find((o) => o.marketId === posting.marketId);
+  const college = (
+    await repositories.organizations.list(actor, { kind: "college" })
+  ).find((o) => o.marketId === posting.marketId);
   const hoursPerCredit = college?.hoursPerCredit ?? 45;
   const totalHours = postingTotalHours(posting);
 
   const student =
     actor.membership.role === "student"
-      ? repositories.students.forUser(actor, actor.user.id)
+      ? await repositories.students.forUser(actor, actor.user.id)
       : null;
   const alreadyApplied = student
-    ? repositories.applications
-        .forStudent(actor, student.id)
-        .some((a) => a.postingId === posting.id)
+    ? (await repositories.applications.forStudent(actor, student.id)).some(
+        (a) => a.postingId === posting.id,
+      )
     : false;
 
   return (

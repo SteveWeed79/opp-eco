@@ -35,43 +35,43 @@ const HTML_BYTES = new TextEncoder().encode("<script>alert(1)</script>");
 // --- filenames -------------------------------------------------------------
 
 describe("filename sanitisation", () => {
-  it("keeps an ordinary name", () => {
+  it("keeps an ordinary name", async () => {
     expect(sanitiseFilename("Omar_Haddad_Resume.pdf")).toBe("Omar_Haddad_Resume.pdf");
   });
 
-  it("strips a traversal path", () => {
+  it("strips a traversal path", async () => {
     expect(sanitiseFilename("../../../etc/passwd")).toBe("passwd");
   });
 
-  it("strips a Windows traversal path", () => {
+  it("strips a Windows traversal path", async () => {
     expect(sanitiseFilename("..\\..\\Windows\\System32\\cmd.exe")).toBe("cmd.exe");
   });
 
-  it("rejects a null byte, which can truncate the name downstream", () => {
+  it("rejects a null byte, which can truncate the name downstream", async () => {
     // "safe.pdf\0.exe" passes an extension check and lands as an executable.
     expect(sanitiseFilename("safe.pdf\0.exe")).toBeNull();
   });
 
-  it("rejects a name that is only dots", () => {
+  it("rejects a name that is only dots", async () => {
     expect(sanitiseFilename("..")).toBeNull();
     expect(sanitiseFilename(".")).toBeNull();
   });
 
-  it("rejects a Windows reserved name", () => {
+  it("rejects a Windows reserved name", async () => {
     expect(sanitiseFilename("CON.pdf")).toBeNull();
     expect(sanitiseFilename("lpt1.docx")).toBeNull();
   });
 
-  it("rejects an absurdly long name", () => {
+  it("rejects an absurdly long name", async () => {
     expect(sanitiseFilename("a".repeat(500) + ".pdf")).toBeNull();
   });
 
-  it("strips characters that mean something to a shell or a header", () => {
+  it("strips characters that mean something to a shell or a header", async () => {
     const cleaned = sanitiseFilename('re"su|me?.pdf');
     expect(cleaned).not.toMatch(/["|?]/);
   });
 
-  it("strips control characters", () => {
+  it("strips control characters", async () => {
     expect(sanitiseFilename("resume\r\n.pdf")).toBe("resume.pdf");
   });
 });
@@ -79,71 +79,71 @@ describe("filename sanitisation", () => {
 // --- content validation ----------------------------------------------------
 
 describe("content validation", () => {
-  it("accepts a genuine PDF named .pdf", () => {
+  it("accepts a genuine PDF named .pdf", async () => {
     const result = checkUpload("resume", "resume.pdf", PDF_BYTES);
     expect(result.ok).toBe(true);
     expect(result.kind).toBe("PDF");
   });
 
-  it("rejects an executable renamed to .pdf", () => {
+  it("rejects an executable renamed to .pdf", async () => {
     // The whole point: the extension is attacker-controlled, the bytes are not.
     const result = checkUpload("resume", "resume.pdf", EXE_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("content_mismatch");
   });
 
-  it("rejects an ELF binary renamed to .docx", () => {
+  it("rejects an ELF binary renamed to .docx", async () => {
     const result = checkUpload("resume", "cv.docx", ELF_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("content_mismatch");
   });
 
-  it("rejects HTML renamed to .pdf", () => {
+  it("rejects HTML renamed to .pdf", async () => {
     // Served inline this would be stored XSS.
     const result = checkUpload("resume", "resume.pdf", HTML_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("content_mismatch");
   });
 
-  it("rejects .svg outright, since it is executable in a browser", () => {
+  it("rejects .svg outright, since it is executable in a browser", async () => {
     const result = checkUpload("deliverable", "mockup.svg", PNG_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("extension_not_allowed");
   });
 
-  it("rejects .html outright", () => {
+  it("rejects .html outright", async () => {
     const result = checkUpload("deliverable", "report.html", HTML_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("extension_not_allowed");
   });
 
-  it("rejects an image on the resume purpose", () => {
+  it("rejects an image on the resume purpose", async () => {
     // Allowlists are per purpose, not global.
     const result = checkUpload("resume", "photo.png", PNG_BYTES);
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("extension_not_allowed");
   });
 
-  it("accepts the same image as a deliverable", () => {
+  it("accepts the same image as a deliverable", async () => {
     expect(checkUpload("deliverable", "mockup.png", PNG_BYTES).ok).toBe(true);
   });
 
-  it("rejects an empty file", () => {
+  it("rejects an empty file", async () => {
     expect(checkUpload("resume", "resume.pdf", new Uint8Array()).reason).toBe("empty");
   });
 
-  it("rejects a file over the purpose's size limit", () => {
+  it("rejects a file over the purpose's size limit", async () => {
     const huge = new Uint8Array(6 * 1024 * 1024);
     huge.set(PDF_BYTES);
     expect(checkUpload("resume", "resume.pdf", huge).reason).toBe("too_large");
   });
 
-  it("checks size before reading content, so a hostile body is cheap to refuse", () => {
+  it("checks size before reading content, so a hostile body is cheap to refuse", async () => {
     const huge = new Uint8Array(6 * 1024 * 1024); // no magic bytes at all
     expect(checkUpload("resume", "resume.pdf", huge).reason).toBe("too_large");
   });
 
-  it("treats a .docx as a zip, which is all its signature proves", () => {
+  it("treats a .docx as a zip, which is all its signature proves", async () => {
     // Documented limitation rather than a gap: nothing is served inline.
     expect(checkUpload("resume", "cv.docx", ZIP_BYTES).ok).toBe(true);
   });
@@ -192,7 +192,7 @@ describe("storage keys", () => {
 // --- signed URLs -----------------------------------------------------------
 
 describe("signed URLs", () => {
-  it("verifies a freshly signed URL", () => {
+  it("verifies a freshly signed URL", async () => {
     const url = signDownloadUrl("key-1");
     const params = new URL(url, "http://x").searchParams;
     expect(
@@ -200,14 +200,14 @@ describe("signed URLs", () => {
     ).toBe(true);
   });
 
-  it("refuses a signature for a different key", () => {
+  it("refuses a signature for a different key", async () => {
     const url = signDownloadUrl("key-1");
     const params = new URL(url, "http://x").searchParams;
     const result = verifyDownloadUrl("key-2", params.get("expires"), params.get("sig"));
     expect(result.ok).toBe(false);
   });
 
-  it("refuses a tampered expiry", () => {
+  it("refuses a tampered expiry", async () => {
     const url = signDownloadUrl("key-1");
     const params = new URL(url, "http://x").searchParams;
     // Extending your own link should not work.
@@ -215,7 +215,7 @@ describe("signed URLs", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("refuses an expired URL", () => {
+  it("refuses an expired URL", async () => {
     const url = signDownloadUrl("key-1", -10);
     const params = new URL(url, "http://x").searchParams;
     expect(verifyDownloadUrl("key-1", params.get("expires"), params.get("sig"))).toEqual({
@@ -224,11 +224,11 @@ describe("signed URLs", () => {
     });
   });
 
-  it("refuses a missing signature", () => {
+  it("refuses a missing signature", async () => {
     expect(verifyDownloadUrl("key-1", "9999999999", null).ok).toBe(false);
   });
 
-  it("refuses a non-numeric expiry without throwing", () => {
+  it("refuses a non-numeric expiry without throwing", async () => {
     expect(verifyDownloadUrl("key-1", "not-a-number", "abc").ok).toBe(false);
   });
 });
@@ -248,30 +248,30 @@ describe("download headers", () => {
     scan: "clean",
   };
 
-  it("always serves as an attachment, never inline", () => {
+  it("always serves as an attachment, never inline", async () => {
     expect(downloadHeaders(meta)["Content-Disposition"]).toMatch(/^attachment;/);
   });
 
-  it("stops the browser sniffing a type", () => {
+  it("stops the browser sniffing a type", async () => {
     expect(downloadHeaders(meta)["X-Content-Type-Options"]).toBe("nosniff");
   });
 
-  it("sandboxes anything that does get rendered", () => {
+  it("sandboxes anything that does get rendered", async () => {
     expect(downloadHeaders(meta)["Content-Security-Policy"]).toContain("sandbox");
   });
 
-  it("keeps education records out of shared caches", () => {
+  it("keeps education records out of shared caches", async () => {
     expect(downloadHeaders(meta)["Cache-Control"]).toContain("no-store");
   });
 
-  it("neutralises a filename that would break the header", () => {
+  it("neutralises a filename that would break the header", async () => {
     const hostile = { ...meta, filename: 'evil".pdf' };
     const disposition = downloadHeaders(hostile)["Content-Disposition"];
     // The quoted segment must not contain a bare quote that ends it early.
     expect(disposition.split(";")[1]).not.toContain('evil".pdf');
   });
 
-  it("falls back to a type no browser will execute", () => {
+  it("falls back to a type no browser will execute", async () => {
     expect(contentTypeFor(".weird")).toBe("application/octet-stream");
   });
 });
@@ -345,45 +345,45 @@ describe("retrieval authorization", () => {
     scan: "clean",
   };
 
-  it("refuses an unscanned file to everyone, including an administrator", () => {
+  it("refuses an unscanned file to everyone, including an administrator", async () => {
     const pending = { ...clean, scan: "pending" as const };
-    const result = canRetrieve(contextFor("admin"), pending, { key: "k", studentId: "stu-omar" });
+    const result = await canRetrieve(contextFor("admin"), pending, { key: "k", studentId: "stu-omar" });
     expect(result).toEqual({ ok: false, reason: "quarantined" });
   });
 
-  it("lets a student open their own file", () => {
+  it("lets a student open their own file", async () => {
     expect(
-      canRetrieve(contextFor("student"), clean, { key: "k", studentId: "stu-omar" }).ok,
+      (await canRetrieve(contextFor("student"), clean, { key: "k", studentId: "stu-omar" })).ok,
     ).toBe(true);
   });
 
-  it("refuses a student someone else's file", () => {
+  it("refuses a student someone else's file", async () => {
     expect(
-      canRetrieve(contextFor("student"), clean, { key: "k", studentId: "stu-jordan" }).ok,
+      (await canRetrieve(contextFor("student"), clean, { key: "k", studentId: "stu-jordan" })).ok,
     ).toBe(false);
   });
 
-  it("lets the college open it, since it owns the relationship", () => {
+  it("lets the college open it, since it owns the relationship", async () => {
     expect(
-      canRetrieve(contextFor("college"), clean, { key: "k", studentId: "stu-omar" }).ok,
+      (await canRetrieve(contextFor("college"), clean, { key: "k", studentId: "stu-omar" })).ok,
     ).toBe(true);
   });
 
-  it("refuses the board, which has no workflow reason to read a resume", () => {
+  it("refuses the board, which has no workflow reason to read a resume", async () => {
     expect(
-      canRetrieve(contextFor("board"), clean, { key: "k", studentId: "stu-omar" }).ok,
+      (await canRetrieve(contextFor("board"), clean, { key: "k", studentId: "stu-omar" })).ok,
     ).toBe(false);
   });
 
-  it("refuses a business with no application attachment", () => {
+  it("refuses a business with no application attachment", async () => {
     expect(
-      canRetrieve(contextFor("business"), clean, { key: "k", studentId: "stu-omar" }).ok,
+      (await canRetrieve(contextFor("business"), clean, { key: "k", studentId: "stu-omar" })).ok,
     ).toBe(false);
   });
 
-  it("refuses a business before the placement releases the student's details", () => {
+  it("refuses a business before the placement releases the student's details", async () => {
     // app-11 is shortlisted — the stage at which a surname is still withheld.
-    const result = canRetrieve(contextFor("business"), clean, {
+    const result = await canRetrieve(contextFor("business"), clean, {
       key: "k",
       studentId: "stu-omar",
       applicationId: "app-11",
@@ -391,8 +391,8 @@ describe("retrieval authorization", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("refuses a business an application it does not own", () => {
-    const result = canRetrieve(contextFor("business"), clean, {
+  it("refuses a business an application it does not own", async () => {
+    const result = await canRetrieve(contextFor("business"), clean, {
       key: "k",
       studentId: "stu-priya",
       applicationId: "app-2",
@@ -402,16 +402,16 @@ describe("retrieval authorization", () => {
 });
 
 describe("extension parsing", () => {
-  it("takes the last extension, not the first", () => {
+  it("takes the last extension, not the first", async () => {
     // "resume.pdf.exe" is .exe, whatever it hopes you read.
     expect(extensionOf("resume.pdf.exe")).toBe(".exe");
   });
 
-  it("is case-insensitive", () => {
+  it("is case-insensitive", async () => {
     expect(extensionOf("RESUME.PDF")).toBe(".pdf");
   });
 
-  it("returns empty for no extension", () => {
+  it("returns empty for no extension", async () => {
     expect(extensionOf("resume")).toBe("");
   });
 });

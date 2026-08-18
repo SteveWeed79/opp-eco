@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { logHours, reviewHours, reviewQueue } from "./timesheet";
 import { contextFor } from "@/data/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { timesheetTotals } from "@/domain/timesheet";
 import * as seed from "@/data/seed";
 import { pendingNotifications } from "@/data/memory-store";
@@ -23,7 +23,7 @@ let snapshot: {
   applications: string[];
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   for (const id of added) {
     const i = seed.timeEntries.findIndex((e) => e.id === id);
     if (i !== -1) seed.timeEntries.splice(i, 1);
@@ -355,29 +355,29 @@ describe("the cache never drifts from the entries", () => {
 
 describe("who can see what", () => {
   it("shows the employer only the placements they supervise", async () => {
-    const mine = repositories.timeEntries.awaitingReview(business());
+    const mine = await repositories.timeEntries.awaitingReview(business());
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((e) => e.businessId === "org-apex")).toBe(true);
   });
 
   it("shows a student only their own weeks", async () => {
-    const mine = repositories.timeEntries.forStudent(student(), "stu-alex");
+    const mine = await repositories.timeEntries.forStudent(student(), "stu-alex");
     // Alex has a seeded timesheet; Omar must not be able to read it.
     expect(mine).toEqual([]);
   });
 
-  it("gives the college the work summaries, because it awards credit for them", () => {
-    const entries = repositories.timeEntries.forApplication(college(), "app-1");
+  it("gives the college the work summaries, because it awards credit for them", async () => {
+    const entries = await repositories.timeEntries.forApplication(college(), "app-1");
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.summary.length > 0)).toBe(true);
   });
 
-  it("gives the board the hours but not the summaries", () => {
+  it("gives the board the hours but not the summaries", async () => {
     // The board validates a reimbursement claim against an hour cap. That
     // arithmetic does not take a description of what the student built, and
     // holding one invites retention and open-records questions it would
     // rather not answer.
-    const entries = repositories.timeEntries.forApplication(board(), "app-1");
+    const entries = await repositories.timeEntries.forApplication(board(), "app-1");
 
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.every((e) => e.hours > 0)).toBe(true);
@@ -385,11 +385,11 @@ describe("who can see what", () => {
     expect(entries.every((e) => e.reviewNote === undefined)).toBe(true);
   });
 
-  it("withholds the summary from the board on a rejected week too", () => {
+  it("withholds the summary from the board on a rejected week too", async () => {
     // The review note is where a supervisor writes free text about a student's
     // conduct, which is the most sensitive field on the row.
-    const rejected = repositories.timeEntries
-      .forApplication(board(), "app-1")
+    const rejected = (await repositories.timeEntries
+      .forApplication(board(), "app-1"))
       .filter((e) => e.status === "rejected");
 
     expect(rejected.length).toBeGreaterThan(0);
@@ -398,8 +398,8 @@ describe("who can see what", () => {
 });
 
 describe("the employer's queue", () => {
-  it("joins each week to what it is against", () => {
-    const queue = reviewQueue(business());
+  it("joins each week to what it is against", async () => {
+    const queue = await reviewQueue(business());
 
     expect(queue.length).toBeGreaterThan(0);
     for (const item of queue) {
@@ -409,8 +409,8 @@ describe("the employer's queue", () => {
     }
   });
 
-  it("puts the week someone has waited longest on first", () => {
-    const weeks = reviewQueue(business()).map((i) => i.entry.weekStarting);
+  it("puts the week someone has waited longest on first", async () => {
+    const weeks = (await reviewQueue(business())).map((i) => i.entry.weekStarting);
     expect(weeks).toEqual([...weeks].sort());
   });
 });

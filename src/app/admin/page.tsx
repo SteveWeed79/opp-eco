@@ -25,7 +25,8 @@ import {
   TableWrap,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { organizationMachine } from "@/domain/lifecycle";
 import { organizationLifecycle } from "@/app/_actions/lifecycle";
 import {
@@ -66,13 +67,20 @@ const STAGE_LABEL: Record<MarketStage, string> = {
 
 export default async function AdminPage() {
   const admin = await actorForPortal("admin");
-  const health = allMarketHealth(admin);
-  const stalled = stalledApplications(admin);
-  const pendingOrgs = repositories.organizations.pendingVetting(admin);
-  const stages = funnel(admin);
+  const { organizationName } = await nameLookups(admin);
+  // Independent of one another, so resolved together rather than in a queue
+  // of six sequential round trips.
+  const [health, stalled, pendingOrgs, stages, deployed, pauseDays] =
+    await Promise.all([
+      allMarketHealth(admin),
+      stalledApplications(admin),
+      await repositories.organizations.pendingVetting(admin),
+      funnel(admin),
+      subsidyDeployed(admin),
+      averagePauseDays(admin),
+    ]);
   const liveMarkets = health.filter((h) => h.market.stage === "live");
   const totalBudget = liveMarkets.reduce((s, h) => s + h.market.subsidyBudget, 0);
-  const deployed = subsidyDeployed(admin);
   const inPause = stalled.filter((s) => s.inPause).length;
 
   return (
@@ -366,7 +374,7 @@ export default async function AdminPage() {
             level={3}
             icon={<TrendingUp className="w-5 h-5" />}
             title="Funnel"
-            subtitle={`Applications in the pause have been waiting ${averagePauseDays(admin)} days on average`}
+            subtitle={`Applications in the pause have been waiting ${pauseDays} days on average`}
           />
           <div className="px-6 py-5 space-y-3">
             {stages.map((stage, i) => {

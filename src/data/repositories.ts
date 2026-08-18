@@ -26,20 +26,20 @@ import type {
 } from "@/domain/types";
 
 export interface MarketRepository {
-  list(actor: ActorContext): Market[];
-  find(actor: ActorContext, id: string): Market | null;
+  list(actor: ActorContext): Promise<Market[]>;
+  find(actor: ActorContext, id: string): Promise<Market | null>;
 }
 
 export interface OrganizationRepository {
-  list(actor: ActorContext, filter?: { kind?: Organization["kind"] }): Organization[];
-  find(actor: ActorContext, id: string): Organization | null;
-  pendingVetting(actor: ActorContext): Organization[];
+  list(actor: ActorContext, filter?: { kind?: Organization["kind"] }): Promise<Organization[]>;
+  find(actor: ActorContext, id: string): Promise<Organization | null>;
+  pendingVetting(actor: ActorContext): Promise<Organization[]>;
 }
 
 export interface StudentRepository {
-  list(actor: ActorContext): Student[];
-  find(actor: ActorContext, id: string): Student | null;
-  pendingVerification(actor: ActorContext): Student[];
+  list(actor: ActorContext): Promise<Student[]>;
+  find(actor: ActorContext, id: string): Promise<Student | null>;
+  pendingVerification(actor: ActorContext): Promise<Student[]>;
   /**
    * The student record behind a signed-in user, scoped like everything else.
    *
@@ -47,20 +47,20 @@ export interface StudentRepository {
    * question, not something a call site should answer by reaching into the
    * fixtures and filtering by `userId`.
    */
-  forUser(actor: ActorContext, userId: string): Student | null;
+  forUser(actor: ActorContext, userId: string): Promise<Student | null>;
   /**
    * The student behind an application, redacted to what the actor's
    * relationship at this stage permits. Businesses must use this rather than
    * `find`, so withheld fields never reach the page at all.
    */
-  forApplication(actor: ActorContext, application: Application): Student | null;
+  forApplication(actor: ActorContext, application: Application): Promise<Student | null>;
 }
 
 export interface PostingRepository {
-  list(actor: ActorContext, filter?: { status?: Posting["status"] }): Posting[];
-  find(actor: ActorContext, id: string): Posting | null;
-  published(actor: ActorContext): Posting[];
-  awaitingCollegeHelp(actor: ActorContext): Posting[];
+  list(actor: ActorContext, filter?: { status?: Posting["status"] }): Promise<Posting[]>;
+  find(actor: ActorContext, id: string): Promise<Posting | null>;
+  published(actor: ActorContext): Promise<Posting[]>;
+  awaitingCollegeHelp(actor: ActorContext): Promise<Posting[]>;
 }
 
 /**
@@ -72,21 +72,21 @@ export interface PostingRepository {
  * offer made to nobody.
  */
 export interface MentorshipOfferRepository {
-  list(actor: ActorContext): MentorshipOffer[];
-  find(actor: ActorContext, id: string): MentorshipOffer | null;
-  openInMarket(actor: ActorContext): MentorshipOffer[];
+  list(actor: ActorContext): Promise<MentorshipOffer[]>;
+  find(actor: ActorContext, id: string): Promise<MentorshipOffer | null>;
+  openInMarket(actor: ActorContext): Promise<MentorshipOffer[]>;
 }
 
 export interface ApplicationRepository {
-  list(actor: ActorContext): Application[];
-  find(actor: ActorContext, id: string): Application | null;
-  forStudent(actor: ActorContext, studentId: string): Application[];
-  forPosting(actor: ActorContext, postingId: string): Application[];
+  list(actor: ActorContext): Promise<Application[]>;
+  find(actor: ActorContext, id: string): Promise<Application | null>;
+  forStudent(actor: ActorContext, studentId: string): Promise<Application[]>;
+  forPosting(actor: ActorContext, postingId: string): Promise<Application[]>;
 }
 
 export interface InterviewSlotRepository {
-  list(actor: ActorContext): InterviewSlot[];
-  open(actor: ActorContext): InterviewSlot[];
+  list(actor: ActorContext): Promise<InterviewSlot[]>;
+  open(actor: ActorContext): Promise<InterviewSlot[]>;
 }
 
 /**
@@ -100,24 +100,24 @@ export interface InterviewSlotRepository {
  * `redactTimeEntry`.
  */
 export interface TimeEntryRepository {
-  find(actor: ActorContext, id: string): TimeEntry | null;
-  forApplication(actor: ActorContext, applicationId: string): TimeEntry[];
-  forStudent(actor: ActorContext, studentId: string): TimeEntry[];
+  find(actor: ActorContext, id: string): Promise<TimeEntry | null>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<TimeEntry[]>;
+  forStudent(actor: ActorContext, studentId: string): Promise<TimeEntry[]>;
   /** The employer's queue: weeks submitted and not yet signed off. */
-  awaitingReview(actor: ActorContext): TimeEntry[];
+  awaitingReview(actor: ActorContext): Promise<TimeEntry[]>;
 }
 
 export interface CreditAwardRepository {
-  list(actor: ActorContext): CreditAward[];
-  forStudent(actor: ActorContext, studentId: string): CreditAward[];
+  list(actor: ActorContext): Promise<CreditAward[]>;
+  forStudent(actor: ActorContext, studentId: string): Promise<CreditAward[]>;
 }
 
 export interface AuditEventRepository {
-  list(actor: ActorContext, filter?: { entityId?: string }): AuditEvent[];
+  list(actor: ActorContext, filter?: { entityId?: string }): Promise<AuditEvent[]>;
 }
 
 export interface UserRepository {
-  find(id: string): User | null;
+  find(id: string): Promise<User | null>;
 }
 
 export interface Repositories {

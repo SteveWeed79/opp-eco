@@ -142,7 +142,7 @@ async function drain(): Promise<{ sent: number; failed: number }> {
       for (const failure of result.failed) {
         // The channel says whether a retry could ever work — a reserved-domain
         // address never will, and the whole seed uses reserved domains.
-        recordFailure(
+        await recordFailure(
           failure.intent,
           failure.permanent ? "undeliverable" : "failed",
           failure.error,
@@ -155,12 +155,12 @@ async function drain(): Promise<{ sent: number; failed: number }> {
       for (const dead of result.undeliverable) {
         // Not requeued: an unknown template or a missing recipient will never
         // succeed on a retry, and a poison message would block the queue.
-        recordFailure(dead, "undeliverable", "No template or unknown recipient");
+        await recordFailure(dead, "undeliverable", "No template or unknown recipient");
         logger.warn("notification.undeliverable", { kind: dead.kind });
       }
     } catch (error) {
       failed += 1;
-      recordFailure(
+      await recordFailure(
         intent,
         "failed",
         error instanceof Error ? error.message : String(error),
@@ -175,8 +175,12 @@ async function drain(): Promise<{ sent: number; failed: number }> {
   return { sent, failed };
 }
 
-function recordFailure(intent: NotificationIntent, state: DeliveryState, error: string) {
-  const rendered = render(intent);
+async function recordFailure(
+  intent: NotificationIntent,
+  state: DeliveryState,
+  error: string,
+) {
+  const rendered = await render(intent);
   record({
     recipientUserId: intent.recipientUserId,
     recipientEmail: rendered?.recipientEmail ?? "unknown",

@@ -2,7 +2,7 @@
 
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { postingTotalHours } from "@/domain/types";
 import { fundingAuthorizationInput, validate } from "@/services/validation";
 
@@ -43,12 +43,12 @@ export async function authorizeFunding(
 
   const application =
     typeof applicationId === "string"
-      ? repositories.applications.find(actor, applicationId)
+      ? await repositories.applications.find(actor, applicationId)
       : null;
   if (!application) return { ok: false, error: "Application not found." };
 
-  const market = repositories.markets.find(actor, application.marketId);
-  const posting = repositories.postings.find(actor, application.postingId);
+  const market = await repositories.markets.find(actor, application.marketId);
+  const posting = await repositories.postings.find(actor, application.postingId);
   if (!market || !posting) {
     return { ok: false, error: "Application is missing its market or posting." };
   }

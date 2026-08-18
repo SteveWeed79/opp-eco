@@ -27,7 +27,8 @@ import {
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
 import { boardTransition } from "./actions";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
@@ -42,11 +43,27 @@ import { postingTotalHours } from "@/domain/types";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
-  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
-  const board = repositories.organizations.find(actor, actor.membership.organizationId!)!;
-  const market = repositories.markets.find(actor, actor.membership.marketId!)!;
+  const { organizationName } = await nameLookups(actor);
+  const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
+  const board = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
+  const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
 
-  const applications = repositories.applications.list(actor);
+  const applications = await repositories.applications.list(actor);
+
+  // Every student and posting this board can see, indexed once.
+  //
+  // The rows below each need both, and looking them up inside the render
+  // would be a query per row against Postgres — the classic N+1, and here it
+  // would also mean awaiting inside JSX, which is not a thing a component can
+  // do. Safe as a flat map specifically because this is the board: only a
+  // business is held at arm's length by `forApplication`, so for this actor a
+  // listed student is the same record `find` would return.
+  const [allStudents, allPostings] = await Promise.all([
+    await repositories.students.list(actor),
+    await repositories.postings.list(actor),
+  ]);
+  const studentById = new Map(allStudents.map((s) => [s.id, s]));
+  const postingById = new Map(allPostings.map((p) => [p.id, p]));
   const committed = applications
     .filter((a) => !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
@@ -72,12 +89,12 @@ export default async function BoardPage() {
     .filter((a) => a.track === "standard" && (a.hoursApproved ?? 0) > 0)
     .map((application) => ({
       application,
-      posting: repositories.postings.find(actor, application.postingId)!,
+      posting: postingById.get(application.postingId)!,
       reimbursement: reimbursementFor(application, application.hoursApproved ?? 0),
     }))
     .sort((a, b) => b.reimbursement.amount - a.reimbursement.amount);
 
-  const slots = repositories.interviewSlots.list(actor);
+  const slots = await repositories.interviewSlots.list(actor);
   const openSlots = slots.filter((s) => s.bookedByStudentId === null);
 
   return (
@@ -182,8 +199,8 @@ export default async function BoardPage() {
           />
           <ul className="row-list divide-y divide-line">
             {unbooked.map((application) => {
-              const student = repositories.students.find(actor, application.studentId)!;
-              const posting = repositories.postings.find(actor, application.postingId)!;
+              const student = studentById.get(application.studentId)!;
+              const posting = postingById.get(application.postingId)!;
               const days = daysInStatus(application, DEMO_NOW);
               return (
                 <li
@@ -240,14 +257,8 @@ export default async function BoardPage() {
               <tbody className="row-list divide-y divide-line">
                 {[...awaitingInterview, ...awaitingDetermination, ...awaitingFunding].map(
                   (application) => {
-                    const student = repositories.students.find(
-                      actor,
-                      application.studentId,
-                    )!;
-                    const posting = repositories.postings.find(
-                      actor,
-                      application.postingId,
-                    )!;
+                    const student = studentById.get(application.studentId)!;
+                    const posting = postingById.get(application.postingId)!;
                     const days = daysInStatus(application, DEMO_NOW);
                     // The proposed commitment: what the board would authorize
                     // if it approved the posting's full hours at market rate.
@@ -469,7 +480,7 @@ export default async function BoardPage() {
         <div className="px-6 py-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {slots.map((slot) => {
             const bookedBy = slot.bookedByStudentId
-              ? repositories.students.find(actor, slot.bookedByStudentId)
+              ? (studentById.get(slot.bookedByStudentId) ?? null)
               : null;
             return (
               <div

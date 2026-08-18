@@ -13,7 +13,8 @@ import {
   Stat,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
@@ -38,34 +39,33 @@ import { WeeklyRecord } from "./WeeklyRecord";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  const { organizationName } = await nameLookups(actor);
   // Whether there is a real session, as opposed to the signed-out demo
   // fallback this portal renders under. Only affects what is linkable.
   const signedIn = (await getActor()) !== null;
-  const unreviewedWeeks = unreviewedWeeksByApplication(actor);
-  const college = repositories.organizations.find(actor, actor.membership.organizationId!)!;
+  const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
+  const college = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
-  const market = repositories.markets.find(actor, actor.membership.marketId!)!;
+  const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
-  const remainingBudget = marketRemainingBudget(actor, market);
+  const remainingBudget = await marketRemainingBudget(actor, market);
 
-  const pendingVerification = repositories.students.pendingVerification(actor);
-  const needsDrafting = repositories.postings.awaitingCollegeHelp(actor);
-  const pendingReview = repositories.postings.list(actor, { status: "pending_review" });
-  const creditQueue = repositories.applications
-    .list(actor)
-    .filter((a) => a.status === "credit_pending");
-  const granted = repositories.creditAwards
-    .list(actor)
-    .filter((c) => c.status === "granted");
-
-  const activePlacements = repositories.applications
-    .list(actor)
-    .filter((a) => a.status === "placement_active");
+  const pendingVerification = await repositories.students.pendingVerification(actor);
+  const needsDrafting = await repositories.postings.awaitingCollegeHelp(actor);
+  const pendingReview = await repositories.postings.list(actor, { status: "pending_review" });
+  const allApplications = await repositories.applications.list(actor);
+  const creditQueue = allApplications.filter((a) => a.status === "credit_pending");
+  const granted = (await repositories.creditAwards.list(actor)).filter(
+    (c) => c.status === "granted",
+  );
+  const activePlacements = allApplications.filter(
+    (a) => a.status === "placement_active",
+  );
 
   // The employers currently offering time. The college is told when one is
   // made and the message links here, so this is the page that has to show it.
-  const mentors = repositories.mentorshipOffers.openInMarket(actor);
+  const mentors = await repositories.mentorshipOffers.openInMarket(actor);
 
   /**
    * Publication moves the college may make on a posting right now.
@@ -74,15 +74,68 @@ export default async function CollegePage() {
    * counts live applications, so a posting with candidates in it must not
    * offer "Close" even though the transition exists.
    */
+  const openCounts = new Map<string, number>();
+  for (const application of allApplications) {
+    if (isTerminal(application.status)) continue;
+    openCounts.set(
+      application.postingId,
+      (openCounts.get(application.postingId) ?? 0) + 1,
+    );
+  }
+
   const postingTransitionsFor = (posting: Posting) =>
     postingMachine
       .available(actor, {
         posting,
-        openApplications: repositories.applications
-          .forPosting(actor, posting.id)
-          .filter((a) => !isTerminal(a.status)).length,
+        openApplications: openCounts.get(posting.id) ?? 0,
       })
       .map((t) => ({ to: t.to, label: t.label }));
+
+  /**
+   * Everything the credit queue renders, resolved before it renders.
+   *
+   * The queue groups applications by student and then, per row, needs the
+   * student, their banked-hours progress, each application's posting, and the
+   * weekly record behind it. Left inline that is four awaits inside a nested
+   * `.map`, which a component cannot do — and against Postgres it would be a
+   * query per application per student.
+   *
+   * A flat student map is safe here in a way it would not be on the employer's
+   * page: `forApplication` redacts only for a business, and the college owns
+   * the student relationship outright.
+   */
+  const creditStudentIds = Array.from(new Set(creditQueue.map((a) => a.studentId)));
+  const creditPostingIds = Array.from(new Set(creditQueue.map((a) => a.postingId)));
+  const standardCreditIds = creditQueue
+    .filter((a) => a.track === "standard")
+    .map((a) => a.id);
+
+  const [creditStudents, creditProgressList, creditPostings, creditEntries] =
+    await Promise.all([
+      Promise.all(creditStudentIds.map((id) => repositories.students.find(actor, id))),
+      Promise.all(
+        creditStudentIds.map((id) => studentCreditProgress(actor, id, hoursPerCredit)),
+      ),
+      Promise.all(creditPostingIds.map((id) => repositories.postings.find(actor, id))),
+      Promise.all(
+        standardCreditIds.map((id) =>
+          repositories.timeEntries.forApplication(actor, id),
+        ),
+      ),
+    ]);
+
+  const creditStudentById = new Map(
+    creditStudentIds.map((id, i) => [id, creditStudents[i]]),
+  );
+  const progressByStudent = new Map(
+    creditStudentIds.map((id, i) => [id, creditProgressList[i]]),
+  );
+  const creditPostingById = new Map(
+    creditPostingIds.map((id, i) => [id, creditPostings[i]]),
+  );
+  const entriesByApplication = new Map(
+    standardCreditIds.map((id, i) => [id, creditEntries[i]]),
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
@@ -324,8 +377,8 @@ export default async function CollegePage() {
               }
 
               return Array.from(byStudent.entries()).map(([studentId, apps]) => {
-                const student = repositories.students.find(actor, studentId)!;
-                const progress = studentCreditProgress(actor, studentId, hoursPerCredit);
+                const student = creditStudentById.get(studentId)!;
+                const progress = progressByStudent.get(studentId)!;
                 const ready = progress.creditsAvailable >= 1;
 
                 return (
@@ -359,10 +412,8 @@ export default async function CollegePage() {
 
                     <ul className="mt-3 space-y-1.5">
                       {apps.map((application) => {
-                        const posting = repositories.postings.find(
-                          actor,
-                          application.postingId,
-                        )!;
+                        const posting = creditPostingById.get(application.postingId);
+                        if (!posting) return null;
                         return (
                           <li
                             key={application.id}
@@ -386,10 +437,7 @@ export default async function CollegePage() {
                                   a total it has to take on trust. */}
                               {application.track === "standard" && (
                                 <WeeklyRecord
-                                  entries={repositories.timeEntries.forApplication(
-                                    actor,
-                                    application.id,
-                                  )}
+                                  entries={entriesByApplication.get(application.id) ?? []}
                                 />
                               )}
                               {/* Per application, because that is what the

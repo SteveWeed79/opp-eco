@@ -14,7 +14,7 @@
  */
 
 import type { NotificationIntent } from "@/data/store";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { templateFor } from "./templates";
 
@@ -35,13 +35,15 @@ export interface NotificationChannel {
   send(notification: RenderedNotification): Promise<void>;
 }
 
-export function render(intent: NotificationIntent): RenderedNotification | null {
+export async function render(
+  intent: NotificationIntent,
+): Promise<RenderedNotification | null> {
   const template = templateFor(intent.kind);
   // An unknown template is a bug, not a message. Better to drop it loudly in
   // the dispatcher's result than to send something empty.
   if (!template) return null;
 
-  const email = addressFor(intent);
+  const email = await addressFor(intent);
   if (!email) return null;
 
   const { subject, body } = template(intent.payload);
@@ -61,15 +63,15 @@ export function render(intent: NotificationIntent): RenderedNotification | null 
  * account, and refusing to tell them their candidate cleared because of that
  * would be the platform failing at its one job.
  */
-function addressFor(intent: NotificationIntent): string | null {
-  const user = repositories.users.find(intent.recipientUserId);
+async function addressFor(intent: NotificationIntent): Promise<string | null> {
+  const user = await repositories.users.find(intent.recipientUserId);
   if (user) return user.email;
 
   if (intent.recipientOrganizationId) {
     // Dispatch belongs to nobody — it runs after the acting user's request is
     // over, on behalf of the system. `systemContext` is the named seam for
     // that, rather than smuggling an admin session into a background read.
-    const org = repositories.organizations.find(
+    const org = await repositories.organizations.find(
       systemContext(),
       intent.recipientOrganizationId,
     );
@@ -127,7 +129,7 @@ export async function dispatch(
   const batch = queue.splice(0, queue.length);
 
   for (const intent of batch) {
-    const rendered = render(intent);
+    const rendered = await render(intent);
     if (!rendered) {
       result.undeliverable.push(intent);
       continue;
