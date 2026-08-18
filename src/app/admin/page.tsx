@@ -76,7 +76,7 @@ export default async function AdminPage() {
   const inPause = stalled.filter((s) => s.inPause).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         dark
         eyebrow="Program administrator"
@@ -126,7 +126,7 @@ export default async function AdminPage() {
         ) : (
           <TableWrap>
             <table className="w-full">
-              <thead className="border-b border-ink-100">
+              <thead className="border-b border-line">
                 <tr>
                   <Th>Student</Th>
                   <Th>Opportunity</Th>
@@ -135,7 +135,7 @@ export default async function AdminPage() {
                   <Th>Dwell</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody className="row-list divide-y divide-line">
                 {stalled.map((item) => (
                   <tr
                     key={item.application.id}
@@ -226,7 +226,7 @@ export default async function AdminPage() {
 
                   {isLive ? (
                     <>
-                      <dl className="grid grid-cols-4 gap-3 mt-5 pt-5 border-t border-ink-100">
+                      <dl className="grid grid-cols-4 gap-3 mt-5 pt-5 border-t border-line">
                         <div>
                           <dt className="text-xs text-ink-500 font-semibold">Students</dt>
                           <dd className="text-lg font-black text-ink-950 tabular">
@@ -255,7 +255,7 @@ export default async function AdminPage() {
                         </div>
                       </dl>
 
-                      <div className="mt-5 pt-5 border-t border-ink-100">
+                      <div className="mt-5 pt-5 border-t border-line">
                         <div className="flex items-baseline justify-between mb-2">
                           <span className="text-xs font-bold text-ink-600 uppercase tracking-wider">
                             {h.market.programYear} subsidy allocation
@@ -280,7 +280,7 @@ export default async function AdminPage() {
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-ink-500 mt-5 pt-5 border-t border-ink-100">
+                    <p className="text-sm text-ink-500 mt-5 pt-5 border-t border-line">
                       {h.market.stage === "configuring"
                         ? "College committed. Configuring credit policy and terms before opening to students."
                         : h.market.stage === "board_committed"
@@ -312,7 +312,7 @@ export default async function AdminPage() {
           {pendingOrgs.length === 0 ? (
             <Empty>No organizations waiting.</Empty>
           ) : (
-            <ul className="divide-y divide-ink-100">
+            <ul className="row-list divide-y divide-line">
               {pendingOrgs.map((org) => (
                 <li
                   key={org.id}

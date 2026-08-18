@@ -20,8 +20,8 @@ const DESTINATIONS = [
 export default function NotFound() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-20">
-      <div className="bg-white rounded-2xl border border-brand-100 shadow-sm p-8">
-        <span className="w-11 h-11 rounded-2xl bg-brand-50 text-brand-700 flex items-center justify-center mb-5">
+      <div className="bg-surface rounded-panel border border-line shadow-e3 p-8">
+        <span className="w-11 h-11 rounded-card bg-brand-50 text-brand-700 flex items-center justify-center mb-5">
           <Compass className="w-5 h-5" aria-hidden="true" />
         </span>
         <h1 className="text-2xl font-black text-ink-950">There&rsquo;s nothing here</h1>
@@ -35,7 +35,7 @@ export default function NotFound() {
               <li key={destination.href}>
                 <Link
                   href={destination.href}
-                  className="inline-block bg-white text-ink-950 border border-ink-200 font-semibold px-4 py-2 rounded-xl text-sm hover:border-brand-700 hover:text-brand-700 transition-colors"
+                  className="inline-block bg-white text-ink-950 border border-line-strong font-semibold px-4 py-2 rounded-xl text-sm hover:border-brand-700 hover:text-brand-700 transition-colors"
                 >
                   {destination.label}
                 </Link>

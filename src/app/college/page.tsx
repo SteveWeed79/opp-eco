@@ -85,7 +85,7 @@ export default async function CollegePage() {
       .map((t) => ({ to: t.to, label: t.label }));
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         eyebrow="Education partner"
         title={college.name}
@@ -146,7 +146,7 @@ export default async function CollegePage() {
           {pendingVerification.length === 0 ? (
             <Empty>Every student on your roster is verified.</Empty>
           ) : (
-            <ul className="divide-y divide-ink-100">
+            <ul className="row-list divide-y divide-line">
               {pendingVerification.map((student) => (
                 <li
                   key={student.id}
@@ -187,7 +187,7 @@ export default async function CollegePage() {
           {needsDrafting.length === 0 ? (
             <Empty>No drafting requests waiting.</Empty>
           ) : (
-            <ul className="divide-y divide-ink-100">
+            <ul className="row-list divide-y divide-line">
               {needsDrafting.map((posting) => (
                 <li key={posting.id} className="px-6 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -210,7 +210,7 @@ export default async function CollegePage() {
                       transitions={postingTransitionsFor(posting)}
                     />
                   </div>
-                  <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-ink-200 pl-3">
+                  <p className="text-xs text-ink-600 mt-2 italic border-l-2 border-line-strong pl-3">
                     &ldquo;{posting.description}&rdquo;
                   </p>
                   {posting.skillsRequired.length === 0 && (
@@ -238,7 +238,7 @@ export default async function CollegePage() {
         {pendingReview.length === 0 ? (
           <Empty>No postings waiting for review.</Empty>
         ) : (
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {pendingReview.map((posting) => {
               const totalHours = postingTotalHours(posting);
               const selfSufficient = isSelfSufficientForCredit(posting, hoursPerCredit);
@@ -313,7 +313,7 @@ export default async function CollegePage() {
         {creditQueue.length === 0 ? (
           <Empty>No credit decisions waiting.</Empty>
         ) : (
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {(() => {
               // Group by student, because banked micro work is awarded together
               const byStudent = new Map<string, typeof creditQueue>();
@@ -475,7 +475,7 @@ export default async function CollegePage() {
           {mentors.length === 0 ? (
             <Empty>No employers are offering mentorship yet.</Empty>
           ) : (
-            <ul className="divide-y divide-ink-100">
+            <ul className="row-list divide-y divide-line">
               {mentors.map((offer) => (
                 <li
                   key={offer.id}

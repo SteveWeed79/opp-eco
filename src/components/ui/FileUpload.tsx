@@ -83,7 +83,7 @@ export function FileUpload({
         className={`w-full rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors ${
           dragging
             ? "border-brand-700 bg-brand-50"
-            : "border-ink-200 bg-white hover:border-brand-400"
+            : "border-line-strong bg-white hover:border-brand-400"
         }`}
       >
         <Paperclip className="w-5 h-5 mx-auto text-ink-400 mb-2" aria-hidden="true" />
@@ -117,7 +117,7 @@ export function FileUpload({
           {files.map((file) => (
             <li
               key={file.name}
-              className="flex items-center gap-2.5 rounded-lg border border-ink-200 px-3 py-2"
+              className="flex items-center gap-2.5 rounded-lg border border-line-strong px-3 py-2"
             >
               <FileText className="w-4 h-4 text-brand-700 shrink-0" aria-hidden="true" />
               <span className="text-sm text-ink-950 truncate flex-1">{file.name}</span>

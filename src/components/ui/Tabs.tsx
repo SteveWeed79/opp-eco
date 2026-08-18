@@ -56,7 +56,7 @@ export function Tabs({
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="flex gap-1 border-b border-ink-200 overflow-x-auto"
+        className="flex gap-1 border-b border-line-strong overflow-x-auto"
       >
         {tabs.map((tab) => {
           const selected = tab.id === active;

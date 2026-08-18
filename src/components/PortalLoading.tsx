@@ -20,7 +20,7 @@ export function PortalLoading({
   rows?: number;
 }) {
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <Card className="px-8 py-7 space-y-3">
         <Skeleton className="h-3 w-32" />
         <Skeleton className="h-8 w-72" />
@@ -34,7 +34,7 @@ export function PortalLoading({
       </div>
 
       <Card>
-        <div className="px-6 pt-5 pb-4 border-b border-ink-100 space-y-2">
+        <div className="px-6 pt-5 pb-4 border-b border-line space-y-2">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-3 w-64" />
         </div>

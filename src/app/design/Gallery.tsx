@@ -414,7 +414,7 @@ function LoadingSection() {
           <SkeletonCard />
           <SkeletonCard />
         </div>
-        <div className="border border-ink-200 rounded-xl overflow-hidden mb-6">
+        <div className="border border-line-strong rounded-xl overflow-hidden mb-6">
           <SkeletonRows rows={4} columns={4} />
         </div>
         <div className="max-w-md">

@@ -77,7 +77,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   return (
     <div
       role={toast.tone === "error" ? "alert" : "status"}
-      className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg ${tones.cls}`}
+      className={`flex items-start gap-3 rounded-card border px-4 py-3 shadow-e4 ${tones.cls}`}
     >
       <Icon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
       <p className="text-sm font-semibold flex-1">{toast.message}</p>

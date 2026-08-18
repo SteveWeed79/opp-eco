@@ -71,7 +71,7 @@ export function ThemeChecker({
             {([50, 100, 200, 400, 500, 600, 700] as const).map((step) => (
               <div key={step} className="text-center">
                 <span
-                  className="block w-12 h-12 rounded-lg border border-ink-200"
+                  className="block w-12 h-12 rounded-lg border border-line-strong"
                   style={{ backgroundColor: report.ramp[step] }}
                   title={`${step} — ${report.ramp[step]}`}
                 />
@@ -81,7 +81,7 @@ export function ThemeChecker({
             {report.accent && (
               <div className="text-center ml-2">
                 <span
-                  className="w-12 h-12 rounded-lg border border-ink-200 flex items-center justify-center text-xs font-bold"
+                  className="w-12 h-12 rounded-lg border border-line-strong flex items-center justify-center text-xs font-bold"
                   style={{
                     backgroundColor: report.accent.fill,
                     color: report.accent.on,
@@ -145,7 +145,7 @@ function ColorInput({
           aria-label={`${label} colour picker`}
           value={valid ? value : "#000000"}
           onChange={(e) => onChange(e.target.value)}
-          className="w-10 h-10 rounded-lg border border-ink-200 bg-white cursor-pointer shrink-0"
+          className="w-10 h-10 rounded-lg border border-line-strong bg-white cursor-pointer shrink-0"
         />
         <input
           type="text"
@@ -153,7 +153,7 @@ function ColorInput({
           value={value}
           placeholder={placeholder ?? "#000000"}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-xl border border-ink-200 px-3 py-2 text-sm tabular focus:outline-none focus:ring-2 focus:ring-brand-700"
+          className="w-full rounded-xl border border-line-strong px-3 py-2 text-sm tabular focus:outline-none focus:ring-2 focus:ring-brand-700"
         />
       </div>
       <p className="text-xs text-ink-500">{hint}</p>
@@ -181,7 +181,7 @@ function Finding({
   const { icon: Icon, className, label } = TONE[severity];
 
   return (
-    <li className="flex gap-3 rounded-xl border border-ink-200 px-3.5 py-3">
+    <li className="flex gap-3 rounded-xl border border-line-strong px-3.5 py-3">
       <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${className}`} aria-hidden="true" />
       <div className="min-w-0">
         <p className="text-sm font-semibold text-ink-950">

@@ -22,6 +22,7 @@ import {
   TableWrap,
   Td,
   Th,
+  ToneCard,
 } from "@/components/ui";
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
@@ -80,7 +81,7 @@ export default async function BoardPage() {
   const openSlots = slots.filter((s) => s.bookedByStudentId === null);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
       <PageHeader
         eyebrow="Local workforce board"
         title={board.name}
@@ -100,7 +101,7 @@ export default async function BoardPage() {
       <Card className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex items-start gap-4">
-            <span className="w-11 h-11 rounded-2xl bg-brand-700 text-white flex items-center justify-center shrink-0">
+            <span className="w-11 h-11 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-e1 flex items-center justify-center shrink-0">
               <Wallet className="w-5 h-5" aria-hidden="true" />
             </span>
             <div>
@@ -172,14 +173,14 @@ export default async function BoardPage() {
       {/* Students who reached mutual interest and never booked               */}
       {/* ------------------------------------------------------------------ */}
       {unbooked.length > 0 && (
-        <Card className="border-crit-100 ring-1 ring-crit-100">
+        <ToneCard tone="crit" elevation="floating">
           <CardHeader
             level={3}
             icon={<ClipboardList className="w-5 h-5 text-crit-600" />}
             title="Reached mutual interest but never booked"
             subtitle="These placements are the most likely in the system to fall apart"
           />
-          <ul className="divide-y divide-ink-100">
+          <ul className="row-list divide-y divide-line">
             {unbooked.map((application) => {
               const student = repositories.students.find(actor, application.studentId)!;
               const posting = repositories.postings.find(actor, application.postingId)!;
@@ -205,7 +206,7 @@ export default async function BoardPage() {
               );
             })}
           </ul>
-        </Card>
+        </ToneCard>
       )}
 
       {/* ------------------------------------------------------------------ */}
@@ -226,7 +227,7 @@ export default async function BoardPage() {
         ) : (
           <TableWrap>
             <table className="w-full">
-              <thead className="border-b border-ink-100">
+              <thead className="border-b border-line">
                 <tr>
                   <Th>Student</Th>
                   <Th>Placement</Th>
@@ -236,7 +237,7 @@ export default async function BoardPage() {
                   <Th>Action</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody className="row-list divide-y divide-line">
                 {[...awaitingInterview, ...awaitingDetermination, ...awaitingFunding].map(
                   (application) => {
                     const student = repositories.students.find(
@@ -279,11 +280,16 @@ export default async function BoardPage() {
 
                     return (
                       <tr key={application.id}>
-                        <Td className="whitespace-nowrap">
-                          <span className="font-semibold text-ink-950">
+                        {/* The name holds its line; the note under it does not.
+                            `whitespace-nowrap` on the whole cell forced a
+                            45-character sentence onto one line and made this
+                            the widest column in the table at 320px, which is
+                            what pushed the action buttons off the card. */}
+                        <Td className="align-top">
+                          <span className="block font-semibold text-ink-950 whitespace-nowrap">
                             {student.name}
                           </span>
-                          <span className="block text-xs text-ink-500">
+                          <span className="block text-xs text-ink-500 max-w-[11rem] text-pretty">
                             {student.eligibility === "eligible"
                               ? "Cleared previously — needs clearing for this job"
                               : "No prior determination"}
@@ -309,7 +315,14 @@ export default async function BoardPage() {
                             {hours} hrs × ${market.subsidyRatePerHour}
                           </span>
                         </Td>
-                        <Td>
+                        {/* Bounded, and deliberately so.
+                            Under auto table layout this column claimed its
+                            max-content width — two ~200px buttons laid side by
+                            side — which pushed the table past the card and
+                            sheared the labels off mid-word at the edge. A
+                            fixed width is what lets the flex row inside
+                            actually wrap, so the buttons stack instead. */}
+                        <Td className="w-56 align-top">
                           <div className="flex flex-wrap items-center gap-2">
                             {/* Authorizing funding gets its own control: it
                                 writes an hour cap against a finite allocation,
@@ -394,7 +407,7 @@ export default async function BoardPage() {
               </thead>
               <tbody>
                 {claims.map(({ application, posting, reimbursement }) => (
-                  <tr key={application.id} className="border-t border-ink-100">
+                  <tr key={application.id} className="border-t border-line">
                     <Td>
                       <span className="font-semibold text-ink-950">
                         {posting.title}
@@ -462,7 +475,7 @@ export default async function BoardPage() {
               <div
                 key={slot.id}
                 className={`rounded-xl border p-4 ${
-                  bookedBy ? "border-brand-200 bg-brand-50" : "border-ink-200 bg-white"
+                  bookedBy ? "border-brand-200 bg-brand-50" : "border-line-strong bg-white"
                 }`}
               >
                 <p className="text-sm font-bold text-ink-950">

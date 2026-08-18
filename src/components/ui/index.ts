@@ -28,6 +28,7 @@ export {
 
 export {
   Card,
+  ToneCard,
   CardHeader,
   PageHeader,
   PageSection,

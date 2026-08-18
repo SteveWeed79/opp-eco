@@ -18,7 +18,7 @@ export default async function AuditPage() {
   const events = repositories.auditEvents.list(admin);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 pt-8 space-y-6">
+    <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 space-y-6">
       <Link
         href="/admin"
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-600 hover:text-ink-950"
@@ -43,7 +43,7 @@ export default async function AuditPage() {
         ) : (
           <TableWrap>
             <table className="w-full">
-              <thead className="border-b border-ink-100">
+              <thead className="border-b border-line">
                 <tr>
                   <Th>When</Th>
                   <Th>Actor</Th>
@@ -51,7 +51,7 @@ export default async function AuditPage() {
                   <Th>Transition</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody className="row-list divide-y divide-line">
                 {events.map((event) => {
                   const user = repositories.users.find(event.actorUserId);
                   return (

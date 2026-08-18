@@ -60,7 +60,7 @@ export function LogHours({
     // it by landmark should not mean reading the whole placement card first.
     <section
       aria-labelledby={headingId}
-      className="border-t border-ink-100 px-6 py-5 space-y-4"
+      className="border-t border-line px-6 py-5 space-y-4"
     >
       <div className="flex items-center gap-2">
         <Clock className="w-4 h-4 text-brand-700" aria-hidden="true" />
@@ -130,7 +130,7 @@ export function LogHours({
       )}
 
       {entries.length > 0 && (
-        <ul className="divide-y divide-ink-100 border-t border-ink-100">
+        <ul className="row-list divide-y divide-line border-t border-line">
           {entries.map((entry) => (
             <WeekRow key={entry.id} entry={entry} />
           ))}

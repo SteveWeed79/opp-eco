@@ -39,7 +39,7 @@ export function SkeletonCard() {
     <div
       role="status"
       aria-label="Loading"
-      className="bg-white rounded-2xl border border-brand-100 p-6 space-y-3"
+      className="bg-surface rounded-panel border border-line shadow-e2 p-6 space-y-3"
     >
       <Skeleton className="h-3 w-24" />
       <Skeleton className="h-8 w-32" />
@@ -50,7 +50,7 @@ export function SkeletonCard() {
 
 export function SkeletonRows({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
   return (
-    <div role="status" aria-label="Loading" className="divide-y divide-ink-100">
+    <div role="status" aria-label="Loading" className="row-list divide-y divide-line">
       {Array.from({ length: rows }).map((_, r) => (
         <div key={r} className="flex items-center gap-4 px-4 py-4">
           {Array.from({ length: columns }).map((_, c) => (

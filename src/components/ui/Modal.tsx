@@ -101,7 +101,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={`bg-white rounded-3xl w-full ${widths[size]} shadow-2xl border border-brand-100 flex flex-col max-h-[90vh]`}
+        className={`bg-surface rounded-hero w-full ${widths[size]} shadow-e5 border border-line flex flex-col max-h-[90vh]`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4">
@@ -128,7 +128,7 @@ export function Modal({
         <div className="px-6 pb-6 overflow-y-auto flex-1">{children}</div>
 
         {footer && (
-          <div className="px-6 py-4 border-t border-ink-100 flex flex-wrap gap-3 justify-end">
+          <div className="px-6 py-4 border-t border-line flex flex-wrap gap-3 justify-end">
             {footer}
           </div>
         )}
