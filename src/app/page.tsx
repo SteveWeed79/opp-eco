@@ -10,7 +10,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge, Card, Money } from "@/components/ui";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { allMarketHealth } from "@/lib/queries";
 

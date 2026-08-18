@@ -25,7 +25,7 @@ import {
   isTerminal,
 } from "@/domain/workflow";
 import type { ActorContext } from "@/domain/types";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
 

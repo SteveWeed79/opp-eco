@@ -13,7 +13,8 @@ import {
   Stat,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
@@ -38,6 +39,7 @@ import { WeeklyRecord } from "./WeeklyRecord";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  const { organizationName } = await nameLookups(actor);
   // Whether there is a real session, as opposed to the signed-out demo
   // fallback this portal renders under. Only affects what is linkable.
   const signedIn = (await getActor()) !== null;

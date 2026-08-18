@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeTransition } from "./transitions";
 import { contextFor } from "@/data/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { memoryStore, pendingNotifications } from "@/data/memory-store";
 import * as seed from "@/data/seed";
 import type { Application } from "@/domain/types";

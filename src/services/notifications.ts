@@ -14,7 +14,7 @@
  */
 
 import type { NotificationIntent } from "@/data/store";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { templateFor } from "./templates";
 

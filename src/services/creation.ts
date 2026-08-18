@@ -20,8 +20,8 @@ import type {
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
-import { repositories } from "@/data/memory";
-import { memoryStore } from "@/data/memory-store";
+import { repositories } from "@/data/backend";
+import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
 
 export type CreateResult<T> =
@@ -37,7 +37,7 @@ export interface CreationDeps {
 
 let sequence = 0;
 const defaultDeps: CreationDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
   id: (prefix) => `${prefix}-${Date.now().toString(36)}${(++sequence).toString(36)}`,
 };

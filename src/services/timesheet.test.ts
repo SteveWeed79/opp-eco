@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { logHours, reviewHours, reviewQueue } from "./timesheet";
 import { contextFor } from "@/data/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { timesheetTotals } from "@/domain/timesheet";
 import * as seed from "@/data/seed";
 import { pendingNotifications } from "@/data/memory-store";

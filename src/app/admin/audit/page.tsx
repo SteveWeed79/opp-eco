@@ -10,7 +10,7 @@ import {
   Td,
   Th,
 } from "@/components/ui";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { actorForPortal } from "@/auth/session";
 
 export default async function AuditPage() {

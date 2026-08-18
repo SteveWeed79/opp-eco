@@ -24,7 +24,8 @@ import {
   ToneCard,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
@@ -42,6 +43,7 @@ import { studentTransition } from "./actions";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
+  const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   // Resolved from the session rather than hardcoded.
   const student = studentForUser(actor.user.id)!;

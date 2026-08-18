@@ -25,7 +25,7 @@ import type {
 } from "@/domain/types";
 import { attemptTransition, isTerminal } from "@/domain/workflow";
 import { timesheetTotals } from "@/domain/timesheet";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { marketRemainingBudget } from "@/lib/queries";
 import {
   ConcurrencyError,
@@ -33,7 +33,7 @@ import {
   type Store,
   type UnitOfWork,
 } from "@/data/store";
-import { memoryStore } from "@/data/memory-store";
+import { store } from "@/data/backend";
 import { notificationsFor } from "./notification-policy";
 
 export interface TransitionCommand {
@@ -88,7 +88,7 @@ export interface TransitionDeps {
 }
 
 const defaultDeps: TransitionDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
 };
 

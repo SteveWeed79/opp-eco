@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { funnel, stalledApplications, marketRemainingBudget } from "./queries";
 import { contextFor } from "@/data/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import * as seed from "@/data/seed";
 
 const admin = contextFor("admin");

@@ -27,7 +27,8 @@ import {
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
 import { boardTransition } from "./actions";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
@@ -42,6 +43,7 @@ import { postingTotalHours } from "@/domain/types";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
+  const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   const board = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;

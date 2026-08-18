@@ -39,7 +39,8 @@ import {
   mentorshipLifecycleAsBusiness,
   postingLifecycleAsBusiness,
 } from "@/app/_actions/lifecycle";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
 import { ApproveHours } from "./ApproveHours";
@@ -52,6 +53,7 @@ import { OfferMentorship } from "./OfferMentorship";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
+  const { organizationName } = await nameLookups(actor);
   const [unreviewedWeeks, hoursQueue] = await Promise.all([
     unreviewedWeeksByApplication(actor),
     reviewQueue(actor),

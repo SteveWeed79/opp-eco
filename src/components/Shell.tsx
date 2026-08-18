@@ -38,6 +38,7 @@ export function Shell({
   signedInAs,
   signedInRole,
   theme,
+  readOnly = false,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
@@ -45,6 +46,8 @@ export function Shell({
   signedInRole?: ActorRole;
   /** Resolved server-side; applied here, because only here knows the route. */
   theme: ResolvedTheme;
+  /** True when the deployment is backed by a database nothing may write to. */
+  readOnly?: boolean;
 }) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
@@ -81,7 +84,7 @@ export function Shell({
         style={themed ? (theme.variables as React.CSSProperties) : undefined}
         className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
       >
-        <DemoNotice />
+        <DemoNotice readOnly={readOnly} />
         {/* A shadow rather than only a hairline: the header has to read as
             floating above the page it is pinned over, or a card scrolling
             under it looks like it is passing through it. */}
@@ -303,7 +306,7 @@ function markTextSize(monogram: string): string {
  * notice has to travel with the pages themselves, including when a link to
  * `/admin` is forwarded to someone with no context for what they're looking at.
  */
-function DemoNotice() {
+function DemoNotice({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="bg-ink-950 text-white">
       <p className="max-w-7xl mx-auto px-6 py-2 text-xs sm:text-sm flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -319,6 +322,15 @@ function DemoNotice() {
           fictional — this is not a live program and nothing here can be applied
           for.
         </span>
+        {readOnly && (
+          /* Only shown when it is true. A permanent "read only" label on the
+             writable demo would be a lie, and one that trains people to ignore
+             the banner. */
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 font-semibold text-ink-200 ring-1 ring-inset ring-white/15">
+            <Lock className="w-3 h-3" aria-hidden="true" />
+            Read-only — browsing seeded data
+          </span>
+        )}
       </p>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actorForPortal } from "@/auth/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { mentorshipFormatLabel } from "@/domain/mentorship";
 import { offerMentorship } from "@/services/creation";
 import { mentorshipOfferInput, validate } from "@/services/validation";

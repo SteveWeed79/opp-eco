@@ -25,7 +25,8 @@ import {
   TableWrap,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { organizationMachine } from "@/domain/lifecycle";
 import { organizationLifecycle } from "@/app/_actions/lifecycle";
 import {
@@ -66,6 +67,7 @@ const STAGE_LABEL: Record<MarketStage, string> = {
 
 export default async function AdminPage() {
   const admin = await actorForPortal("admin");
+  const { organizationName } = await nameLookups(admin);
   // Independent of one another, so resolved together rather than in a queue
   // of six sequential round trips.
   const [health, stalled, pendingOrgs, stages, deployed, pauseDays] =

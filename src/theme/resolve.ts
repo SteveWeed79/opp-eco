@@ -12,7 +12,7 @@
  */
 
 import type { ActorContext, Organization } from "@/domain/types";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { themeFor, themeVariables } from "./theme";
 

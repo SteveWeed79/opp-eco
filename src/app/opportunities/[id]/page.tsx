@@ -12,7 +12,8 @@ import {
   PostingStatusBadge,
   TrackBadge,
 } from "@/components/ui";
-import { repositories, organizationName } from "@/data/memory";
+import { repositories } from "@/data/backend";
+import { nameLookups } from "@/lib/names";
 import { viewerActor } from "@/auth/session";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { canApply } from "@/domain/lifecycle";
@@ -77,13 +78,13 @@ export async function generateMetadata({
   const { id } = await params;
   const actor = await viewerActor();
   const posting = await visiblePosting(actor, id);
+  if (!posting) return { title: pageTitle("Opportunity") };
 
   // A forwarded link's preview is often all the context a second-hand reader
   // gets, so it names the role and the employer rather than the product.
+  const { organizationName } = await nameLookups(actor);
   return {
-    title: posting
-      ? pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`)
-      : pageTitle("Opportunity"),
+    title: pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`),
   };
 }
 
@@ -96,6 +97,7 @@ export default async function OpportunityPage({
   const actor = await viewerActor();
   const posting = await visiblePosting(actor, id);
   if (!posting) notFound();
+  const { organizationName } = await nameLookups(actor);
 
   const college = (
     await repositories.organizations.list(actor, { kind: "college" })

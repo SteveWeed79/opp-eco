@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actorForPortal } from "@/auth/session";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { createPosting } from "@/services/creation";
 import { postingInput, validate } from "@/services/validation";

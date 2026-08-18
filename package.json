@@ -12,7 +12,8 @@
     "test:unit": "vitest run",
     "db:status": "node scripts/db.mjs status",
     "db:migrate": "node scripts/db.mjs migrate",
-    "db:verify": "node scripts/db.mjs verify"
+    "db:verify": "node scripts/db.mjs verify",
+    "db:seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

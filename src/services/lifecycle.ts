@@ -31,8 +31,8 @@ import {
 } from "@/domain/lifecycle";
 import { mentorshipMachine } from "@/domain/mentorship";
 import { isTerminal } from "@/domain/workflow";
-import { repositories } from "@/data/memory";
-import { memoryStore } from "@/data/memory-store";
+import { repositories } from "@/data/backend";
+import { store } from "@/data/backend";
 import type { NotificationIntent, Store, UnitOfWork } from "@/data/store";
 
 export type LifecycleResult<T> =
@@ -45,7 +45,7 @@ export interface LifecycleDeps {
 }
 
 const defaultDeps: LifecycleDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
 };
 

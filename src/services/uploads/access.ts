@@ -12,7 +12,7 @@
  */
 
 import type { ActorContext } from "@/domain/types";
-import { repositories } from "@/data/memory";
+import { repositories } from "@/data/backend";
 import { disclosureFor } from "@/domain/disclosure";
 import type { StoredFile } from "./storage";
 

@@ -55,6 +55,17 @@ export interface DatabaseConfig {
    * try again, not that the work was wrong.
    */
   maxRetries: number;
+  /**
+   * Refuse every write.
+   *
+   * **On by default whenever a database is configured.** Pointing the demo at
+   * real Postgres and pointing it at a writable one are different decisions,
+   * and conflating them means the first person to click "Approve" on a shared
+   * demo mutates data everyone else is looking at. Opt in explicitly with
+   * `DATABASE_READ_ONLY=false`; the seed script bypasses this entirely,
+   * because loading fixtures is not a write the web application makes.
+   */
+  readOnly: boolean;
 }
 
 export type DatabaseEnv = Record<string, string | undefined>;
@@ -77,6 +88,7 @@ export function databaseConfig(env: DatabaseEnv = process.env): DatabaseConfig {
     maxConnections: positiveInt(env.DATABASE_MAX_CONNECTIONS, 10),
     defaultIsolation: isolationFrom(env.DATABASE_ISOLATION),
     maxRetries: positiveInt(env.DATABASE_MAX_RETRIES, 3),
+    readOnly: env.DATABASE_READ_ONLY !== "false",
   };
 }
 

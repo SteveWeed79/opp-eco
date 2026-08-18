@@ -26,8 +26,8 @@ import {
   timesheetTotals,
   weekStartingFor,
 } from "@/domain/timesheet";
-import { repositories } from "@/data/memory";
-import { memoryStore } from "@/data/memory-store";
+import { repositories } from "@/data/backend";
+import { store } from "@/data/backend";
 import type { Store, UnitOfWork } from "@/data/store";
 
 export type TimesheetResult<T> =
@@ -46,7 +46,7 @@ export interface TimesheetDeps {
 
 let sequence = 0;
 const defaultDeps: TimesheetDeps = {
-  store: memoryStore,
+  store,
   now: () => new Date(),
   id: (prefix) => `${prefix}-${Date.now().toString(36)}${(++sequence).toString(36)}`,
 };
