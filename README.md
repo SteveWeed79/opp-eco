@@ -96,6 +96,24 @@ Properties worth knowing:
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 - **A portal is named zones, not a stack of cards.** Every page was a flat run of identical `Card`s, so reading order carried no rank — a queue blocking a placement, a reference table, and a settings panel touched once a year all looked the same. Two things followed, and both were live: anything appended to the end became invisible, and the college's brand picker read exactly like a queue. `PageSection` groups a page into two to four named zones, and its `settings` tone recesses configuration behind a rule, because a page that gives equal weight to "four students are waiting on you" and "pick a brand colour" has not decided what it is for.
 
+## Opportunities have a URL
+
+`/opportunities/[id]` is the full posting: the description, the skills it matches on, the terms, and whether the hours clear the college's credit threshold.
+
+It exists because **the description had nowhere to be read.** A posting cannot be published without one — the college's publish guard refuses an empty description — and yet the only surfaces that rendered it were the employer's own drafts and the college's drafting queue. Students, the people it is written for, were asked to apply from a title and a wage.
+
+A page rather than an expander, because the realistic path into this program is an advisor sending a student a link, and there was no link to send.
+
+**Who can open what** is not the same for every role, and it is decided on the page rather than delegated to `postings.find`:
+
+| | Published | Draft / in review |
+|---|---|---|
+| Student, board | Yes | **404** — same answer as an id that does not exist |
+| Employer | Yes, including competitors' | Their own only |
+| College, admin | Yes | Yes |
+
+That distinction is load-bearing. `postings.find` narrows by organization for `business` and by *market* for everyone else — correct for the queues it was written for, and too wide here: it would have let a student open an employer's half-written draft by guessing an id. Nothing had exposed it before, because until this page there was no way to address a posting by id at all. An e2e test asserts a real draft and a nonexistent id return the same status, so the URL cannot become an oracle for what an employer is drafting.
+
 ## The five state machines
 
 Five things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, an **organization's** vetting, and an employer's **mentorship offer**. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
@@ -209,6 +227,7 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Interview slot publishing.** The board's "Publish slots" button. Slots already have a repository and optimistic concurrency; what is missing is the form and a rule about how far ahead a board may publish.
 - **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
 - **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
+- **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 - **Pairing a student with a mentor.** An employer can offer, and a student can see who is offering; the introduction itself runs through the college off-platform. A pairing record is what would let the mentor list show remaining capacity honestly rather than a declared number, and it needs a decision first about whether a student asks the mentor or the college — which is the difference between a request queue an employer has to work and an intermediary who already knows both people.
 
