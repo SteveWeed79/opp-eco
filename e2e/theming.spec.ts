@@ -21,6 +21,20 @@ const SEEDED_ACCENT = "#c9a227";
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 /**
+ * Open the colour editor on the college portal.
+ *
+ * The inputs and the findings live in a dialog rather than in a form standing
+ * open on the page — settings touched once a year should not be the tallest
+ * thing on an operational screen. The summary row keeps the generated palette
+ * and a count of the findings visible without it.
+ */
+async function openColourEditor(page: Page) {
+  await page.goto("/college");
+  await page.getByRole("button", { name: "Edit colours" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+}
+
+/**
  * Read a custom property as the browser resolved it inside the themed subtree.
  *
  * Deliberately not off `:root` — the platform defaults live there in
@@ -89,7 +103,7 @@ test.describe("the theme checker tells a college what will happen", () => {
   test("names the adjustment when a colour has to be deepened", async ({
     page,
   }) => {
-    await page.goto("/college");
+    await openColourEditor(page);
 
     const hex = page.getByLabel("Primary hex value");
     await hex.fill("#4da3ff");
@@ -105,7 +119,7 @@ test.describe("the theme checker tells a college what will happen", () => {
   test("points a too-light colour at the role it actually suits", async ({
     page,
   }) => {
-    await page.goto("/college");
+    await openColourEditor(page);
     await page.getByLabel("Primary hex value").fill("#ffc627");
 
     await expect(
@@ -114,7 +128,7 @@ test.describe("the theme checker tells a college what will happen", () => {
   });
 
   test("flags a colour that collides with a status colour", async ({ page }) => {
-    await page.goto("/college");
+    await openColourEditor(page);
     // A crimson: a real institutional colour, and where this product puts
     // errors and destructive actions.
     await page.getByLabel("Primary hex value").fill("#a6192e");
@@ -125,7 +139,7 @@ test.describe("the theme checker tells a college what will happen", () => {
   });
 
   test("advises rather than blocks", async ({ page }) => {
-    await page.goto("/college");
+    await openColourEditor(page);
     await page.getByLabel("Primary hex value").fill("#a6192e");
 
     // Every warning above still renders a palette. A school knows its own
@@ -137,7 +151,7 @@ test.describe("the theme checker tells a college what will happen", () => {
   test("reports the demo college's own seeded pair honestly", async ({
     page,
   }) => {
-    await page.goto("/college");
+    await openColourEditor(page);
 
     // Green and gold is an extremely common institutional pairing, and it
     // collides twice. Kept in the seed rather than swapped for something that
@@ -150,8 +164,21 @@ test.describe("the theme checker tells a college what will happen", () => {
     ).toBeVisible();
   });
 
-  test("the advice it gives is itself accessible", async ({ page }) => {
+  test("says there is something to read without being opened", async ({
+    page,
+  }) => {
+    // The reason the editor can live in a dialog at all. If the page gave no
+    // sign the checker had found anything, moving it behind a button would
+    // have turned a check nobody can miss into one nobody opens — the seeded
+    // green-and-gold pair collides twice and that has to reach the page.
     await page.goto("/college");
+
+    await expect(page.getByText("2 things worth knowing")).toBeVisible();
+    await expect(page.getByRole("dialog")).toBeHidden();
+  });
+
+  test("the advice it gives is itself accessible", async ({ page }) => {
+    await openColourEditor(page);
     await page.getByLabel("Primary hex value").fill("#a6192e");
     await page.getByLabel("Second colour hex value").fill(SEEDED_ACCENT);
     await expect(page.getByText("Your accent takes dark text")).toBeVisible();

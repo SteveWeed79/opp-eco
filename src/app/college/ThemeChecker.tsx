@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Palette, CircleAlert, Info, Check } from "lucide-react";
-import { Card, CardHeader, Assumption } from "@/components/ui";
+import { Assumption, Button, Card, Modal } from "@/components/ui";
 import { analyzeTheme, type Severity } from "@/theme/analyze";
 
 /**
@@ -17,6 +17,19 @@ import { analyzeTheme, type Severity } from "@/theme/analyze";
  * *relationship* between two colours — whether they read as a pair, whether
  * one collides with a status colour — and those only make sense while you are
  * moving them.
+ *
+ * **A summary row that opens a dialog, rather than a form standing open.**
+ * This was previously the whole editor rendered inline, which made a control
+ * touched about once a year the tallest thing on an operational page. Moving
+ * it to a route of its own was rejected before — and still is — because the
+ * contrast checker is a thing to be *shown*, and nobody clicks into settings
+ * during a walkthrough. A dialog is the third option: the palette and its
+ * findings stay visible on the page as a summary, so the capability still
+ * advertises itself, while the inputs and the explanation appear only when
+ * someone is actually changing something.
+ *
+ * The colours live here rather than in the dialog, so closing it keeps what
+ * you tried and the summary row goes on reflecting it.
  */
 export function ThemeChecker({
   initialBrand,
@@ -29,93 +42,172 @@ export function ThemeChecker({
 }) {
   const [brand, setBrand] = useState(initialBrand);
   const [accent, setAccent] = useState(initialAccent ?? "");
+  const [open, setOpen] = useState(false);
 
   const report = useMemo(
     () => analyzeTheme(brand, accent || undefined),
     [brand, accent],
   );
 
+  const warnings = report.findings.filter((f) => f.severity === "warning").length;
+  const adjustments = report.findings.filter(
+    (f) => f.severity === "adjusted",
+  ).length;
+
   return (
-    <Card>
-      <CardHeader
-        level={3}
-        icon={<Palette className="w-5 h-5" />}
-        title="Your colours"
-        subtitle={`How ${organizationName} appears to its students`}
-      />
-
-      <div className="px-6 py-5 space-y-5">
-        <div className="grid sm:grid-cols-2 gap-4">
-          <ColorInput
-            label="Primary"
-            hint="Headings, buttons, links."
-            value={brand}
-            onChange={setBrand}
-          />
-          <ColorInput
-            label="Second colour"
-            hint="A band and the mark. Optional."
-            value={accent}
-            onChange={setAccent}
-            placeholder="Not set"
-          />
-        </div>
-
-        {/* What will actually render, beside what was asked for — the whole
-            point is that the difference is visible rather than discovered. */}
-        <div>
-          <p className="text-xs font-bold text-ink-700 uppercase tracking-wider mb-2">
-            What students will see
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {([50, 100, 200, 400, 500, 600, 700] as const).map((step) => (
-              <div key={step} className="text-center">
-                <span
-                  className="block w-12 h-12 rounded-lg border border-line-strong"
-                  style={{ backgroundColor: report.ramp[step] }}
-                  title={`${step} — ${report.ramp[step]}`}
-                />
-                <span className="text-[10px] text-ink-500 tabular">{step}</span>
-              </div>
-            ))}
-            {report.accent && (
-              <div className="text-center ml-2">
-                <span
-                  className="w-12 h-12 rounded-lg border border-line-strong flex items-center justify-center text-xs font-bold"
-                  style={{
-                    backgroundColor: report.accent.fill,
-                    color: report.accent.on,
-                  }}
-                  title={`accent — ${report.accent.fill}`}
-                >
-                  Aa
-                </span>
-                <span className="text-[10px] text-ink-500">accent</span>
-              </div>
-            )}
+    <>
+      <Card className="px-6 py-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div className="flex items-start gap-3.5 min-w-0">
+          <span className="shrink-0 grid place-items-center w-9 h-9 rounded-card bg-brand-50 text-brand-700 ring-1 ring-brand-100">
+            <Palette className="w-5 h-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[0.95rem] font-bold text-ink-950">Your colours</h3>
+            <p className="text-sm text-ink-500 mt-0.5 text-pretty">
+              How {organizationName} appears to its students
+            </p>
+            {/* The headline of the report, on the page. A dialog nobody opens
+                is a check nobody reads, and the seeded green-and-gold pair
+                genuinely collides twice — that should be visible without
+                anyone going looking for it. */}
+            <p className="text-xs mt-2 flex items-center gap-1.5">
+              {report.findings.length === 0 ? (
+                <>
+                  <Check
+                    className="w-3.5 h-3.5 text-good-700"
+                    aria-hidden="true"
+                  />
+                  <span className="text-ink-600">Nothing to flag</span>
+                </>
+              ) : (
+                <>
+                  <CircleAlert
+                    className={`w-3.5 h-3.5 ${
+                      warnings > 0 ? "text-warn-700" : "text-brand-700"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="text-ink-600">
+                    {[
+                      warnings > 0 &&
+                        `${warnings} thing${warnings === 1 ? "" : "s"} worth knowing`,
+                      adjustments > 0 && `${adjustments} adjusted`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </>
+              )}
+            </p>
           </div>
         </div>
 
-        <ul className="space-y-2.5">
-          {report.findings.length === 0 && (
-            <Finding
-              severity="ok"
-              title="Nothing to flag"
-              detail="These colours render as given and sit clear of the colours this product uses for status."
-            />
-          )}
-          {report.findings.map((finding, index) => (
-            <Finding key={`${finding.title}-${index}`} {...finding} />
-          ))}
-        </ul>
+        <div className="flex items-center gap-4">
+          {/* What students will actually see, at a glance. The generated ramp
+              rather than the two hex values entered, because the difference
+              between the two is the entire point of this panel. */}
+          <span className="flex items-center gap-1" aria-hidden="true">
+            {([200, 400, 500, 600, 700] as const).map((step) => (
+              <span
+                key={step}
+                className="block w-6 h-6 rounded-md ring-1 ring-inset ring-ink-950/10"
+                style={{ backgroundColor: report.ramp[step] }}
+              />
+            ))}
+            {report.accent && (
+              <span
+                className="block w-6 h-6 rounded-md ml-1.5 ring-1 ring-inset ring-ink-950/10"
+                style={{ backgroundColor: report.accent.fill }}
+              />
+            )}
+          </span>
+          <Button variant="ghost" onClick={() => setOpen(true)}>
+            Edit colours
+          </Button>
+        </div>
+      </Card>
 
-        <Assumption>
-          A preview. Saving a partner&rsquo;s branding needs a write path that
-          does not exist yet — the colours above come from the seeded record.
-          The checks and the generated palette are real.
-        </Assumption>
-      </div>
-    </Card>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        size="lg"
+        title="Your colours"
+        description={`How ${organizationName} appears to its students`}
+        footer={<Button onClick={() => setOpen(false)}>Done</Button>}
+      >
+        <div className="space-y-5">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <ColorInput
+              label="Primary"
+              hint="Headings, buttons, links."
+              value={brand}
+              onChange={setBrand}
+            />
+            <ColorInput
+              label="Second colour"
+              hint="A band and the mark. Optional."
+              value={accent}
+              onChange={setAccent}
+              placeholder="Not set"
+            />
+          </div>
+
+          {/* What will actually render, beside what was asked for — the whole
+              point is that the difference is visible rather than discovered. */}
+          <div>
+            <p className="text-xs font-bold text-ink-700 uppercase tracking-wider mb-2">
+              What students will see
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {([50, 100, 200, 400, 500, 600, 700] as const).map((step) => (
+                <div key={step} className="text-center">
+                  <span
+                    className="block w-12 h-12 rounded-lg border border-line-strong"
+                    style={{ backgroundColor: report.ramp[step] }}
+                    title={`${step} — ${report.ramp[step]}`}
+                  />
+                  <span className="text-[10px] text-ink-500 tabular">{step}</span>
+                </div>
+              ))}
+              {report.accent && (
+                <div className="text-center ml-2">
+                  <span
+                    className="w-12 h-12 rounded-lg border border-line-strong flex items-center justify-center text-xs font-bold"
+                    style={{
+                      backgroundColor: report.accent.fill,
+                      color: report.accent.on,
+                    }}
+                    title={`accent — ${report.accent.fill}`}
+                  >
+                    Aa
+                  </span>
+                  <span className="text-[10px] text-ink-500">accent</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <ul className="space-y-2.5">
+            {report.findings.length === 0 && (
+              <Finding
+                severity="ok"
+                title="Nothing to flag"
+                detail="These colours render as given and sit clear of the colours this product uses for status."
+              />
+            )}
+            {report.findings.map((finding, index) => (
+              <Finding key={`${finding.title}-${index}`} {...finding} />
+            ))}
+          </ul>
+
+          <Assumption>
+            A preview. Saving a partner&rsquo;s branding needs a write path that
+            does not exist yet — the colours above come from the seeded record.
+            The checks and the generated palette are real.
+          </Assumption>
+        </div>
+      </Modal>
+    </>
   );
 }
 

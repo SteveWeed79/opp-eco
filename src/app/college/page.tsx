@@ -523,6 +523,11 @@ export default async function CollegePage() {
       {/* stays on this page rather than moving to a route of its own,        */}
       {/* because the contrast checker is a thing to be *shown*, and nobody   */}
       {/* clicks into settings during a walkthrough.                          */}
+      {/*                                                                     */}
+      {/* Recessing it was not enough on its own: a form standing permanently */}
+      {/* open still reads as work to do. It is now a summary row that opens  */}
+      {/* the editor in a dialog, which keeps the palette and its findings on */}
+      {/* the page — the part worth showing — without the inputs.             */}
       {/* ------------------------------------------------------------------ */}
       <PageSection
         title="Institution settings"
