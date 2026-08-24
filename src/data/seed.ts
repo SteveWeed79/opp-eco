@@ -85,37 +85,42 @@ export const markets: Market[] = [
     programYear: "PY2026",
   },
   {
-    id: "mkt-gardencity",
-    name: "Western Kansas",
-    city: "Garden City",
-    counties: ["Finney", "Ford", "Seward"],
-    stage: "board_committed",
-    boardId: "org-wkwp",
-    collegeIds: [],
-    launchedOn: null,
-    subsidyBudget: 90_000,
-    subsidyRatePerHour: 20,
-    programYear: "PY2026",
-  },
-  {
-    id: "mkt-salina",
-    name: "North Central Kansas",
-    city: "Salina",
-    counties: ["Saline", "Ottawa", "Dickinson"],
-    stage: "board_engaged",
-    boardId: null,
-    collegeIds: [],
-    launchedOn: null,
-    subsidyBudget: 0,
-    subsidyRatePerHour: 20,
-    programYear: "PY2026",
-  },
-  {
     id: "mkt-hays",
     name: "Smoky Hill",
     city: "Hays",
     counties: ["Ellis", "Russell", "Trego"],
-    stage: "prospecting",
+    // The board has committed and the college is in conversation, which is
+    // why `collegeIds` is still empty — a college joins that list when it
+    // commits, not when it takes a meeting.
+    stage: "college_engaged",
+    boardId: "org-shwp",
+    collegeIds: [],
+    launchedOn: null,
+    subsidyBudget: 110_000,
+    subsidyRatePerHour: 20,
+    programYear: "PY2026",
+  },
+  {
+    /**
+     * The outlier.
+     *
+     * Three university towns prove the model works next to a university.
+     * They cannot show whether it travels, because every one of them has the
+     * same anchor institution, the same student supply, and roughly the same
+     * employer mix. A market a tenth their size, anchored on a technical
+     * college campus and a community college rather than a university, is the
+     * one that tests replicability — and it is the one that fails first if
+     * the model only works where a university is doing half the work.
+     *
+     * Lincoln County is paired in deliberately: its Make My Move incentives
+     * recruit remote workers into the county, which is a different talent
+     * problem sitting next to the same employers.
+     */
+    id: "mkt-beloit",
+    name: "North Central",
+    city: "Beloit",
+    counties: ["Mitchell", "Lincoln", "Cloud"],
+    stage: "board_engaged",
     boardId: null,
     collegeIds: [],
     launchedOn: null,
@@ -285,17 +290,32 @@ export const organizations: Organization[] = [
     hoursPerCredit: 40,
   },
 
-  // --- Western Kansas, board committed ---
+  // --- Smoky Hill, college engaged ---
   {
-    id: "org-wkwp",
-    marketId: "mkt-gardencity",
+    id: "org-shwp",
+    marketId: "mkt-hays",
     kind: "board",
-    name: "Western Kansas Workforce Partnership",
-    county: "Finney",
+    name: "Smoky Hill Workforce Partnership",
+    county: "Ellis",
     status: "active",
     contactName: "Sofia Marquez",
-    contactEmail: "smarquez@wkwp.example.org",
+    contactEmail: "smarquez@shwp.example.org",
     appliedOn: daysAgo(45),
+  },
+  {
+    // Engaged, not committed: the record exists because the conversation is
+    // real, and it sits in the administrator's vetting queue rather than in
+    // the market's `collegeIds`.
+    id: "org-chalkbluff",
+    marketId: "mkt-hays",
+    kind: "college",
+    name: "Chalk Bluff State University",
+    county: "Ellis",
+    status: "under_review",
+    contactName: "Dr. Owen Radcliffe",
+    contactEmail: "oradcliffe@chalkbluff.example.edu",
+    appliedOn: daysAgo(12),
+    hoursPerCredit: 45,
   },
 ];
 

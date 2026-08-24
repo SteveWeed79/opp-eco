@@ -37,7 +37,7 @@ function bookingPanel(page: Page) {
 }
 
 test("the booking dialog can be dismissed with the keyboard", async ({ page }) => {
-  await page.goto("/student");
+  await page.goto("/demo/student");
 
   const panel = bookingPanel(page);
   await expect(
@@ -60,14 +60,14 @@ test("a student books a board interview and every portal reflects it", async ({
 }) => {
   // Recorded before the booking so the cross-portal assertion is a delta
   // rather than the presence of a name that would be on the page anyway.
-  await page.goto("/board");
+  await page.goto("/demo/board");
   const neverBookedBefore = await boardStat(page, "Never booked");
   expect(
     neverBookedBefore,
     "the board should start with unbooked applications — if this is 0, the server is carrying state from a previous run",
   ).toBeGreaterThan(0);
 
-  await page.goto("/student");
+  await page.goto("/demo/student");
 
   // The pause, surfaced where the student already is.
   const panel = bookingPanel(page);
@@ -92,11 +92,11 @@ test("a student books a board interview and every portal reflects it", async ({
   ).toBeVisible();
 
   // The board's queue shrank, which is the point of notifying them.
-  await page.goto("/board");
+  await page.goto("/demo/board");
   expect(await boardStat(page, "Never booked")).toBe(neverBookedBefore - 1);
 
   // And the administrator's stalled queue is still rendering after the write.
-  await page.goto("/admin");
+  await page.goto("/demo/admin");
   await expect(page.getByText("What's stuck")).toBeVisible();
 });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { brand, brandAddress, pageTitle } from "./brand";
+import { brand, brandAddress, pageTitle, publicAddress, siteTitle } from "./brand";
 
 /**
  * The name is not settled, so the cost of changing it has to stay at one file.
@@ -20,6 +20,13 @@ const SRC = join(process.cwd(), "src");
  * catch a leftover of a previous one — and the first real rename proved that
  * gap immediately: the schema's header comment still carried the old name
  * because nothing was looking for it.
+ *
+ * The former name is no longer only history: the venture still publishes on
+ * the domain it names, and the footer says so, because an address people are
+ * given has to resolve somewhere recognisable. That does not weaken this
+ * check — it is the reason for it. The old name lives in `brand.ts` as
+ * `formerly` and `publicDomain`, and every render site imports it from there,
+ * exactly as the current name does.
  *
  * Add to this list on every rename rather than trusting a grep done on the day.
  */
@@ -102,6 +109,25 @@ describe("derived strings", () => {
     // recipient gets, so "[Demo]" has to come first.
     expect(pageTitle()).toMatch(/^\[Demo\]/);
     expect(pageTitle("Component library")).toMatch(/^\[Demo\] Component library/);
+  });
+
+  it("does not put the demo marker on a venture page", () => {
+    // The other half of the same rule. `/` and the pages beside it describe
+    // real work at a real address, and a "[Demo]" on them would be a false
+    // disclaimer — the same failure as a missing one, pointed the other way.
+    expect(siteTitle()).not.toContain("[Demo]");
+    expect(siteTitle("For partners")).not.toContain("[Demo]");
+    expect(siteTitle("For partners")).toMatch(/^For partners/);
+  });
+
+  it("builds addresses at the public domain, not the reserved one", () => {
+    // `brand.domain` is `.example` so nothing in the prototype can be
+    // delivered. The contact page is the opposite case: an address that does
+    // not receive mail is worse than the missing one it replaced.
+    expect(publicAddress(brand.contactMailbox)).toBe(
+      `${brand.contactMailbox}@${brand.publicDomain}`,
+    );
+    expect(publicAddress("contact")).not.toContain(".example");
   });
 
   it("keeps the two-tone header parts consistent with the full name", () => {

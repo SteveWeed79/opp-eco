@@ -11,7 +11,7 @@ import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 test("a student applies, and the employer sees the candidate", async ({ page }) => {
-  await page.goto("/student");
+  await page.goto("/demo/student");
 
   // The recommendations list is the only place an unapplied posting appears.
   // Waited for rather than counted straight away: `count()` does not
@@ -31,12 +31,12 @@ test("a student applies, and the employer sees the candidate", async ({ page }) 
   }).toPass({ timeout: 5000 });
 
   // The employer's pipeline is the point of applying.
-  await page.goto("/business");
+  await page.goto("/demo/business");
   await expect(page.getByText("Candidate pipeline")).toBeVisible();
 });
 
 test("an employer posts an opportunity and the college is told", async ({ page }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   await page.getByRole("button", { name: /Post an opportunity/ }).click();
   const dialog = page.getByRole("dialog");
@@ -55,7 +55,7 @@ test("an employer posts an opportunity and the college is told", async ({ page }
   await expect(page.getByRole("status").first()).toContainText("review");
 
   // The message that keeps it out of a queue nobody watches.
-  await page.goto("/admin/outbox");
+  await page.goto("/demo/admin/outbox");
   await expect(
     page.getByText("submitted a posting for review").first(),
   ).toBeVisible();
@@ -64,7 +64,7 @@ test("an employer posts an opportunity and the college is told", async ({ page }
 test("the micro track asks different questions than the standard track", async ({
   page,
 }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
   await page.getByRole("button", { name: /Post an opportunity/ }).click();
   const dialog = page.getByRole("dialog");
 
@@ -86,7 +86,7 @@ test("the micro track asks different questions than the standard track", async (
 test("an employer offers to mentor, and it reaches students without a review", async ({
   page,
 }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   await page.getByRole("button", { name: /Offer to mentor/ }).click();
   const dialog = page.getByRole("dialog");
@@ -114,17 +114,17 @@ test("an employer offers to mentor, and it reaches students without a review", a
 
   // The college still hears about it, because it is the party that makes the
   // introduction — an offer nobody was told about is a name in a dead list.
-  await page.goto("/admin/outbox");
+  await page.goto("/demo/admin/outbox");
   await expect(page.getByText("offering to mentor").first()).toBeVisible();
 
   // And a student can see who is offering.
-  await page.goto("/student");
+  await page.goto("/demo/student");
   await expect(page.getByText("Mentors in your market")).toBeVisible();
   await expect(page.getByText("Alex Moreno").first()).toBeVisible();
 });
 
 test("pausing an offer takes it off the student's mentor list", async ({ page }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   // Pausing is the reversible half of the machine, so it goes through without
   // a confirmation — an employer saying "not this month" about their own
@@ -140,12 +140,12 @@ test("pausing an offer takes it off the student's mentor list", async ({ page })
 
   // The student does not. An employer who paused and stayed on the list would
   // field introductions they had just said they could not take.
-  await page.goto("/student");
+  await page.goto("/demo/student");
   await expect(page.getByText("Alex Moreno")).toHaveCount(0);
 });
 
 test("an employer moves a candidate through the state machine", async ({ page }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   // "Assign project" is the micro track's one-step route from mutual interest
   // to work starting — no board, no funding authorization. The label comes
@@ -168,7 +168,7 @@ test("an employer moves a candidate through the state machine", async ({ page })
 test("an irreversible move demands a reason before it will go through", async ({
   page,
 }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   const end = page.getByRole("button", { name: "End placement early" }).first();
   await expect(end).toBeVisible();
@@ -191,12 +191,12 @@ test("an irreversible move demands a reason before it will go through", async ({
 });
 
 test("the audit log and the outbox both record what happened", async ({ page }) => {
-  await page.goto("/admin/audit");
+  await page.goto("/demo/admin/audit");
   await expect(page.getByText("Recorded transitions")).toBeVisible();
   // The reason typed above is on the record.
   await expect(page.getByText("Role filled internally.").first()).toBeVisible();
 
-  await page.goto("/admin/outbox");
+  await page.goto("/demo/admin/outbox");
   // The distinction this page exists for: the audit log says what changed,
   // the outbox says whether anyone was told.
   await expect(page.getByText("Delivered", { exact: true }).first()).toBeVisible();

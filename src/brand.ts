@@ -41,11 +41,48 @@ export const brand = {
   monogram: "CCLN",
 
   /**
-   * Bare domain, used to build addresses. `.example` is reserved by RFC 2606
-   * so nothing addressed here can be delivered — deliberate for a demo whose
-   * organizations are invented.
+   * Bare domain, used to build addresses **inside the prototype**. `.example`
+   * is reserved by RFC 2606 so nothing addressed here can be delivered —
+   * deliberate for a demo whose organizations are invented.
    */
   domain: "ccln.example",
+
+  /**
+   * The name this venture was launched under, and the domain it still
+   * answers on.
+   *
+   * Not history for its own sake. The programme renamed to the initialism
+   * while the domain stayed where it was, so the address people are given —
+   * on an application form, in an email signature, from a business card —
+   * resolves to a site calling itself something else. A reader who cannot
+   * tell whether they have arrived at the right organization leaves.
+   *
+   * `brand.test.ts` treats "Opportunity Ecosystem" as a former name and
+   * fails if it is spelled anywhere in `src/` outside this file. That check
+   * is still right: the point was never that the old name is forbidden, it
+   * is that it lives in one place. Render it from here.
+   */
+  formerly: "Opportunity Ecosystem",
+
+  /** The domain the venture actually publishes on. Real, and deliverable. */
+  publicDomain: "opportunityecosystem.org",
+
+  /**
+   * The mailbox on the public site.
+   *
+   * **This has to exist before the contact page ships.** The venture had no
+   * company address at all — a funder who wanted to reply had a personal
+   * inbox and nothing else — which is the gap this closes. Point it at a
+   * different address if the shared mailbox is not set up yet; a published
+   * address that bounces is worse than the one it replaced.
+   */
+  contactMailbox: "contact",
+
+  /** Who to ask for. */
+  founderName: "Melissa Weed",
+
+  /** Where the venture is based. */
+  headquarters: "Pittsburg, Kansas",
 
   /** What the platform operator's own organization is called in-product. */
   operatorName: "Career Connected Learning Network",
@@ -78,9 +115,29 @@ export function defaultEmailFrom(): string {
   return `${brand.name} <onboarding@resend.dev>`;
 }
 
-/** Page title. `[Demo]` leads so a forwarded link preview says so first. */
+/**
+ * Title for a page inside the prototype. `[Demo]` leads so a forwarded link
+ * preview says so first.
+ */
 export function pageTitle(page?: string): string {
   return page
     ? `[Demo] ${page} — ${brand.name}`
     : `[Demo] ${brand.name} — ${brand.programme}`;
+}
+
+/**
+ * Title for a venture page.
+ *
+ * Deliberately not `pageTitle`. These pages describe real work at a real
+ * address, and leading them with `[Demo]` would be a false disclaimer —
+ * which is the same failure as a missing one, pointed the other way. The
+ * marker belongs to `/demo` and only there.
+ */
+export function siteTitle(page?: string): string {
+  return page ? `${page} — ${brand.name}` : `${brand.name}`;
+}
+
+/** An address at the venture's public domain. */
+export function publicAddress(mailbox: string): string {
+  return `${mailbox}@${brand.publicDomain}`;
 }

@@ -24,6 +24,7 @@ import { transitionInput, validate } from "@/services/validation";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { drainPending } from "@/services/outbox";
+import { PORTAL_PATH } from "@/routes";
 
 export interface ActionResult {
   ok: boolean;
@@ -31,7 +32,7 @@ export interface ActionResult {
 }
 
 /** Every portal reads applications, so every portal's view can go stale. */
-const PORTAL_PATHS = ["/admin", "/student", "/business", "/college", "/board"];
+const PORTAL_PATHS = Object.values(PORTAL_PATH);
 
 export interface TransitionRequest {
   applicationId: unknown;

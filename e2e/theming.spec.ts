@@ -29,7 +29,7 @@ const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
  * and a count of the findings visible without it.
  */
 async function openColourEditor(page: Page) {
-  await page.goto("/college");
+  await page.goto("/demo/college");
   await page.getByRole("button", { name: "Edit colours" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 }
@@ -57,7 +57,7 @@ const brandTone = (page: Page, step: number) =>
 
 test.describe("a partner's colours reach the pages that are theirs", () => {
   test("the student portal renders in the college's brand", async ({ page }) => {
-    await page.goto("/student");
+    await page.goto("/demo/student");
 
     // Not "some colour was set" — the exact tone the ramp computes for the
     // seeded green, so a wrapper that renders but ignores the theme fails.
@@ -66,7 +66,7 @@ test.describe("a partner's colours reach the pages that are theirs", () => {
   });
 
   test("the college portal does too", async ({ page }) => {
-    await page.goto("/college");
+    await page.goto("/demo/college");
     expect(await brandTone(page, 700)).toBe(rampFromHue(hueOf(SEEDED_BRAND))[700]);
   });
 
@@ -74,7 +74,7 @@ test.describe("a partner's colours reach the pages that are theirs", () => {
     // Painting a board's oversight console in one college's colours would
     // misrepresent what the board is looking at. This is the gate that stops
     // it, and it is one boolean away from being wrong.
-    await page.goto("/board");
+    await page.goto("/demo/board");
 
     const themed = rampFromHue(hueOf(SEEDED_BRAND))[700];
     expect(await brandTone(page, 700)).not.toBe(themed);
@@ -83,10 +83,10 @@ test.describe("a partner's colours reach the pages that are theirs", () => {
   test("the second colour appears as a band, and only where themed", async ({
     page,
   }) => {
-    await page.goto("/student");
+    await page.goto("/demo/student");
     const themed = await themedVariable(page, "--color-accent");
 
-    await page.goto("/board");
+    await page.goto("/demo/board");
     expect(await themedVariable(page, "--color-accent")).not.toBe(themed);
   });
 
@@ -94,7 +94,7 @@ test.describe("a partner's colours reach the pages that are theirs", () => {
     // A themed page with no attribution claims to be the school's own system,
     // which is a different and worse claim than "your school, on this
     // platform".
-    await page.goto("/student");
+    await page.goto("/demo/student");
     await expect(page.getByText("Themed for")).toBeVisible();
   });
 });
@@ -171,7 +171,7 @@ test.describe("the theme checker tells a college what will happen", () => {
     // sign the checker had found anything, moving it behind a button would
     // have turned a check nobody can miss into one nobody opens — the seeded
     // green-and-gold pair collides twice and that has to reach the page.
-    await page.goto("/college");
+    await page.goto("/demo/college");
 
     await expect(page.getByText("2 things worth knowing")).toBeVisible();
     await expect(page.getByRole("dialog")).toBeHidden();

@@ -23,6 +23,7 @@
 
 import type { Organization } from "@/domain/types";
 import { brand } from "@/brand";
+import { PORTAL_PATH } from "@/routes";
 import { accentFromHue, hueOf, rampFromHue, type Accent, type Ramp } from "./ramp";
 
 export interface PartnerTheme {
@@ -89,7 +90,10 @@ export function themeFor(organization: Organization | null): PartnerTheme {
  * and for the board actively misleading.
  */
 export function isPartnerSurface(pathname: string): boolean {
-  return pathname.startsWith("/student") || pathname.startsWith("/college");
+  return (
+    pathname.startsWith(PORTAL_PATH.student) ||
+    pathname.startsWith(PORTAL_PATH.college)
+  );
 }
 
 /**
