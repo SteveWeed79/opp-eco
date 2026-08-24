@@ -18,22 +18,89 @@ import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
 import { signInAs, signOut } from "@/auth/actions";
 import { brand } from "@/brand";
 import { isPartnerSurface } from "@/theme/theme";
+import { DEMO_ROOT, PORTAL_PATH, SITE_NAV, isDemoSurface } from "@/routes";
 import type { ResolvedTheme } from "@/theme/resolve";
 
+/**
+ * The switcher, and the only place a portal's label lives.
+ *
+ * `href` is read from `PORTAL_PATH` rather than written out, because these
+ * five strings are also the redirect targets after sign-on, the paths
+ * revalidated after a write, and the links in every notification email. A
+ * copy here is a copy that can disagree with all of them — which is exactly
+ * what happened when the portals moved under `/demo` and this array kept
+ * pointing at addresses that no longer existed.
+ */
 const PORTALS: {
   role: ActorRole;
   href: string;
   label: string;
   icon: typeof Building2;
 }[] = [
-  { role: "admin", href: "/admin", label: "Admin", icon: SlidersHorizontal },
-  { role: "student", href: "/student", label: "Student", icon: GraduationCap },
-  { role: "business", href: "/business", label: "Business", icon: Building2 },
-  { role: "college", href: "/college", label: "College", icon: School },
-  { role: "board", href: "/board", label: "Workforce Board", icon: Landmark },
+  { role: "admin", href: PORTAL_PATH.admin, label: "Admin", icon: SlidersHorizontal },
+  { role: "student", href: PORTAL_PATH.student, label: "Student", icon: GraduationCap },
+  { role: "business", href: PORTAL_PATH.business, label: "Business", icon: Building2 },
+  { role: "college", href: PORTAL_PATH.college, label: "College", icon: School },
+  { role: "board", href: PORTAL_PATH.board, label: "Workforce Board", icon: Landmark },
 ];
 
+/**
+ * The frame, in two halves.
+ *
+ * This site answers to two different readers and they need different chrome.
+ * A funder landing on `/` wants to know what this organization is; a
+ * stakeholder walking through `/demo` wants a portal switcher and a standing
+ * reminder that none of it is real. Rendering one header for both meant the
+ * venture's front page opened with a demonstration banner and a row of
+ * fictional statistics, which is the wrong first impression in both
+ * directions — it undersells the work and it overstates the prototype.
+ *
+ * The split is by route, not by prop, so a page cannot end up under the wrong
+ * chrome by forgetting to pass something.
+ */
 export function Shell({
+  children,
+  signedInAs,
+  signedInRole,
+  theme,
+  readOnly = false,
+}: {
+  children: React.ReactNode;
+  signedInAs?: string;
+  /** Absent when signed out, which is when every portal is browsable. */
+  signedInRole?: ActorRole;
+  /** Resolved server-side; applied by the demo chrome, which knows the route. */
+  theme: ResolvedTheme;
+  /** True when the deployment is backed by a database nothing may write to. */
+  readOnly?: boolean;
+}) {
+  const pathname = usePathname();
+
+  if (!isDemoSurface(pathname)) {
+    return (
+      <ToastProvider>
+        <div className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col">
+          <SiteHeader pathname={pathname} />
+          <main className="flex-1">{children}</main>
+          <SiteFooter />
+        </div>
+      </ToastProvider>
+    );
+  }
+
+  return (
+    <DemoChrome
+      signedInAs={signedInAs}
+      signedInRole={signedInRole}
+      theme={theme}
+      readOnly={readOnly}
+    >
+      {children}
+    </DemoChrome>
+  );
+}
+
+function DemoChrome({
   children,
   signedInAs,
   signedInRole,
@@ -90,7 +157,7 @@ export function Shell({
             under it looks like it is passing through it. */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-line shadow-[0_1px_3px_rgb(15_23_42/0.04),0_8px_24px_-12px_rgb(15_23_42/0.12)]">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3 group shrink-0">
+            <Link href={DEMO_ROOT} className="flex items-center gap-3 group shrink-0">
               <span
                 className={`w-10 h-10 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_2px_6px_-1px_rgb(3_105_161/0.5)] group-hover:from-ink-700 group-hover:to-ink-950 transition-all overflow-hidden ${markTextSize(
                   themed ? theme.monogram : brand.monogram,
@@ -284,6 +351,170 @@ export function Shell({
 }
 
 /**
+ * The venture header.
+ *
+ * Quieter than the demo's on purpose. There is no portal to switch to, no
+ * session to hold, and nothing here mutates — so the chrome is a mark, four
+ * links, and one way into the prototype.
+ */
+function SiteHeader({ pathname }: { pathname: string }) {
+  return (
+    <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-line">
+      <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
+        <Link href="/" className="flex items-center gap-3 group shrink-0">
+          <span
+            className={`w-10 h-10 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_2px_6px_-1px_rgb(3_105_161/0.5)] group-hover:from-ink-700 group-hover:to-ink-950 transition-all ${markTextSize(
+              brand.monogram,
+            )}`}
+          >
+            {brand.monogram}
+          </span>
+          <span className="hidden sm:block leading-tight">
+            <span className="block text-sm font-extrabold tracking-tight text-ink-950">
+              {brand.lead}
+            </span>
+            <span className="block text-sm font-extrabold text-brand-700">
+              {brand.accent}
+            </span>
+          </span>
+        </Link>
+
+        <nav
+          aria-label="Site"
+          className="hidden md:flex items-center gap-1"
+        >
+          {SITE_NAV.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`px-3.5 py-2 rounded-card text-sm font-semibold transition-colors ${
+                  isActive
+                    ? "text-ink-950 bg-canvas-deep"
+                    : "text-ink-600 hover:text-ink-950 hover:bg-canvas"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <Link
+          href={DEMO_ROOT}
+          className="shrink-0 bg-surface border border-line-strong text-ink-700 px-4 py-2.5 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all"
+        >
+          See the prototype
+        </Link>
+      </div>
+
+      {/* Small screens keep the nav as a scrolling row rather than losing it
+          behind a menu button — four links do not need a drawer. */}
+      <div className="md:hidden border-t border-line overflow-x-auto">
+        <div className="flex gap-1 px-4 py-2 min-w-max">
+          {SITE_NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={pathname === item.href ? "page" : undefined}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${
+                pathname === item.href
+                  ? "bg-ink-950 text-white"
+                  : "text-ink-600"
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/**
+ * The venture footer.
+ *
+ * Carries the two facts a funder or a partner looks for and could not find
+ * anywhere on this site before: that the address they were given still
+ * resolves here under a former name, and that this is a for-profit paired
+ * with a foundation rather than one organization being vague about which it
+ * is. Both are questions people ask early, and an answer they have to email
+ * for is an answer most of them never get.
+ */
+function SiteFooter() {
+  return (
+    <footer className="border-t border-line bg-surface mt-24">
+      <div className="max-w-6xl mx-auto px-6 py-14 grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
+        <div>
+          <p className="font-black text-ink-950 tracking-tight">{brand.name}</p>
+          <p className="text-sm text-ink-500 mt-2 leading-relaxed max-w-sm">
+            Connective infrastructure between education, employers, workforce
+            partners, funding, and learners across rural Kansas.
+          </p>
+          <p className="text-xs text-ink-500 mt-4 leading-relaxed max-w-sm">
+            Formerly {brand.formerly}. The name changed; the address did not —
+            this is still {brand.publicDomain}.
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[0.7rem] font-bold text-ink-500 uppercase tracking-[0.12em]">
+            Structure
+          </p>
+          <p className="text-sm text-ink-600 mt-3 leading-relaxed">
+            A for-profit company providing infrastructure, technology, and
+            services, paired with a nonprofit foundation that brings
+            philanthropic and public funding into the network to remove
+            barriers to participation.
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[0.7rem] font-bold text-ink-500 uppercase tracking-[0.12em]">
+            Pages
+          </p>
+          <ul className="mt-3 space-y-2">
+            {SITE_NAV.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="text-sm text-ink-600 hover:text-ink-950 font-semibold"
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <Link
+                href={DEMO_ROOT}
+                className="text-sm text-ink-600 hover:text-ink-950 font-semibold"
+              >
+                Prototype
+              </Link>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="border-t border-line">
+        <p className="max-w-6xl mx-auto px-6 py-5 text-xs text-ink-500 leading-relaxed">
+          Headquartered in Pittsburg, Kansas. The working prototype at{" "}
+          <Link href={DEMO_ROOT} className="font-semibold text-ink-700 underline underline-offset-2">
+            {DEMO_ROOT}
+          </Link>{" "}
+          runs on invented organizations and fictional figures — nothing in it
+          is an offer of employment, funding, academic credit, or wage
+          reimbursement.
+        </p>
+      </div>
+    </footer>
+  );
+}
+
+/**
  * Type size for the square mark, chosen by how much is in it.
  *
  * Partner monograms are two letters; the platform's is four, because the
@@ -357,6 +588,18 @@ function DemoFooter() {
         <p className="max-w-3xl">
           Nothing on this site is an offer of employment, funding, academic
           credit, or wage reimbursement.
+        </p>
+        {/* A way out. Without it the prototype is a one-way door: the mark in
+            the header goes to `/demo`, every portal link stays inside, and
+            somebody who arrived from a forwarded link has no route to the
+            organization that built it. */}
+        <p className="pt-1">
+          <Link
+            href="/"
+            className="font-bold text-ink-700 hover:text-ink-950 underline underline-offset-4"
+          >
+            Back to {brand.name}
+          </Link>
         </p>
       </div>
     </footer>

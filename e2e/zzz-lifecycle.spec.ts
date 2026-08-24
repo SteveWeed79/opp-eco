@@ -15,7 +15,7 @@ test.describe.configure({ mode: "serial" });
 test("the college verifies a student, which is what opens applying", async ({
   page,
 }) => {
-  await page.goto("/college");
+  await page.goto("/demo/college");
 
   const queue = page.getByRole("heading", { name: "Student verification" });
   await expect(queue).toBeVisible();
@@ -36,7 +36,7 @@ test("the college verifies a student, which is what opens applying", async ({
 test("rejecting a verification demands a reason the student can read", async ({
   page,
 }) => {
-  await page.goto("/college");
+  await page.goto("/demo/college");
 
   // A student is only rejectable once they have asked to be checked. Rather
   // than depend on one being left in that state by the test above, walk the
@@ -83,7 +83,7 @@ test("a posting goes out for review, comes back, and goes again", async ({ page 
   // else and never appears on the employer's side at all.
   const title = `Loop test posting ${Date.now()}`;
 
-  await page.goto("/business");
+  await page.goto("/demo/business");
   await page.getByRole("button", { name: /Post an opportunity/ }).click();
   const create = page.getByRole("dialog");
   await create.getByLabel("Title").fill(title);
@@ -107,7 +107,7 @@ test("a posting goes out for review, comes back, and goes again", async ({ page 
   await expect(page.getByRole("status").first()).toContainText("review");
 
   // The college sends it back with a reason.
-  await page.goto("/college");
+  await page.goto("/demo/college");
   const review = page.getByRole("listitem").filter({ hasText: title }).first();
   await expect(review).toBeVisible();
 
@@ -121,7 +121,7 @@ test("a posting goes out for review, comes back, and goes again", async ({ page 
 
   // The employer sees it and can act. A change request the employer cannot
   // resubmit is a dead end dressed as a decision.
-  await page.goto("/business");
+  await page.goto("/demo/business");
   const employerRow = page.getByRole("listitem").filter({ hasText: title }).first();
   await expect(employerRow).toContainText("Changes requested");
 
@@ -129,12 +129,12 @@ test("a posting goes out for review, comes back, and goes again", async ({ page 
   await expect(page.getByRole("status").first()).toContainText("done");
 
   // And back in the college's queue, where it can be published.
-  await page.goto("/college");
+  await page.goto("/demo/college");
   const again = page.getByRole("listitem").filter({ hasText: title }).first();
   await again.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByRole("status").first()).toContainText("done");
 
-  await page.goto("/business");
+  await page.goto("/demo/business");
   await expect(
     page.getByRole("listitem").filter({ hasText: title }).first(),
   ).toContainText("Live");
@@ -143,7 +143,7 @@ test("a posting goes out for review, comes back, and goes again", async ({ page 
 test("a posting with candidates in it cannot be closed out from under them", async ({
   page,
 }) => {
-  await page.goto("/business");
+  await page.goto("/demo/business");
 
   // The guard lives on the machine, so the button is simply not offered — the
   // page and the service agree because both read the same count.
@@ -161,7 +161,7 @@ test("a posting with candidates in it cannot be closed out from under them", asy
 });
 
 test("the administrator vets an organization, which unblocks it", async ({ page }) => {
-  await page.goto("/admin");
+  await page.goto("/demo/admin");
 
   const queue = page.getByRole("heading", { name: "Awaiting vetting" });
   await expect(queue).toBeVisible();
@@ -185,11 +185,11 @@ test("the administrator vets an organization, which unblocks it", async ({ page 
 test("vetting is the administrator's alone", async ({ page }) => {
   // Signed in as the college, the vetting queue is not even reachable — the
   // portal switcher disables every portal but your own.
-  await page.goto("/admin");
+  await page.goto("/demo/admin");
   await expect(page.getByRole("heading", { name: "Awaiting vetting" })).toBeVisible();
 
   // And the buttons the college would need are not on the college's own page.
-  await page.goto("/college");
+  await page.goto("/demo/college");
   await expect(page.getByRole("button", { name: "Begin vetting" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
 });

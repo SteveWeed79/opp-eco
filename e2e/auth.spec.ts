@@ -13,7 +13,7 @@ test("signing on sets a server-side session and lands in the portal", async ({
   page,
   context,
 }) => {
-  await page.goto("/");
+  await page.goto("/demo");
   await expect(page.getByRole("button", { name: "Sign on" })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign on" }).click();
@@ -36,14 +36,17 @@ test("signing on sets a server-side session and lands in the portal", async ({
 });
 
 test("signing out clears the session", async ({ page, context }) => {
-  await page.goto("/");
+  await page.goto("/demo");
   await page.getByRole("button", { name: "Sign on" }).click();
   await page.getByRole("radio", { name: /Marcia Delgado/ }).click();
   await page.getByRole("button", { name: "Enter portal" }).click();
   await page.waitForURL("**/board");
 
   await page.getByRole("button", { name: "Sign out" }).click();
-  await page.waitForURL("http://localhost:3000/");
+  // Back to the prototype's index, not the venture's front page. Somebody
+  // signing out was walking through the demo, and the sign-on control they
+  // will want next only exists under `/demo`.
+  await page.waitForURL("http://localhost:3000/demo");
 
   const session = (await context.cookies()).find((c) => c.name === "oe_demo_role");
   expect(session).toBeUndefined();
@@ -62,7 +65,7 @@ test.describe("file downloads", () => {
   });
 
   test("an unsigned request is refused", async ({ page, request }) => {
-    await page.goto("/");
+    await page.goto("/demo");
     await page.getByRole("button", { name: "Sign on" }).click();
     await page.getByRole("radio", { name: /Steve Weed/ }).click();
     await page.getByRole("button", { name: "Enter portal" }).click();

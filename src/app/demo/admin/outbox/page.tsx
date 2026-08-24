@@ -15,6 +15,7 @@ import {
 import { actorForPortal } from "@/auth/session";
 import { outboxFor } from "@/services/outbox";
 import { emailConfig } from "@/services/email/config";
+import { PORTAL_PATH } from "@/routes";
 
 /**
  * The notification outbox.
@@ -42,7 +43,7 @@ export default async function OutboxPage() {
   return (
     <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 space-y-6">
       <Link
-        href="/admin"
+        href={PORTAL_PATH.admin}
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-600 hover:text-ink-950"
       >
         <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to operations

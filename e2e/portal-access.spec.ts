@@ -16,10 +16,10 @@ import { test, expect } from "@playwright/test";
  */
 
 const OTHER_PORTALS = [
-  { path: "/student", label: "Student" },
-  { path: "/business", label: "Business" },
-  { path: "/college", label: "College" },
-  { path: "/board", label: "Workforce Board" },
+  { path: "/demo/student", label: "Student" },
+  { path: "/demo/business", label: "Business" },
+  { path: "/demo/college", label: "College" },
+  { path: "/demo/board", label: "Workforce Board" },
 ];
 
 test.describe("signed in as an administrator", () => {
@@ -32,7 +32,7 @@ test.describe("signed in as an administrator", () => {
         path: "/",
       },
     ]);
-    await page.goto("/admin");
+    await page.goto("/demo/admin");
     await expect(page.locator("header")).toContainText("Steve Weed");
   });
 
@@ -82,7 +82,7 @@ test.describe("signed out", () => {
   test("every portal is still browsable, which the demo depends on", async ({
     page,
   }) => {
-    for (const portal of [...OTHER_PORTALS, { path: "/admin", label: "Admin" }]) {
+    for (const portal of [...OTHER_PORTALS, { path: "/demo/admin", label: "Admin" }]) {
       await page.goto(portal.path);
       await expect(page).toHaveURL(new RegExp(`${portal.path}$`));
       await expect(page.getByText("This page didn't load")).toHaveCount(0);
@@ -90,7 +90,7 @@ test.describe("signed out", () => {
   });
 
   test("the switcher offers all five", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/demo");
     for (const label of ["Admin", "Student", "Business", "College", "Workforce Board"]) {
       await expect(
         page.getByRole("link", { name: label, exact: true }).first(),

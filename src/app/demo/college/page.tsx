@@ -36,6 +36,7 @@ import { platformTheme } from "@/theme/theme";
 import { collegeTransition } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
 import { WeeklyRecord } from "./WeeklyRecord";
+import { opportunityPath } from "@/routes";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
@@ -312,7 +313,7 @@ export default async function CollegePage() {
                             description below is on the row either way. */}
                         {signedIn ? (
                           <Link
-                            href={`/opportunities/${posting.id}`}
+                            href={opportunityPath(posting.id)}
                             className="font-semibold text-ink-950 hover:text-brand-700 transition-colors"
                           >
                             {posting.title}

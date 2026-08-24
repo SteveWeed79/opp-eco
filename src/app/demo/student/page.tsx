@@ -40,6 +40,7 @@ import { BookInterview } from "./BookInterview";
 import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
 import { studentTransition } from "./actions";
+import { opportunityPath } from "@/routes";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
@@ -430,7 +431,7 @@ export default async function StudentPage() {
                             and a wage — the description the college refuses to
                             publish without was rendered to nobody. */}
                         <Link
-                          href={`/opportunities/${posting.id}`}
+                          href={opportunityPath(posting.id)}
                           className="font-semibold text-ink-950 hover:text-brand-700 transition-colors"
                         >
                           {posting.title}
