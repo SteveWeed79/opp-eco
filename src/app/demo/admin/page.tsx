@@ -42,6 +42,7 @@ import {
   subsidyDeployed,
 } from "@/lib/queries";
 import type { MarketStage } from "@/domain/types";
+import { PORTAL_PATH } from "@/routes";
 
 const STAGE_ORDER: MarketStage[] = [
   "prospecting",
@@ -430,7 +431,7 @@ export default async function AdminPage() {
           </div>
           <div className="flex flex-wrap items-center gap-5">
             <Link
-              href="/admin/audit"
+              href={`${PORTAL_PATH.admin}/audit`}
               className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
             >
               View audit log <ArrowRight className="w-4 h-4" aria-hidden="true" />
@@ -438,7 +439,7 @@ export default async function AdminPage() {
             {/* The audit log says what changed; the outbox says whether anyone
                 was told. A placement stalls on the second, not the first. */}
             <Link
-              href="/admin/outbox"
+              href={`${PORTAL_PATH.admin}/outbox`}
               className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
             >
               Notification outbox{" "}

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ActorContext, ActorRole } from "@/domain/types";
 import { contextFor, demoAccounts } from "@/data/session";
+import { PORTAL_PATH } from "@/routes";
 
 /**
  * Session resolution.
@@ -60,14 +61,6 @@ export async function getActor(): Promise<ActorContext | null> {
   return provider.resolve();
 }
 
-/** Where each role's own portal lives. */
-export const PORTAL_PATH: Record<ActorRole, string> = {
-  admin: "/admin",
-  student: "/student",
-  business: "/business",
-  college: "/college",
-  board: "/board",
-};
 
 /**
  * The actor for a portal page.

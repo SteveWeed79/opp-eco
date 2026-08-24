@@ -8,17 +8,32 @@ import { test, expect, type Page } from "@playwright/test";
  * real bugs this project has hit were exactly that shape.
  */
 
-const PORTALS = [
-  { path: "/", name: "landing" },
-  { path: "/admin", name: "admin" },
-  { path: "/admin/audit", name: "audit log" },
-  { path: "/student", name: "student" },
-  { path: "/business", name: "business" },
-  { path: "/college", name: "college" },
-  { path: "/board", name: "board" },
-  { path: "/design", name: "component gallery" },
-  { path: "/opportunities/post-frontier-nursing", name: "opportunity detail" },
+/**
+ * The venture pages. Real work, real figures, and no demonstration notice —
+ * a disclaimer on them would be as false as its absence is on the prototype.
+ */
+const SITE_PAGES = [
+  { path: "/", name: "home" },
+  { path: "/approach", name: "approach" },
+  { path: "/partners", name: "partners" },
+  { path: "/evidence", name: "evidence" },
+  { path: "/contact", name: "contact" },
 ];
+
+/** The prototype. Every one of these carries the notice. */
+const DEMO_PAGES = [
+  { path: "/demo", name: "prototype landing" },
+  { path: "/demo/admin", name: "admin" },
+  { path: "/demo/admin/audit", name: "audit log" },
+  { path: "/demo/student", name: "student" },
+  { path: "/demo/business", name: "business" },
+  { path: "/demo/college", name: "college" },
+  { path: "/demo/board", name: "board" },
+  { path: "/demo/design", name: "component gallery" },
+  { path: "/demo/opportunities/post-frontier-nursing", name: "opportunity detail" },
+];
+
+const PORTALS = [...SITE_PAGES, ...DEMO_PAGES];
 
 /** Collect anything the browser complains about while a page loads. */
 function watchForProblems(page: Page) {
@@ -53,18 +68,33 @@ for (const portal of PORTALS) {
       expect(overflows).toBe(false);
     });
 
-    test("carries the demonstration notice", async ({ page }) => {
-      await page.goto(portal.path);
-      // The notice has to travel with every page, because a forwarded link to
-      // /admin lands somewhere with no other context.
-      await expect(page.getByText("Demonstration", { exact: false }).first()).toBeVisible();
-    });
+  });
+}
+
+for (const portal of DEMO_PAGES) {
+  test(`${portal.name} carries the demonstration notice`, async ({ page }) => {
+    await page.goto(portal.path);
+    // The notice has to travel with every page under `/demo`, because a
+    // forwarded link to one of them lands somewhere with no other context.
+    await expect(
+      page.getByText("Demonstration", { exact: false }).first(),
+    ).toBeVisible();
+  });
+}
+
+for (const page_ of SITE_PAGES) {
+  test(`${page_.name} does not carry it`, async ({ page }) => {
+    await page.goto(page_.path);
+    // The other half of the same rule, and the reason the split exists: the
+    // venture pages describe real work, and a demonstration banner across
+    // them would be a disclaimer for something that is not a demonstration.
+    await expect(page.getByText("Demonstration", { exact: false })).toHaveCount(0);
   });
 }
 
 test.describe("security headers", () => {
   test("are set on a page response", async ({ page }) => {
-    const response = await page.goto("/student");
+    const response = await page.goto("/demo/student");
     const headers = response!.headers();
 
     expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
@@ -78,7 +108,7 @@ test.describe("security headers", () => {
     // A nonce-based CSP that blocks React's own scripts leaves a page that
     // renders and does nothing. Interactivity is the only real proof.
     const problems = watchForProblems(page);
-    await page.goto("/design");
+    await page.goto("/demo/design");
 
     await page.getByRole("tab", { name: /Forms/ }).click();
     await expect(page.getByText("Slot picker")).toBeVisible();
@@ -87,7 +117,7 @@ test.describe("security headers", () => {
   });
 
   test("stylesheets load under the policy", async ({ page }) => {
-    await page.goto("/student");
+    await page.goto("/demo/student");
     const background = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
     );

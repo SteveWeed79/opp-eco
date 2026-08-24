@@ -17,19 +17,28 @@ import AxeBuilder from "@axe-core/playwright";
  */
 
 const PAGES = [
-  { path: "/", name: "landing" },
-  { path: "/admin", name: "admin console" },
-  { path: "/admin/audit", name: "audit log" },
-  { path: "/admin/outbox", name: "notification outbox" },
-  { path: "/student", name: "student portal" },
-  { path: "/business", name: "business portal" },
-  { path: "/college", name: "college portal" },
-  { path: "/board", name: "board portal" },
-  { path: "/design", name: "component gallery" },
+  // The venture pages and the prototype are different surfaces with different
+  // chrome — a header, a footer, and a nav that exist on one and not the
+  // other. Both are scanned, because a violation in the site header would
+  // otherwise be invisible to a suite that only ever loads portals.
+  { path: "/", name: "home" },
+  { path: "/approach", name: "approach" },
+  { path: "/partners", name: "partners" },
+  { path: "/evidence", name: "evidence" },
+  { path: "/contact", name: "contact" },
+  { path: "/demo", name: "prototype landing" },
+  { path: "/demo/admin", name: "admin console" },
+  { path: "/demo/admin/audit", name: "audit log" },
+  { path: "/demo/admin/outbox", name: "notification outbox" },
+  { path: "/demo/student", name: "student portal" },
+  { path: "/demo/business", name: "business portal" },
+  { path: "/demo/college", name: "college portal" },
+  { path: "/demo/board", name: "board portal" },
+  { path: "/demo/design", name: "component gallery" },
   // A seeded published posting. `accessibility.spec.ts` sorts first under
   // `workers: 1`, so the suites that publish and close postings have not run
   // yet and this id is still in the state the seed left it.
-  { path: "/opportunities/post-frontier-nursing", name: "opportunity detail" },
+  { path: "/demo/opportunities/post-frontier-nursing", name: "opportunity detail" },
 ];
 
 /** WCAG 2.1 A and AA — the level public-sector procurement asks for. */
@@ -57,7 +66,7 @@ for (const target of PAGES) {
 
 test.describe("states a static scan would miss", () => {
   test("an open modal is accessible", async ({ page }) => {
-    await page.goto("/design");
+    await page.goto("/demo/design");
     await page.getByRole("button", { name: "Open modal" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
 
@@ -66,7 +75,7 @@ test.describe("states a static scan would miss", () => {
   });
 
   test("a form showing a validation error is accessible", async ({ page }) => {
-    await page.goto("/design");
+    await page.goto("/demo/design");
     await page.getByRole("tab", { name: /Forms/ }).click();
 
     // The error state is where labelling usually breaks: an error rendered
@@ -76,7 +85,7 @@ test.describe("states a static scan would miss", () => {
   });
 
   test("every data table is accessible once sorted", async ({ page }) => {
-    await page.goto("/design");
+    await page.goto("/demo/design");
     await page.getByRole("tab", { name: /Data display/ }).click();
     await page
       .getByRole("columnheader", { name: /Dwell/ })
@@ -98,12 +107,12 @@ test.describe("things automation can check that are worth checking", () => {
   });
 
   test("every page declares a language", async ({ page }) => {
-    await page.goto("/student");
+    await page.goto("/demo/student");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
   });
 
   test("keyboard focus is always visible", async ({ page }) => {
-    await page.goto("/student");
+    await page.goto("/demo/student");
     await page.keyboard.press("Tab");
 
     const hasVisibleFocus = await page.evaluate(() => {

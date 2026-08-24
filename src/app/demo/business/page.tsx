@@ -50,6 +50,7 @@ import { marketRemainingBudget } from "@/lib/queries";
 import { businessTransition } from "./actions";
 import { NewPosting } from "./NewPosting";
 import { OfferMentorship } from "./OfferMentorship";
+import { opportunityPath } from "@/routes";
 
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
@@ -477,7 +478,7 @@ export default async function BusinessPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
-                        href={`/opportunities/${posting.id}`}
+                        href={opportunityPath(posting.id)}
                         className="font-semibold text-sm text-ink-950 hover:text-brand-700 transition-colors"
                       >
                         {posting.title}

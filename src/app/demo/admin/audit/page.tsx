@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { repositories } from "@/data/backend";
 import { actorForPortal } from "@/auth/session";
+import { PORTAL_PATH } from "@/routes";
 
 export default async function AuditPage() {
   const admin = await actorForPortal("admin");
@@ -26,7 +27,7 @@ export default async function AuditPage() {
   return (
     <div className="max-w-5xl mx-auto px-6 pt-8 pb-16 space-y-6">
       <Link
-        href="/admin"
+        href={PORTAL_PATH.admin}
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-600 hover:text-ink-950"
       >
         <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to operations

@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
  */
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/design");
+  await page.goto("/demo/design");
 });
 
 test.describe("tabs", () => {
@@ -128,7 +128,7 @@ test.describe("toasts", () => {
 
 test.describe("choice group", () => {
   test("behaves as a radiogroup, not a row of toggle buttons", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/demo");
     await page.getByRole("button", { name: "Sign on" }).click();
 
     const group = page.getByRole("radiogroup");

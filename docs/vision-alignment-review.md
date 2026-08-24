@@ -1,6 +1,7 @@
 # Site review against the Patterson Fellows 2026 application
 
-**Status:** Review. No code changed by this document.
+**Status:** Review. **A and F are built** — see the note under each. The rest
+stands as recommended.
 **Reviewed:** the site as it stands on `claude/opp-eco-app-review-lufnbs`, against the
 Patterson Family Foundation Fellows 2026 application (Melissa Weed, CCLN).
 **Purpose:** name where the site and the current vision have come apart, and say
@@ -52,6 +53,16 @@ is admirably honest and it is not a front door.
 ---
 
 ## A. Split the front door from the demo
+
+> **Built.** `/` is the venture; the prototype moved to `/demo` with its banner
+> and `noindex` intact. Venture pages at `/`, `/approach`, `/partners`,
+> `/evidence`, `/contact`. The name bridge and the hybrid-structure line are in
+> the site footer, the contact address is in `brand.ts`, and `front-door.spec.ts`
+> asserts the split. The old portal paths 308 to their new homes.
+>
+> **One thing needs a person:** `contact@opportunityecosystem.org` has to exist,
+> or `brand.contactMailbox` needs pointing at an address that does. A published
+> address that bounces is worse than the missing one it replaced.
 
 **The single highest-value change, and the cheapest.**
 
@@ -453,6 +464,11 @@ answers that better than a paragraph.
 
 ## F. Align the seeded markets to the pilot in the application
 
+> **Built.** Garden City and Salina are gone; Hays moved to `college_engaged`
+> with a board and a college in vetting, and Beloit joins at `board_engaged` as
+> the outlier. The seed now shows the four-community proving ground the
+> application describes.
+
 Seeded markets today: Pittsburg (live), Emporia (configuring), Garden City (board
 committed), Salina (board engaged), Hays (prospecting).
 
@@ -542,8 +558,9 @@ Worth saying plainly, because a review that only lists gaps invites over-correct
 
 ## Two decisions only the founder can make
 
-**Publish the prices, or publish the shape?** The application states three tiers with
-figures. Putting exact dollars on a public page before a single institution has paid
+**Publish the prices, or publish the shape?** *(Decided: shape only. `/partners`
+describes the three tiers by scope and says, on the page, why there is no figure
+on it.)* The application states three tiers with figures. Putting exact dollars on a public page before a single institution has paid
 one sets an anchor that is hard to move, and the application itself names willingness
 to pay as the central unvalidated assumption. My recommendation: publish the three
 tiers by *scope* — what each includes, who each is for — and give the figure as a
@@ -565,8 +582,8 @@ A, since it changes who the front door addresses.
 
 | | Work | Why here |
 |---|---|---|
-| **Now** | A (front door split, real numbers, name bridge, contact) | A funder may type the URL this week. Days of work, not weeks. |
-| **Now** | F (seed alignment to the pilot) | One file. Makes the demo show the pilot the application describes. |
+| ~~Now~~ **Done** | A (front door split, real numbers, name bridge, contact) | A funder may type the URL this week. Days of work, not weeks. |
+| ~~Now~~ **Done** | F (seed alignment to the pilot) | One file. Makes the demo show the pilot the application describes. |
 | **Now** | E, cheap half — name the dashboard "CCLN Pro", screenshot it | Answers "what is the $20,000 building" with a picture. |
 | **Next** | B (`/partners`) and G (claim discipline) | The revenue model's first public expression. Needs the pricing decision above. |
 | **Next** | C (phases, reopen Q8) | Cheap, and it is what stops the other changes reading as overreach. |

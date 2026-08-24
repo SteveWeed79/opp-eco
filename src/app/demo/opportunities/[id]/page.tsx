@@ -19,7 +19,7 @@ import { isSelfSufficientForCredit } from "@/domain/credit";
 import { canApply } from "@/domain/lifecycle";
 import { postingTotalHours, type ActorContext, type Posting } from "@/domain/types";
 import { pageTitle } from "@/brand";
-import { ApplyButton } from "@/app/student/ApplyButton";
+import { ApplyButton } from "@/app/demo/student/ApplyButton";
 
 /**
  * One opportunity, in full.

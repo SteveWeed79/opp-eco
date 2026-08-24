@@ -6,6 +6,16 @@ The program launches city by city: the administrator secures a local workforce b
 
 **Status: mockup with real foundations.** The UI is a demo running on seeded fixtures, but it reads through the same domain layer and repository contracts a production build would use.
 
+## Two sites, one deployment
+
+`/` is the **venture**: what this organization is, who it serves, what a partnership includes, and what has actually been tested. Indexed, and every figure on it is real.
+
+`/demo` is the **prototype**: five portals over one workflow, running on invented organizations, carrying a demonstration banner and `noindex` on every page.
+
+They used to be the same page, and that page had to be honest and impressive at once. It opened with a program pitch and four statistics computed from seeded fixtures, under a black bar explaining that every figure above it was fictional — so a reader had to hold two contradictory frames simultaneously, and a funder given the address had nowhere to land. Splitting them is what lets the demonstration labelling stay loud without it being the first thing anybody reads.
+
+Every path lives in [`src/routes.ts`](src/routes.ts), because the portal paths are also the redirect target after sign-on, the paths revalidated after a write, the links in every notification email, and the partner-theming check. A copy at any one of those call sites is a copy that can disagree with the rest — which is exactly what happened during the move, twice, and is why `front-door.spec.ts` asserts the split rather than trusting it.
+
 ## Getting started
 
 ```bash
@@ -60,6 +70,7 @@ bookable application. Restart the server to reseed.
 | Mentorship | A separate entity, not a third track | Unpaid, uncredited, never reimbursed — it is the absence of the placement machinery, so inheriting that machinery would be wrong |
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
+| Seeded markets | The four-community proving ground | Pittsburg, Emporia, and Hays — three university towns — plus Beloit, deliberately a tenth their size. Three university markets can prove the model works next to a university; they cannot show whether it travels |
 | Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 
@@ -81,8 +92,11 @@ src/services/    Write paths (executeTransition for existing records,
                  dispatch and the outbox that records it.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
-src/components/  Component library, rendered at /design.
-src/app/         Route segments per portal over a shared shell.
+src/components/  Component library, rendered at /demo/design.
+src/routes.ts    Every path, in one place. The `/demo` prefix, the portal
+                 paths, and which surface a pathname belongs to.
+src/app/         `/` and the venture pages; `/demo/*` per portal. One shell
+                 picks the chrome from the route.
 ```
 
 Properties worth knowing:
@@ -99,7 +113,7 @@ Properties worth knowing:
 
 ## Opportunities have a URL
 
-`/opportunities/[id]` is the full posting: the description, the skills it matches on, the terms, and whether the hours clear the college's credit threshold.
+`/demo/opportunities/[id]` is the full posting: the description, the skills it matches on, the terms, and whether the hours clear the college's credit threshold.
 
 It exists because **the description had nowhere to be read.** A posting cannot be published without one — the college's publish guard refuses an empty description — and yet the only surfaces that rendered it were the employer's own drafts and the college's drafting queue. Students, the people it is written for, were asked to apply from a title and a wage.
 
