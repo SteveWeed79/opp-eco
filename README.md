@@ -43,6 +43,7 @@ bookable application. Restart the server to reseed.
 - [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
 - [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
+- [`docs/vision-alignment-review.md`](docs/vision-alignment-review.md) — where the site and the Patterson Fellows 2026 application describe different ventures, and what closing each gap looks like
 
 ## Decisions made so far
 
