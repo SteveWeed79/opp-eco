@@ -19,6 +19,7 @@ import {
   type NotificationQueue,
   type QueuedNotification,
   type Store,
+  type PendingNotification,
   type UnitOfWork,
 } from "./store";
 
@@ -31,7 +32,14 @@ let auditSequence = 1000;
  * change has committed must be retryable, and a send that succeeds before a
  * rollback has told someone about work that did not happen.
  */
-export const pendingNotifications: NotificationIntent[] = [];
+export const pendingNotifications: PendingNotification[] = [];
+
+/** Injected so a test can queue a message and then age it. */
+export let queueClock: () => Date = () => new Date();
+
+export function setQueueClock(next: () => Date) {
+  queueClock = next;
+}
 
 /**
  * The array above, behind the queue contract.
@@ -43,14 +51,24 @@ export const memoryNotificationQueue: NotificationQueue = {
   async take() {
     return pendingNotifications
       .splice(0, pendingNotifications.length)
-      .map((intent) => ({ id: null, intent }));
+      .map((waiting) => ({ id: null, intent: waiting.intent, waiting }));
   },
-  async requeue(item: QueuedNotification) {
-    pendingNotifications.push(item.intent);
+  async requeue(item: QueuedNotification, error: string) {
+    // The original queued time survives a retry, deliberately. Resetting it
+    // would make a message that has failed for three days look like one that
+    // arrived a minute ago, which is exactly the message an operator most needs
+    // to see.
+    const previous = (item as { waiting?: PendingNotification }).waiting;
+    pendingNotifications.push({
+      intent: item.intent,
+      queuedAt: previous?.queuedAt ?? queueClock().toISOString(),
+      attempts: (previous?.attempts ?? 0) + 1,
+      lastError: error,
+    });
   },
   async pending(marketId: string | null) {
     return marketId
-      ? pendingNotifications.filter((n) => n.marketId === marketId)
+      ? pendingNotifications.filter((n) => n.intent.marketId === marketId)
       : [...pendingNotifications];
   },
 };
@@ -327,7 +345,12 @@ class MemoryUnitOfWork implements UnitOfWork {
   enqueueNotification(intent: NotificationIntent) {
     const safe = withoutParticipantPII(intent);
     this.effects.push(() => {
-      pendingNotifications.push(safe);
+      pendingNotifications.push({
+        intent: safe,
+        queuedAt: queueClock().toISOString(),
+        attempts: 0,
+        lastError: null,
+      });
     });
   }
 

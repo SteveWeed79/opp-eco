@@ -62,15 +62,16 @@ export function worstOf(statuses: HealthStatus[]): HealthStatus {
 }
 
 /**
- * A queue deeper than this is backing up rather than working.
+ * A message still waiting after this long is stuck rather than in flight.
  *
- * Depth rather than age, because `NotificationIntent` carries no timestamp —
- * the queue contract has never needed one, and adding a column to both data
- * layers to improve a health check is the wrong order to do things in. Depth
- * is a fair proxy: a drained queue sits near zero, and one nothing is draining
- * only grows. When the dispatcher gains a schedule, this gains an age.
+ * Age, not depth. This read queue depth as a proxy while the queue carried no
+ * timestamp, and depth answers the wrong question: thirty messages draining
+ * steadily are healthy, and one that has been there since Tuesday is not, and
+ * the two look identical from a count. The queue now records when each message
+ * arrived — the Postgres table always had the column and nobody read it — so
+ * this can ask what it meant to ask.
  */
-export const QUEUE_BACKLOG = 25;
+export const STUCK_AFTER_MS = 30 * 60 * 1000;
 
 async function timed<T>(work: () => Promise<T>): Promise<{ value: T; ms: number }> {
   const started = Date.now();
@@ -144,19 +145,25 @@ async function checkSchema(): Promise<HealthCheck> {
   }
 }
 
-async function checkNotifications(): Promise<HealthCheck> {
+async function checkNotifications(now: Date): Promise<HealthCheck> {
   const email = emailConfig();
 
   try {
     const { value, ms } = await timed(() => outboxFor(null));
     const undeliverable = value.delivered.filter((n) => n.state === "undeliverable").length;
     const failed = value.delivered.filter((n) => n.state === "failed").length;
-    const backlog = value.pending.length > QUEUE_BACKLOG;
+    const oldest = value.pending.reduce<number>((worst, waiting) => {
+      const waited = now.getTime() - new Date(waiting.queuedAt).getTime();
+      return Number.isFinite(waited) && waited > worst ? waited : worst;
+    }, 0);
+    const stuck = oldest > STUCK_AFTER_MS;
 
     const notes: string[] = [];
     if (undeliverable) notes.push(`${undeliverable} undeliverable`);
     if (failed) notes.push(`${failed} failed`);
-    if (backlog) notes.push(`${value.pending.length} queued and not draining`);
+    if (stuck) {
+      notes.push(`oldest has waited ${Math.round(oldest / 60_000)} minutes`);
+    }
 
     // Said first and always, because it is the thing that surprises people:
     // a queue that looks healthy and a mailbox nobody is filling are the same
@@ -248,7 +255,7 @@ export async function healthReport(now: Date = new Date()): Promise<HealthReport
   const checks = await Promise.all([
     checkDataLayer(),
     checkSchema(),
-    checkNotifications(),
+    checkNotifications(now),
     Promise.resolve(checkSignOn()),
     Promise.resolve(checkUploads()),
   ]);

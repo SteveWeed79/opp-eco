@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { healthReport, worstOf, EXPECTED_MIGRATION } from "./health";
+import { healthReport, worstOf, EXPECTED_MIGRATION, STUCK_AFTER_MS } from "./health";
 import * as seed from "@/data/seed";
 
 describe("an overall verdict", () => {
@@ -38,6 +38,49 @@ describe("the report", () => {
   it("has nothing to migrate without a database", async () => {
     const report = await healthReport();
     expect(report.checks.find((c) => c.name === "schema")!.status).toBe("ok");
+  });
+
+  it("calls a message that has waited too long stuck, not a queue that is deep", async () => {
+    // Depth was a proxy while the queue carried no timestamp, and it answers
+    // the wrong question: thirty draining steadily are healthy, one sitting
+    // since Tuesday is not, and a count cannot tell them apart.
+    const { pendingNotifications } = await import("@/data/memory-store");
+    const intent = {
+      marketId: "mkt-pittsburg",
+      recipientUserId: "u-marcia",
+      kind: "interview.booked.board",
+      payload: {},
+    };
+
+    // Forty fresh ones: deep, and entirely fine.
+    for (let i = 0; i < 40; i++) {
+      pendingNotifications.push({
+        intent,
+        queuedAt: new Date().toISOString(),
+        attempts: 0,
+        lastError: null,
+      });
+    }
+    try {
+      expect(
+        (await healthReport()).checks.find((c) => c.name === "notifications")!.status,
+      ).toBe("ok");
+
+      // One old one: shallow, and the thing worth waking somebody for.
+      pendingNotifications.push({
+        intent,
+        queuedAt: new Date(Date.now() - 2 * STUCK_AFTER_MS).toISOString(),
+        attempts: 3,
+        lastError: "connection reset",
+      });
+      const check = (await healthReport()).checks.find(
+        (c) => c.name === "notifications",
+      )!;
+      expect(check.status).toBe("degraded");
+      expect(check.detail).toMatch(/waited \d+ minutes/);
+    } finally {
+      pendingNotifications.length = 0;
+    }
   });
 
   it("says sending is off before it says the queue is fine", async () => {

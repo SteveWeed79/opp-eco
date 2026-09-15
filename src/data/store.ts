@@ -55,6 +55,13 @@ export interface NotificationIntent {
 export interface QueuedNotification {
   id: string | null;
   intent: NotificationIntent;
+  /**
+   * What was known about it when it was claimed.
+   *
+   * Carried through so a requeue can preserve the original queued time and
+   * increment the attempt count. Absent on a queue that has nothing to carry.
+   */
+  waiting?: PendingNotification;
 }
 
 /**
@@ -67,6 +74,26 @@ export interface QueuedNotification {
  * database deployment every message was written to the table and none was ever
  * sent — the dispatcher was draining a queue nothing filled.
  */
+/**
+ * A message that is still waiting, and what is known about why.
+ *
+ * `pending` used to return bare intents, which meant the only thing anybody
+ * could say about the queue was how deep it is. Depth answers the wrong
+ * question: a queue of thirty draining steadily is healthy and a queue of one
+ * that has been there since Tuesday is not, and they look identical from a
+ * count. The age is what an operator acts on, and the last error is what they
+ * act on it with.
+ */
+export interface PendingNotification {
+  intent: NotificationIntent;
+  /** When it was queued, not when it was last tried. */
+  queuedAt: string;
+  /** Failed delivery attempts so far. Zero for something never tried. */
+  attempts: number;
+  /** Why the last attempt failed, when one has. */
+  lastError: string | null;
+}
+
 export interface NotificationQueue {
   /**
    * Claim everything pending. Claimed messages leave the queue, exactly as a
@@ -75,8 +102,8 @@ export interface NotificationQueue {
   take(): Promise<QueuedNotification[]>;
   /** Return a message that failed for a reason a retry could fix. */
   requeue(item: QueuedNotification, error: string): Promise<void>;
-  /** What is still waiting, for the administrator's outbox. */
-  pending(marketId: string | null): Promise<NotificationIntent[]>;
+  /** What is still waiting, for the administrator's outbox and the health check. */
+  pending(marketId: string | null): Promise<PendingNotification[]>;
 }
 
 /**

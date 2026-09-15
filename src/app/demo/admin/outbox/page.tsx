@@ -27,6 +27,23 @@ import { PORTAL_PATH } from "@/routes";
  * state change, and until this page existed there was no way to see the
  * difference.
  */
+/**
+ * How long something has been waiting, in the units a person thinks in.
+ *
+ * Rounded rather than precise: nobody acts differently on 94 seconds than on
+ * 97, and "2 minutes" is the thing somebody reads out on a call.
+ */
+function waitedFor(queuedAt: string): string {
+  const ms = Date.now() - new Date(queuedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `waiting ${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `waiting ${hours}h`;
+  return `waiting ${Math.round(hours / 24)}d`;
+}
+
 export default async function OutboxPage() {
   const admin = await actorForPortal("admin");
   // Administrators are the one cross-market role; scoping to their own market
@@ -147,18 +164,38 @@ export default async function OutboxPage() {
           <CardHeader
             icon={<Clock className="w-5 h-5" />}
             title="Queued"
-            subtitle="Committed but not yet sent — these drain on the next transition"
+            subtitle="Committed but not yet sent — drained on a schedule and after each write"
           />
+          {/* How long, and why, rather than just what. A queue of thirty
+              draining steadily is healthy; one message that has been here
+              since Tuesday is not, and until this said so the two looked
+              identical. */}
           <ul className="row-list divide-y divide-line">
-            {pending.map((intent, index) => (
+            {pending.map((waiting, index) => (
               <li
-                key={`${intent.kind}-${index}`}
-                className="px-6 py-3 flex items-center justify-between gap-3 text-sm"
+                key={`${waiting.intent.kind}-${index}`}
+                className="px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-sm"
               >
-                <span className="text-ink-950">{intent.kind}</span>
-                <span className="text-xs text-ink-500">
-                  {intent.recipientOrganizationId ?? intent.recipientUserId}
-                </span>
+                <div className="min-w-0">
+                  <span className="text-ink-950">{waiting.intent.kind}</span>
+                  {waiting.lastError && (
+                    <p className="text-xs text-crit-700 mt-0.5">
+                      Last attempt failed: {waiting.lastError}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-ink-500 shrink-0">
+                  {waiting.attempts > 0 && (
+                    <span>
+                      {waiting.attempts} attempt{waiting.attempts === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  <span>{waitedFor(waiting.queuedAt)}</span>
+                  <span>
+                    {waiting.intent.recipientOrganizationId ??
+                      waiting.intent.recipientUserId}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

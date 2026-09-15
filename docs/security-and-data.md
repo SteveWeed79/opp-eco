@@ -177,6 +177,7 @@ Authorization enforced at the repository layer with tests · one guarded write p
 | Log redaction | `src/services/logging.ts` | Redacts by key fragment, bounds depth and length, survives cyclic objects |
 | Health that names nobody | `src/services/health.ts` | A health report is read by a monitor, a status page and whoever is on call — none of which have the database's access controls, and under FERPA a log holding participant details inherits the handling rules of the data. Every detail is a count, a duration or a setting; the test asserts it against every seeded person |
 | Health at two resolutions | `src/app/api/health/route.ts` | An unauthenticated endpoint that answers in detail is reconnaissance: a driver name, a migration filename, an internal scanner's host and port. Anonymous callers get the verdict and nothing else; only an administrator gets the report |
+| A scheduled drain, closed by default | `src/app/api/cron/notifications/route.ts` | Sends email, so it is not a read: the secret is compared in constant time, an unset secret refuses everything rather than failing open, and the refusal is a 404 because a 401 confirms the endpoint is worth guessing at |
 | Request correlation | `src/proxy.ts` | An `x-request-id` per request, echoed on the response, keeping an upstream id rather than minting a second. An implausible inbound value is replaced rather than escaped — it reaches a log line and a response header, and a newline in it would forge a second entry |
 | `npm audit` at high, Dependabot weekly | CI, `.github/dependabot.yml` | Actions are grouped and updated too — a supply-chain path that is easy to forget because it is not in package.json |
 | Vulnerability reporting path | `SECURITY.md` | Names cross-tenant access and audit tampering as the findings we most want |
@@ -218,7 +219,6 @@ The known limitation, stated rather than hidden: a `.docx` signature only proves
 | Shared-store rate limiting | The current limiter is per instance; a distributed one needs Redis or Vercel KV |
 | Branch protection requiring CI | CI reports today but does not block; a red PR is still mergeable |
 | Error reporting off the browser | The route error boundary logs client-side, so it reaches a console and not a server. The `digest` it shows is the correlation that works; an endpoint to receive the rest does not exist |
-| A scheduled outbox drain | The queue depth is reported and nothing drains it on a timer, so the health check reads depth as a proxy for age — `NotificationIntent` carries no timestamp |
 
 ### Policy and procurement, not code
 

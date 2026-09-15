@@ -665,6 +665,27 @@ throw at boot, a schema one migration behind the code reading it.
 | `sign-on` | How people get in, and whether that configuration boots |
 | `uploads` | Whether files are accepted, and what is scanning them |
 
+**The queue has a clock of its own.** Every write path drains the outbox after
+it commits, which covers the common case and hides the interesting one: a
+message that fails transiently goes back on the queue and then waits for
+*somebody else's* unrelated write to push it out. On a quiet evening in a rural
+market that is not a retry, it is a night. `/api/cron/notifications` runs the
+same drain on a schedule — `vercel.json` carries a five-minute entry — guarded
+by `CRON_SECRET` and compared in constant time. Unset, it refuses: failing open
+would mean the deployment that forgot to configure it is the one left exposed,
+and it answers 404 rather than 401 because a 401 confirms there is something
+there worth guessing at.
+
+**The notifications check measures age, not depth.** Depth answers the wrong
+question — thirty messages draining steadily are healthy, one sitting since
+Tuesday is not, and a count cannot tell them apart. The Postgres outbox always
+had `created_at`, `attempts` and `last_error`; nothing read them, because
+`pending()` returned bare intents. It now returns what is actually known about a
+waiting message, and `/demo/admin/outbox` says how long each has waited, how
+many attempts have failed, and why. A retry keeps the original queued time
+rather than resetting it — a message that has failed for three days must not
+look like one that arrived a minute ago.
+
 **`degraded` answers 200, not 503.** A status page that pages somebody at 3am
 because email is redirected to a test address has taught them to ignore it, and
 an application serving requests is up. Only `failing` — the database gone, the

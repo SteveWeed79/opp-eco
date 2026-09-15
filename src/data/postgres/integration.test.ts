@@ -619,13 +619,20 @@ withDatabase("the write path", () => {
     });
 
     const waiting = await queue.pending(application.marketId);
-    expect(waiting.map((n) => n.kind)).toEqual(
+    expect(waiting.map((n) => n.intent.kind)).toEqual(
       expect.arrayContaining(["posting.submitted", "student.verified"]),
     );
-    const employerMessage = waiting.find((n) => n.kind === "posting.submitted")!;
-    expect(employerMessage.recipientOrganizationId).toBe("org-apex");
-    expect(employerMessage.recipientUserId).toBe("contact:org-apex");
-    expect(employerMessage.payload).toEqual({ title: "Water quality data intern" });
+    const employerMessage = waiting.find((n) => n.intent.kind === "posting.submitted")!;
+    expect(employerMessage.intent.recipientOrganizationId).toBe("org-apex");
+    expect(employerMessage.intent.recipientUserId).toBe("contact:org-apex");
+    expect(employerMessage.intent.payload).toEqual({
+      title: "Water quality data intern",
+    });
+    // The columns this table always had and nobody read. Age is what an
+    // operator acts on; depth was only ever a proxy for it.
+    expect(employerMessage.attempts).toBe(0);
+    expect(employerMessage.lastError).toBeNull();
+    expect(Number.isNaN(Date.parse(employerMessage.queuedAt))).toBe(false);
 
     // Claiming empties the queue, the way a splice does — two instances
     // draining at once must not both send it.
@@ -637,7 +644,7 @@ withDatabase("the write path", () => {
     // A failure a retry could fix comes back, with the reason recorded.
     const returned = claimed.find((c) => c.intent.kind === "posting.submitted")!;
     await queue.requeue(returned, "connection reset");
-    expect((await queue.pending(null)).map((n) => n.kind)).toEqual([
+    expect((await queue.pending(null)).map((n) => n.intent.kind)).toEqual([
       "posting.submitted",
     ]);
     const [row] = await client.query<{ last_error: string; attempts: number }>(
