@@ -251,6 +251,28 @@ On Neon, use the **direct** connection string for migrations — DDL through a
 connection pooler can land on a different session than the one holding the
 transaction — and the **pooler** host for the running app.
 
+### Pointing a deployment at it
+
+Four variables, in this order:
+
+| Variable | Value | Why |
+|---|---|---|
+| `DATABASE_URL` | the **pooler** host | A serverless deployment opens a connection per invocation; the direct endpoint runs out of backends on a free tier |
+| `DATABASE_READ_ONLY` | leave unset | Refusing writes is the default, and a shared demo is exactly the case it exists for. Set `false` only when the deployment is meant to be mutated |
+| `DATABASE_MAX_CONNECTIONS` | leave unset | 10 suits a free tier |
+| `EMAIL_REDIRECT_TO` | your own address | Unrelated to the database, and the thing to get wrong once |
+
+Migrate and seed from a terminal against the **direct** host before the first
+deploy — `npm run db:migrate && npm run db:seed` — rather than from the running
+app, which has no path that applies a schema and should not have one.
+
+A read-only deployment reads Postgres and refuses every write with a sentence
+saying so, rather than a dead button: a disabled control is a claim the page
+makes and a direct POST ignores, so the refusal lives in the one layer every
+write passes through. Nothing is dispatched from the notification queue there
+either — claiming a message marks it sent, and a deployment that cannot write
+must not mark someone else's messages as sent.
+
 ### Proving the two layers agree
 
 Everything in `src/data/postgres` is unit-tested against a recording client,
