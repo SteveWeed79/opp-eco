@@ -744,6 +744,26 @@ export interface Session {
  */
 export type CodePurpose = "sign_in" | "password_reset";
 
+/**
+ * Somebody's password, as the database holds it.
+ *
+ * The hash is self-describing — `scrypt$N$r$p$salt$key` — so the cost can be
+ * raised later without a migration that locks everybody out. See
+ * `domain/password.ts`.
+ */
+export interface StoredPassword {
+  userId: string;
+  hash: string;
+  updatedAt: string;
+  /**
+   * Set when somebody other than the owner put this password here — an
+   * administrator restoring access to an account whose mailbox changed. They
+   * must choose their own before doing anything else, so a temporary credential
+   * cannot quietly become a permanent one.
+   */
+  mustChange: boolean;
+}
+
 export interface SignInCode {
   userId: string;
   purpose: CodePurpose;

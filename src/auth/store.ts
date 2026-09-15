@@ -17,6 +17,7 @@
 
 import type {
   CodePurpose,
+  StoredPassword,
   Membership,
   MfaChallenge,
   RecoveryCode,
@@ -67,6 +68,20 @@ export interface AuthStore {
   revokeSession(id: string, at: string): Promise<void>;
   /** Sign out everywhere — used when a code is issued for an account. */
   revokeSessionsForUser(userId: string, at: string): Promise<void>;
+
+  // -- Passwords ------------------------------------------------------------
+
+  /**
+   * The stored hash for somebody, or null if they have none.
+   *
+   * Null is a real state rather than an error: a board officer has no password
+   * by design, and a college account created before it set one has not got round
+   * to it. Both are answered by sending them down a different path, not by
+   * failing.
+   */
+  findPassword(userId: string): Promise<StoredPassword | null>;
+  putPassword(password: StoredPassword): Promise<void>;
+  removePassword(userId: string): Promise<void>;
 
   // -- The second factor ----------------------------------------------------
 

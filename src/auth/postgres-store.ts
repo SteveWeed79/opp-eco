@@ -220,6 +220,38 @@ export function postgresAuthStore(client: PostgresClient): AuthStore {
       );
     },
 
+    // -- Passwords ----------------------------------------------------------
+
+    async findPassword(userId) {
+      const row = await first(`SELECT * FROM user_passwords WHERE user_id = $1`, [
+        userId,
+      ]);
+      return row
+        ? {
+            userId: text(row.user_id),
+            hash: text(row.password_hash),
+            updatedAt: stamp(row.updated_at),
+            mustChange: Boolean(row.must_change),
+          }
+        : null;
+    },
+
+    async putPassword(password) {
+      await client.query(
+        `INSERT INTO user_passwords (user_id, password_hash, updated_at, must_change)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id) DO UPDATE SET
+           password_hash = EXCLUDED.password_hash,
+           updated_at = EXCLUDED.updated_at,
+           must_change = EXCLUDED.must_change`,
+        [password.userId, password.hash, password.updatedAt, password.mustChange],
+      );
+    },
+
+    async removePassword(userId) {
+      await client.query(`DELETE FROM user_passwords WHERE user_id = $1`, [userId]);
+    },
+
     // -- The second factor --------------------------------------------------
 
     async putTotpEnrolment(enrolment) {

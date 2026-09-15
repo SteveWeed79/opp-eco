@@ -127,6 +127,17 @@ export function requiresSecondFactor(role: ActorRole): boolean {
   return role === "admin";
 }
 
+/**
+ * Whether this account signs in with a password at all.
+ *
+ * False for a government organization and for one that has moved to its own
+ * identity provider. Both hold no password here, for the same reason by
+ * different routes.
+ */
+export function usesPassword(mode: IdentityMode): boolean {
+  return mode === "password";
+}
+
 /** How long somebody has between proving the first factor and the second. */
 export const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
 
@@ -244,4 +255,24 @@ export function signInBlockReason(
  */
 export function defaultIdentityMode(kind: Organization["kind"]): IdentityMode {
   return kind === "board" ? "email_code" : "password";
+}
+
+/**
+ * How this account signs in.
+ *
+ * The organization decides, because identity is an institutional arrangement
+ * rather than a personal preference — a college decides its people use
+ * passwords, and a public agency decides its officers do not.
+ *
+ * **No organization means the administrator**, who is cross-market and belongs
+ * to none. They get a password like everybody else, and a second factor on top,
+ * because theirs is the account that reads every market and authorises money.
+ * The old fallback here was `email_code`, which quietly gave the widest-access
+ * account on the platform the treatment designed for public employees whose
+ * agency protects their mailbox — the administrator has no agency behind them.
+ */
+export function signInMethodFor(
+  organization: Pick<Organization, "identityMode"> | null,
+): IdentityMode {
+  return organization?.identityMode ?? "password";
 }

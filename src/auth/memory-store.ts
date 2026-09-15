@@ -11,6 +11,7 @@ import type {
   MfaChallenge,
   RecoveryCode,
   Session,
+  StoredPassword,
   SignInCode,
   TotpEnrolment,
 } from "@/domain/types";
@@ -21,6 +22,7 @@ import type { AuthStore } from "./store";
 
 const sessions = new Map<string, Session>();
 const codes = new Map<string, SignInCode>();
+const passwords = new Map<string, StoredPassword>();
 const enrolments = new Map<string, TotpEnrolment>();
 const recoveryCodes = new Map<string, RecoveryCode>();
 const challenges = new Map<string, MfaChallenge>();
@@ -29,6 +31,7 @@ const challenges = new Map<string, MfaChallenge>();
 export function resetAuthState() {
   sessions.clear();
   codes.clear();
+  passwords.clear();
   enrolments.clear();
   recoveryCodes.clear();
   challenges.clear();
@@ -92,6 +95,20 @@ export const memoryAuthStore: AuthStore = {
         sessions.set(id, { ...session, revokedAt: at });
       }
     }
+  },
+
+  // -- Passwords ------------------------------------------------------------
+
+  async findPassword(userId) {
+    return passwords.get(userId) ?? null;
+  },
+
+  async putPassword(password) {
+    passwords.set(password.userId, password);
+  },
+
+  async removePassword(userId) {
+    passwords.delete(userId);
   },
 
   // -- The second factor ----------------------------------------------------
