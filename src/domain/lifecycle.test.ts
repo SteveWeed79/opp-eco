@@ -78,6 +78,8 @@ function posting(overrides: Partial<Posting> = {}): Posting {
 
 function organization(overrides: Partial<Organization> = {}): Organization {
   return {
+    identityMode: "email_code",
+    emailDomains: [],
     id: "org-1",
     marketId: MARKET,
     kind: "business",

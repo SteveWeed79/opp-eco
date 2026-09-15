@@ -39,6 +39,8 @@ const cents = (value) => (value === undefined || value === null ? null : Math.ro
  * make the next `db:migrate` try to rebuild tables that already exist.
  */
 export const TABLES = [
+  "sessions",
+  "sign_in_codes",
   "notification_outbox",
   "audit_events",
   "outcomes",
@@ -91,8 +93,8 @@ export async function seedInto(tx) {
     await insert(
       `INSERT INTO organizations (id, market_id, kind, name, county, status,
          contact_name, contact_email, applied_on, hours_per_credit,
-         brand_color, accent_color, logo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         brand_color, accent_color, logo_url, identity_mode, email_domains)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
         org.id,
         org.marketId,
@@ -107,6 +109,8 @@ export async function seedInto(tx) {
         org.brandColor ?? null,
         org.accentColor ?? null,
         org.logoUrl ?? null,
+        org.identityMode,
+        org.emailDomains,
       ],
     );
   }

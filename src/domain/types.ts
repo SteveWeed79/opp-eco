@@ -238,6 +238,24 @@ export interface Organization {
   contactName: string;
   contactEmail: string;
   appliedOn: string;
+  /**
+   * How this organization's people sign in.
+   *
+   * On the organization rather than the user because it is an institutional
+   * decision, not a personal preference: a workforce board does not let some of
+   * its officers federate and others pick a password, and the platform should
+   * not offer that.
+   */
+  identityMode: IdentityMode;
+  /**
+   * Work-address domains this organization's people must sign in from.
+   *
+   * Empty means any address already on a user record. Populated, it is the
+   * control that stops a public employee's account being bound to a personal
+   * mailbox — which is how a government identity quietly becomes something the
+   * agency cannot revoke.
+   */
+  emailDomains: string[];
   /** Colleges only: minimum student work hours required per credit awarded. */
   hoursPerCredit?: number;
 
@@ -650,6 +668,67 @@ export interface CreditAward {
   status: "pending" | "granted" | "denied";
   courseMapping: string;
   grantedOn: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+/**
+ * How an organization's people prove who they are.
+ *
+ * **There is no password anywhere in this model, and that is the point.** A
+ * credential this platform does not hold is a credential it cannot leak, and
+ * one set of users here are public employees: the data rules say to federate a
+ * government identity and never replicate it, so the schema gives it nowhere to
+ * land.
+ *
+ * `federated` is not "SSO is available" — it is "this organization's people may
+ * **only** arrive through their own identity provider". No adapter ships yet, so
+ * declaring it today means nobody from that organization can sign in through
+ * this platform at all. That is the correct failure: a workforce board whose
+ * IdP is not wired should be locked out, not quietly issued a platform-held
+ * identity for a public employee.
+ */
+export type IdentityMode = "email_code" | "federated";
+
+/**
+ * A signed-in session, held server-side.
+ *
+ * `id` is the SHA-256 of the token in the cookie, never the token itself. A
+ * dump of this table yields nothing anyone can present — which is the whole
+ * reason the session is a record here rather than a signed blob in the browser.
+ */
+export interface Session {
+  id: string;
+  userId: string;
+  createdAt: string;
+  /** Hard stop, regardless of activity. */
+  expiresAt: string;
+  /** Moved forward on each request, and compared against the idle window. */
+  lastSeenAt: string;
+  revokedAt: string | null;
+}
+
+/**
+ * A one-time code, issued to a work address and good for minutes.
+ *
+ * Keyed by user rather than given its own id: requesting a new code replaces
+ * the outstanding one, so a person who clicks twice cannot leave two live codes
+ * behind, and there is no way to accumulate guesses across several.
+ *
+ * The code itself is never stored — `codeHash` is. The platform can check a
+ * code and cannot reproduce one, which matters because an unconsumed code is a
+ * bearer token for somebody's account.
+ */
+export interface SignInCode {
+  userId: string;
+  codeHash: string;
+  createdAt: string;
+  expiresAt: string;
+  /** Guesses so far. A code is retired well before brute force is plausible. */
+  attempts: number;
+  consumedAt: string | null;
 }
 
 // ---------------------------------------------------------------------------

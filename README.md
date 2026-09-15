@@ -48,6 +48,20 @@ One caveat worth knowing before you run them: the demo store lives in the
 server process, so `e2e/booking.spec.ts` permanently books the seed's only
 bookable application. Restart the server to reseed.
 
+### Trying real sign-on
+
+`npm run dev` gives you the role picker, which makes you anybody. To walk the
+real thing instead, with codes written to the terminal rather than emailed:
+
+```bash
+AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev
+```
+
+Then sign in as `evance@verdigris.example.edu` and paste the code the server
+logs. `mdelgado@sekwp.example.org` is the workforce board, and is refused —
+boards are federated, and that refusal is the feature. See
+[Signing in](#signing-in).
+
 ## Start here
 
 - [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
@@ -86,8 +100,11 @@ src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  PII disclosure, funding sources and the ledger against them,
                  and the follow-up outcome — the one record here that is an
                  observation rather than a state machine. No UI, no database.
-src/auth/        Session resolution behind a provider interface. Replacing
-                 simulated sign-on touches this and nothing else.
+src/auth/        Session resolution behind a provider interface, and the two
+                 providers behind it: the demo's role cookie and real sign-on
+                 by one-time code. The pre-auth store lives here rather than
+                 in the scoped repositories, because resolving a session is
+                 what produces the actor everything else is scoped by.
 src/data/        Repository contracts, two implementations behind them — the
                  in-memory fixtures and Postgres — and the Store/UnitOfWork
                  for writes. One environment variable picks which.
@@ -107,7 +124,7 @@ Properties worth knowing:
 
 - **Two data layers, one contract.** With `DATABASE_URL` unset everything runs off the seeded fixtures — that is the demo, the unit suite, and a zero-configuration checkout. Set it and the same screens read Postgres, through the same repository interfaces, with writes refused unless `DATABASE_READ_ONLY=false`. A CI job applies the schema, seeds it, and asserts the two layers return the same records for every accessor and every role; see [Running on Postgres](#running-on-postgres).
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
-- **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
+- **Two doors, one session shape.** `AUTH_MODE` unset is the demonstration's role picker; `AUTH_MODE=code` is real sign-on — a one-time code to a work address, a server-side session, no password anywhere. Both resolve to a membership carrying the role and market every read is scoped by, because that part was never the simulated bit. Organizations that run their own identity provider are federated and cannot be signed in here at all; see [Signing in](#signing-in).
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
@@ -474,6 +491,87 @@ first automatic run would hit every record at once; a person pressing a button
 against a computed list is how you find out the schedule is wrong while that is
 still cheap.
 
+## Signing in
+
+`AUTH_MODE` picks one of two doors, and the default is the demonstration's.
+
+| `AUTH_MODE` | The way in | Sessions |
+|---|---|---|
+| unset | A dropdown that makes you anybody | An httpOnly cookie naming a role |
+| `code` | A one-time code to your work address | A random token; the database holds its SHA-256 |
+
+Both resolve to the same thing — a membership carrying the role and market that
+every repository read is scoped by — because that part was never the simulated
+bit. `src/auth/session.ts` promised that replacing simulated sign-on would touch
+one file and nothing else; real sign-on is that promise being cashed in.
+
+**There is no password, and nothing to reset.** A code is the whole credential:
+eight characters from an alphabet with no `0`, `O`, `1`, `I` or `L` in it, good
+for ten minutes, usable once, dead after five wrong guesses. The database stores
+its SHA-256, never the code, so a dump of that table yields nothing presentable.
+Codes are emailed directly and are deliberately **never** written to the
+notification outbox — the outbox persists every payload and renders it on a
+screen an administrator can open, which would make it a published list of bearer
+tokens for every account on the platform.
+
+**Asking for a code never says whether the account exists.** Sign-on is the one
+page anyone can reach, so an honest "no such account" is a free directory of who
+takes part in this programme — including which public employees work on it. The
+address you typed gets the same second step and the same message either way.
+
+**Government identity is federated, never replicated.** A workforce board's
+officers are public employees whose agency owns their identity. An organization
+marked `federated` cannot be signed in here at all, and boards default to it — so
+under real sign-on the seeded board officer genuinely cannot get in. No SSO
+adapter ships yet, and that failure is the correct one: the alternative is this
+platform minting and holding a credential for a government employee because it
+was quicker than waiting for the IdP. They are told plainly where to go, which is
+the one thing the sign-in form will say out loud about an address, because an
+institution's identity arrangement is not a secret about a person.
+
+**Sessions expire on two clocks, and the tighter one belongs to the wider
+access.** An absolute lifetime and an idle timeout, both by role: eight hours and
+thirty minutes for an administrator or a board officer, twelve and two for a
+college or an employer, twenty-four and four for a student. Signing out revokes
+the session server-side rather than only dropping the cookie, because a cookie
+deleted on one machine does nothing about the session it named.
+
+**Two configurations are refused at boot rather than at a request:** the role
+picker against a writable database — anyone becoming anyone and changing real
+records — and `AUTH_MODE=code` with no way to deliver a code, which is an account
+nobody can reach. `AUTH_ECHO_CODES=true` writes codes to the server log for
+development and is refused in production.
+
+### The gate is in the layout, not only the page
+
+Every portal page calls `actorForPortal`, and for a while every one of them
+still answered an anonymous request with `200` and its own chrome.
+
+Each portal has a `loading.tsx`. That wraps the page in a Suspense boundary, so
+the response commits and the skeleton starts streaming *before* the page
+component runs — and a `redirect()` from inside that boundary is too late to be
+a redirect. Next appends a client-side navigation instead. In a browser it looks
+right, which is why it survived: you land on the sign-in page. Anything reading
+the status code — a scanner, a crawler, a link unfurler, `curl` — got a
+successful response to a request that should have been refused.
+
+A segment's layout renders above its own loading boundary, so
+`src/auth/portal-layout.tsx` is a two-line `layout.tsx` per portal that calls the
+same gate before a byte is committed. The pages keep their call: they need the
+actor, and a check that disappears when one file is deleted is not a check.
+
+`src/auth/portal-gate.test.ts` asserts the rule structurally — any segment that
+streams a fallback must refuse above it — because nothing in a type or a normal
+unit test notices when adding one file changes what `redirect()` means in the
+file beside it.
+
+The same switch governs a quieter version of the same leak: the shell resolves a
+partner college's name and brand colours for signed-out visitors, so a
+demonstration is themed from a bare link. Under real sign-on that reads records
+as the system context to answer a question nobody authenticated asked, and puts a
+named institution in the masthead of a response to an anonymous request.
+`anonymousFallbackAllowed` gates both.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
@@ -575,9 +673,35 @@ database it names is truncated and reseeded** — never point it at one whose
 contents matter.
 
 Running the **whole e2e suite against Postgres** is the other half, and worth
-doing after any change to the data layer: point `DATABASE_URL` at a seeded
-local database, set `DATABASE_READ_ONLY=false`, and run `npm run test:e2e`.
+doing after any change to the data layer:
+
+```bash
+export DATABASE_URL=postgresql://you@localhost:5432/oppeco
+export DATABASE_READ_ONLY=false
+export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
+npm run db:seed && npm run build && npm run test:e2e
+```
+
 Every flow the demo has passes on either backend.
+
+That third variable is the one door past the guard on demo sign-on, and it is
+there because this suite needs the combination the guard refuses — a role picker,
+a database, and writes — while running a production build, so nothing about the
+process tells it apart from a deployed demo. Nobody sets a variable to that
+string about a database whose contents matter, which is the entire safeguard.
+
+The sign-on suite is the exception and runs on its own, because a process is
+either the role picker or real sign-on and cannot be both:
+
+```bash
+AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev > /tmp/oe.log &
+AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test e2e/zzzzzzz-sign-in.spec.ts
+```
+
+`npm run dev` rather than the production build the rest of the suite uses,
+because `AUTH_ECHO_CODES` is refused in production — the test bends around that
+rather than the other way about. The code is read back out of the server's log,
+which is the only place it exists outside a mailbox.
 
 The first run of that suite found six faults that no amount of TypeScript would
 have caught: a `citext` column whose extension was never created, two seeded

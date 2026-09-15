@@ -129,6 +129,8 @@ It does not need — and should decline if offered — personal phone numbers, h
 Concretely:
 - **Federate identity, never replicate it.** If the board uses SSO, request the minimum claims: subject identifier, email, display name. Do not request directory or profile scopes because they are available.
 - **Never hold their credentials.** SSO means you never see a password, which removes an entire class of incident.
+
+  *This is now enforced rather than intended.* Every organisation carries an `identityMode`, and workforce boards **default to `federated`** — the claim is seeded rather than left to be remembered. A federated organisation cannot be signed in here at all: asking for a code returns no code and says plainly to use the agency's own login. No SSO adapter ships yet, so under real sign-on the seeded board officer genuinely cannot get in, and that is the correct failure. The alternative — minting and holding a credential for a public employee because it was quicker than waiting for the IdP — is exactly what this rule exists to prevent, and it is the kind of shortcut that only ever gets taken under a deadline. The schema has no column to put a credential in.
 - **Do not integrate with state HR or personnel systems.** There is no workflow here that needs it, and being connected to one makes you a target for reasons unrelated to your own data.
 - Even the officer's name on an interview slot is a choice. It is worth keeping because a student booking a call should know who they are meeting — but note that it is a deliberate inclusion, not an inevitability.
 
@@ -165,7 +167,7 @@ Because of KORA, and because it makes reporting cheaper. Aggregates should be de
 
 ### Already in place
 
-Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex` · **no participant PII in any outbound message** · **consent recorded against the source institution and enforced on disclosure** · **a retention schedule with a purge that anonymises rather than deletes**
+Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex` · no participant PII in any outbound message · consent recorded against the source institution and enforced on disclosure · a retention schedule with a purge that anonymises rather than deletes · **passwordless sign-on with server-side sessions, and government identity refused rather than replicated**
 
 | Control | Where | Note |
 |---|---|---|
@@ -179,6 +181,10 @@ Authorization enforced at the repository layer with tests · one guarded write p
 | No participant PII in email | `src/services/notification-privacy.ts`, `templates.ts` | Templates name a **record reference**, never a learner. A denylist strips participant keys at `enqueueNotification` — the `UnitOfWork`, not the renderer, because the Postgres queue persists the payload to a table. `notification-privacy.test.ts` renders every template against every seeded learner and fails on any leak |
 | FERPA redisclosure notice | `templates.ts` | On every employer-facing message. The platform is what makes the sharing easy, so it carries the notice |
 | Consent, enforced on disclosure | `src/domain/consent.ts` | Attached to the institution whose records it covers. An employer's step up from abbreviated name to contact details requires **both** the placement stage and education-record consent on file; the check runs in both data layers |
+| Passwordless sign-on | `src/services/auth.ts`, `src/domain/identity.ts` | A one-time code to a work address. Nothing replayable is stored: the cookie holds a random token and the database its SHA-256, the mailbox holds a code and the database its SHA-256. Codes are emailed directly and **never** enter the notification outbox, which persists every payload and renders it on a screen — that would publish a bearer token per account. Asking for a code never reveals whether an account exists |
+| Government identity federated, not held | `src/domain/identity.ts`, seed | Boards default to `identityMode: federated` and cannot be signed in here at all. No credential column exists to hold one |
+| Session lifetimes by role | `src/domain/identity.ts` | Absolute *and* idle, tightest where access is widest — 8h/30m for an administrator or board officer, 12h/2h for a college or employer, 24h/4h for a student. Signing out revokes server-side, not just in the browser |
+| Anonymous requests refused before anything streams | `src/auth/portal-layout.tsx` | The gate is in each portal's layout, above its `loading.tsx` Suspense boundary. In the page it ran after the response had committed, so a refusal could only be a client-side navigation and anything reading the status code saw `200`. `portal-gate.test.ts` asserts the rule structurally |
 | Retention schedule | `src/domain/retention.ts` | Four record types with figures and rationales. Purging **anonymises rather than deletes** — the placement survives so reported figures still reconcile — and runs per learner from a computed due list, not as an unattended sweep |
 
 ### Uploads
@@ -208,7 +214,7 @@ The known limitation, stated rather than hidden: a `.docx` signature only proves
 
 ### Policy and procurement, not code
 
-Real authentication with **MFA for admin and board roles specifically** — still the largest single gap, and the one everything above assumes — they see cross-market data and make funding decisions · **encryption at rest** (a statutory safe harbour under Kansas breach law) · **Postgres row-level security** as defence in depth, so an application bug is not automatically a breach · retention and deletion schedules · **incident response with a one-hour clock** if WIOA funds are involved · DPAs with Vercel and the database host · periodic admin access review · penetration test before a government contract
+**SSO for federated organisations** — a workforce board cannot sign in at all until an adapter exists, which is the honest failure but not a usable one, and it is an integration with the agency before it is any code here · **MFA for administrators specifically**, who see cross-market data; a one-time code to a mailbox is single-factor, and the mailbox is the factor · **encryption at rest** (a statutory safe harbour under Kansas breach law) · **Postgres row-level security** as defence in depth, so an application bug is not automatically a breach · retention and deletion schedules · **incident response with a one-hour clock** if WIOA funds are involved · DPAs with Vercel and the database host · periodic admin access review · penetration test before a government contract
 
 ---
 

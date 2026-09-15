@@ -193,6 +193,8 @@ export function toOrganization(row: Row): Organization {
     brandColor: optionalText(row.brand_color),
     accentColor: optionalText(row.accent_color),
     logoUrl: optionalText(row.logo_url),
+    identityMode: text(row.identity_mode) as Organization["identityMode"],
+    emailDomains: list(row.email_domains),
   };
 }
 

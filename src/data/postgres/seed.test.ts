@@ -113,8 +113,12 @@ describe("coverage", () => {
     // until a portal renders blank.
     const written = new Set(statements.map((s) => target(s.text)));
     const expected = TABLES.filter(
-      // The outbox is produced by the running application, not by fixtures.
-      (t: string) => t !== "notification_outbox",
+      // Produced by the running application, not by fixtures. The outbox fills
+      // as transactions commit; sessions and codes only exist once somebody
+      // signs in, and a seeded session would be a working credential shipped in
+      // the repository.
+      (t: string) =>
+        !["notification_outbox", "sessions", "sign_in_codes"].includes(t),
     );
     expect([...expected].filter((t) => !written.has(t))).toEqual([]);
   });
@@ -141,6 +145,27 @@ describe("coverage", () => {
     )!;
     expect(marketInsert.text).not.toContain("subsidy_budget_cents");
     expect(marketInsert.text).not.toContain("subsidy_rate_cents");
+  });
+
+  it("seeds no session and no sign-in code", () => {
+    // Worth asserting rather than assuming. A fixture session would be a
+    // credential anyone could read out of this repository and present.
+    const auth = statements.filter(
+      (s) =>
+        s.text.startsWith("INSERT INTO sessions") ||
+        s.text.startsWith("INSERT INTO sign_in_codes"),
+    );
+    expect(auth).toEqual([]);
+  });
+
+  it("records how each organization signs in", () => {
+    // Boards default to federated, which is the seeded claim: a government
+    // organization is locked to its own identity provider.
+    const board = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO organizations") && s.params.includes("board"),
+    )!;
+    expect(board.params).toContain("federated");
   });
 
   it("writes no rate on a fund that is not paid by the hour", () => {

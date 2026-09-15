@@ -33,6 +33,7 @@ import type {
 } from "@/domain/types";
 import { clearanceExpiry } from "@/domain/eligibility";
 import { hasExited } from "@/domain/outcome";
+import { defaultIdentityMode } from "@/domain/identity";
 import { isTerminal } from "@/domain/workflow";
 import { scoreMatch } from "@/domain/matching";
 import { brandAddress } from "@/brand";
@@ -128,7 +129,26 @@ export const markets: Market[] = [
 // Organizations
 // ---------------------------------------------------------------------------
 
-export const organizations: Organization[] = [
+/** The fixture shape before identity is filled in below. */
+type OrganizationSeed = Omit<Organization, "identityMode" | "emailDomains"> &
+  Partial<Pick<Organization, "identityMode" | "emailDomains">>;
+
+/**
+ * An organization's work domain, taken from the address it already gave.
+ *
+ * Derived rather than written out twice: a contact address and a declared work
+ * domain that disagree is the kind of fixture error that reads as a login bug.
+ * Businesses are left open — a small employer's staff are as likely to be on a
+ * shared mailbox as a corporate domain, and locking them out on day one is how
+ * a programme loses the employer it just recruited.
+ */
+function domainsFor(organization: OrganizationSeed): string[] {
+  if (organization.kind === "business") return [];
+  const at = organization.contactEmail.lastIndexOf("@");
+  return at === -1 ? [] : [organization.contactEmail.slice(at + 1).toLowerCase()];
+}
+
+export const organizations: Organization[] = ([
   /**
    * The foundation, and the only `nonprofit` in the fixtures.
    *
@@ -334,7 +354,18 @@ export const organizations: Organization[] = [
     appliedOn: daysAgo(12),
     hoursPerCredit: 45,
   },
-];
+] as OrganizationSeed[]).map((organization) => ({
+  ...organization,
+  /**
+   * Boards default to `federated`, which is the claim worth seeding rather than
+   * defaulting quietly: a government organization is locked to its own identity
+   * provider unless somebody deliberately says otherwise. No adapter ships, so
+   * under real sign-on the seeded board officer genuinely cannot get in — the
+   * correct failure, and one the demo should show rather than paper over.
+   */
+  identityMode: organization.identityMode ?? defaultIdentityMode(organization.kind),
+  emailDomains: organization.emailDomains ?? domainsFor(organization),
+}));
 
 // ---------------------------------------------------------------------------
 // Funding

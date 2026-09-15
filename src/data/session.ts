@@ -119,6 +119,18 @@ export function contextFor(role: ActorRole): ActorContext {
   return { user, membership: account.membership };
 }
 
+/**
+ * The membership behind a signed-in user, for the pre-auth path.
+ *
+ * Only the five demo accounts carry one, which is a fixture limitation rather
+ * than a model one: under real sign-on those are the only people who can get
+ * in, because nobody else in the seed has a membership to resolve to. A real
+ * deployment creates a membership when a person is invited to an organization.
+ */
+export function membershipForUser(userId: string): Membership | null {
+  return ACCOUNTS.find((a) => a.membership.userId === userId)?.membership ?? null;
+}
+
 export function accountFor(role: ActorRole): DemoAccount {
   return demoAccounts.find((a) => a.role === role) ?? demoAccounts[0];
 }

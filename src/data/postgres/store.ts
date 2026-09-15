@@ -241,6 +241,8 @@ class PostgresUnitOfWork implements UnitOfWork {
         brand_color = ${organization.brandColor ?? null},
         accent_color = ${organization.accentColor ?? null},
         logo_url = ${organization.logoUrl ?? null},
+        identity_mode = ${organization.identityMode},
+        email_domains = ${organization.emailDomains},
         updated_at = now()
       WHERE id = ${organization.id}`);
   }
