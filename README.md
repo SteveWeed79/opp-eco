@@ -81,7 +81,9 @@ The five portals are five views onto **one workflow state machine**, not five in
 ```
 src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  profiles per track, credit accumulation, match scoring,
-                 PII disclosure. No UI, no database.
+                 PII disclosure, and the follow-up outcome — the one record
+                 here that is an observation rather than a state machine.
+                 No UI, no database.
 src/auth/        Session resolution behind a provider interface. Replacing
                  simulated sign-on touches this and nothing else.
 src/data/        Repository contracts, two implementations behind them — the
@@ -130,6 +132,8 @@ A page rather than an expander, because the realistic path into this program is 
 That distinction is load-bearing. `postings.find` narrows by organization for `business` and by *market* for everyone else — correct for the queues it was written for, and too wide here: it would have let a student open an employer's half-written draft by guessing an id. Nothing had exposed it before, because until this page there was no way to address a posting by id at all. An e2e test asserts a real draft and a nonexistent id return the same status, so the URL cannot become an oracle for what an employer is drafting.
 
 ## The five state machines
+
+Still five, and `Outcome` is deliberately not a sixth — see [Outcomes](#outcomes).
 
 Five things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, an **organization's** vetting, and an employer's **mentorship offer**. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
 
@@ -202,6 +206,78 @@ Weekly rather than daily, because a week is the period a board reimburses agains
 ### Who sees what, and why not more
 
 The board sees hours and periods; the work summaries are stripped before the rows reach it. Pricing a claim against an hour cap does not take a description of what the student built, and holding one would give a government agency a weekly diary of a named student's activity it has no need for — which, once held, is subject to retention and open-records questions it would rather not answer. Collect once, disclose per purpose. The redaction is in the repository, not the component: a field hidden on screen while the full row travels to the client is not withheld.
+
+## Outcomes
+
+Every other record here measures whether a *placement* worked — the hours were
+approved, the credit was granted, the board's money bought what it was committed
+to. None of them measures whether the venture did. The claim this platform makes
+to a funder is narrower and harder: that a learner who takes part is more likely
+to end up **working in their own region**. The lifecycle ended at credit granted,
+so there was nowhere to put the answer either way.
+
+An `Outcome` is one follow-up observation about one learner, and optionally about
+the experience it followed. Six answers:
+
+| | Counts as |
+|---|---|
+| Hired by the host employer | Regional employment |
+| Employed in the region | Regional employment |
+| Employed outside the region | Employment, not retention |
+| Continued in education | Positive, not employment |
+| Entered training or an apprenticeship | Positive, not employment |
+| Still looking | A recorded result |
+
+**Employed in the region and employed elsewhere are separate values, not one
+"employed".** That distinction is the entire argument the venture rests on: a
+programme that reliably produces graduates who leave is a talent pipeline out of
+the county, and a board funding it should be able to see that. Folding them
+together would give a number that always looks good.
+
+**It is not a state machine, and that is the design.** There is no status, no
+version, and no update path — an outcome is an *observation*, so a learner
+followed up again six months later gets a second row. Nothing supersedes anything,
+because the follow-up history is the evidence being offered. `summarizeOutcomes`
+counts one observation per learner, the most recent, so a diligent officer cannot
+inflate the denominator by doing their job.
+
+### Absence is not a result
+
+`still_seeking` is a recorded answer. A learner nobody has asked has **no row at
+all**, and the two are reported separately: the console shows regional employment
+over the learners actually measured, beside the count of finished placements
+nobody has followed up on. Rating over everyone who exited would make an unworked
+queue read as a programme that fails to place people, and a rate of zero over
+nothing measured would be worse — so the rate is blank until there is something
+to compute it from.
+
+The seed ships with the queue still half-worked, and with a learner who took a
+job in Kansas City, for the same reason the seeded college's brand colours
+collide twice: a measure that only ever reports good news on its own fixtures has
+not been tested against anything.
+
+### Who does it, and who sees it
+
+The college records them, because follow-up is local-operator work and it holds
+the relationship that makes the call get answered; an administrator can too, for
+the same reason they can do anything else here. The learner and the employer are
+deliberately absent and are the open question (Q23) — an employer is the only
+party that actually knows it made a hire, and a self-report is the commonest
+source in real workforce reporting, but each needs a rule about what it may claim.
+
+**The board reads the counts and never the free text.** Its obligation is how
+many were employed and how many stayed, which is exactly what the kind says; the
+sentence naming a learner's new employer is a fact about someone's life rather
+than a performance measure. That is the timesheet redaction applied at the other
+end of the lifecycle, and it is in the repository rather than the component.
+
+An employer reads **none of them**, which is the case that shaped the query
+layer. It can read the applications against its own postings and no outcomes at
+all, so a follow-up queue built by subtracting one list from the other would have
+shown every placement it hosted as never followed up — work already done,
+presented as outstanding, with no way to discover otherwise. `canReadOutcomes`
+exists so a derived view can tell "no outcome exists" from "you may not see one",
+and `outcomeScope` is tested against it so the two cannot drift.
 
 ## Theming
 
@@ -357,6 +433,13 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
 - **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
+- **A fixed follow-up interval.** Workforce reporting measures employment at set
+  quarters after exit — the second and the fourth — and an outcome here is
+  recorded whenever somebody asks. The record already separates the date an
+  outcome was true as of from the date it was entered, which is what a windowed
+  report would need; what is missing is the rule about when a follow-up becomes
+  *due* rather than merely possible, and that decides whether the resulting
+  figure is comparable to the ones a board already reports (Q23).
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

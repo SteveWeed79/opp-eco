@@ -198,6 +198,15 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createOutcome(outcome: import("@/domain/types").Outcome) {
+    if (seed.outcomes.some((o) => o.id === outcome.id)) {
+      throw new Error(`Outcome ${outcome.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.outcomes.push(outcome);
+    });
+  }
+
   appendAuditEvent(event: Omit<AuditEvent, "id">) {
     this.effects.push(() => {
       seed.auditEvents.unshift({ ...event, id: `evt-${++auditSequence}` });

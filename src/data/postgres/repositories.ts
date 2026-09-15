@@ -28,17 +28,24 @@ import type {
   Application,
   MentorshipOffer,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
 } from "@/domain/types";
-import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
+import {
+  disclosureFor,
+  redactOutcome,
+  redactStudent,
+  redactTimeEntry,
+} from "@/domain/disclosure";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import type { Repositories } from "../repositories";
 import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   marketScope,
+  outcomeScope,
   mentorshipPairingScope,
   ownMarketScope,
   postingOwnershipScope,
@@ -52,6 +59,7 @@ import {
   toMarket,
   toMentorshipOffer,
   toMentorshipPairing,
+  toOutcome,
   toOrganization,
   toPosting,
   toStudent,
@@ -170,6 +178,26 @@ export function postgresRepositories(db: SqlClient): Repositories {
     return sql`SELECT * FROM mentorship_pairings WHERE ${where}
                ORDER BY mentorship_pairings.introduced_on DESC,
                         mentorship_pairings.id COLLATE "C"`;
+  }
+
+  /**
+   * Newest observation first, then the id, matching `byObservedDescending` on
+   * the other layer — the parity test compares these row by row, so an order
+   * that differs only by chance fails it for no reason.
+   *
+   * The board's narrowing happens here rather than in the WHERE clause: it may
+   * read its market's outcomes and may not read the free text, which is a
+   * projection rather than a filter. Same shape as `narrowTimeEntry`.
+   */
+  async function outcomesWhere(actor: ActorContext, extra: Sql): Promise<Outcome[]> {
+    const where = joinSql([outcomeScope(actor), extra], " AND ");
+    const rows = await all(
+      sql`SELECT * FROM outcomes WHERE ${where}
+          ORDER BY outcomes.observed_on DESC, outcomes.recorded_on DESC,
+                   outcomes.id COLLATE "C"`,
+      toOutcome,
+    );
+    return actor.membership.role === "board" ? rows.map(redactOutcome) : rows;
   }
 
   async function timeEntriesWhere(
@@ -454,6 +482,14 @@ export function postgresRepositories(db: SqlClient): Repositories {
               ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id COLLATE "C"`,
           toCreditAward,
         ),
+    },
+
+    outcomes: {
+      list: (actor) => outcomesWhere(actor, sql`TRUE`),
+      forStudent: (actor, studentId) =>
+        outcomesWhere(actor, sql`outcomes.student_id = ${studentId}`),
+      forApplication: (actor, applicationId) =>
+        outcomesWhere(actor, sql`outcomes.application_id = ${applicationId}`),
     },
 
     auditEvents: {

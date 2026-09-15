@@ -105,6 +105,35 @@ export function mentorshipPairingScope(actor: ActorContext): Sql {
   return joinSql(parts, " AND ");
 }
 
+/**
+ * Restrict follow-up observations to the parties with a reason to read one.
+ *
+ * The market's, for a college or an administrator, because they record them; a
+ * learner's own, because a record held about someone they cannot see is the
+ * kind of thing a privacy regime asks about. **Nothing at all for an employer**
+ * — no surface it has reads one, and where a different employer's intern ended
+ * up is not its business.
+ *
+ * The board is *not* narrowed here, and that is the asymmetry with
+ * `mentorshipPairingScope`: a board has a statutory interest in how many
+ * learners were employed and how many stayed, which is exactly what the kind
+ * says. What it does not get is the free text — stripped by `redactOutcome` on
+ * the way out, the same way a work summary is.
+ */
+export function outcomeScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "business") return sql`FALSE`;
+
+  const parts: Sql[] = [marketScope(actor, "outcomes")];
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`outcomes.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function studentScope(actor: ActorContext): Sql {
   const parts: Sql[] = [marketScope(actor, "students")];
   if (actor.membership.role === "student") {

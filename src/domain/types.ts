@@ -497,6 +497,89 @@ export interface CreditAward {
 }
 
 // ---------------------------------------------------------------------------
+// Outcomes
+// ---------------------------------------------------------------------------
+
+/**
+ * What the learner did next.
+ *
+ * The lifecycle ends at credit granted, which measures whether the *experience*
+ * worked. It says nothing about whether the venture did — the claim this
+ * platform actually makes is that a learner who takes part is more likely to
+ * end up working in their own region, and until now nothing could record that
+ * either way.
+ *
+ * `employed_in_region` versus `employed_elsewhere` is the distinction the whole
+ * argument rests on, so it is a first-class value rather than a note on a
+ * general "employed". A programme that reliably produces graduates who leave is
+ * a talent pipeline out of the county, and a board funding it deserves to be
+ * able to see that.
+ *
+ * `still_seeking` is a recorded fact, not an absence. A learner who was asked
+ * and is still looking is different evidence from a learner nobody followed up
+ * with, and collapsing the two would let an unworked follow-up queue read as a
+ * bad result — or, worse, let a good one be claimed from silence. **Absence is
+ * absence: it has no row.**
+ */
+export type OutcomeKind =
+  | "employed_by_host"
+  | "employed_in_region"
+  | "employed_elsewhere"
+  | "continued_education"
+  | "entered_training"
+  | "still_seeking";
+
+/**
+ * One follow-up observation about one learner.
+ *
+ * Several per learner is normal and intended: employment measured three months
+ * after a placement and again a year later are two facts, not a correction of
+ * the first. Nothing here supersedes anything, which is why there is no status
+ * and no version — an outcome is an observation, and observations accumulate.
+ */
+export interface Outcome {
+  id: string;
+  marketId: string;
+  studentId: string;
+  /**
+   * The experience this followed, when there is one.
+   *
+   * Null is a real case rather than missing data: a learner reached through
+   * mentorship alone has no application, and the day the venture measures
+   * career exposure that never became a placement, that learner still has an
+   * outcome worth holding.
+   */
+  applicationId: string | null;
+  kind: OutcomeKind;
+  /**
+   * The date the outcome was true as of — **not** the day someone typed it in.
+   *
+   * A follow-up made in March about a job that started in January is a January
+   * fact, and reporting that grouped it by the entry date would put it in the
+   * wrong quarter. `recordedOn` keeps the entry date separately, because the
+   * gap between the two is how you tell a live follow-up process from a
+   * back-filled one.
+   */
+  observedOn: string;
+  recordedOn: string;
+  recordedByUserId: string;
+  /**
+   * The role that recorded it, frozen at the moment it was recorded.
+   *
+   * A deliberate departure from `MentorshipPairing.introducedByUserId`, which
+   * stores only the user and lets the membership behind it carry the role. That
+   * is right for provenance and wrong here, because the source *is* the
+   * evidence: "the college followed up" and "the employer told us they hired
+   * her" are different strengths of claim, and if the role were resolved at
+   * read time, an officer moving between organizations would silently rewrite
+   * the evidentiary weight of records they made years earlier.
+   */
+  source: ActorRole;
+  /** The employer, the institution, the programme. Free text, and optional. */
+  detail?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
 
@@ -519,7 +602,8 @@ export interface AuditEvent {
     | "credit"
     | "time_entry"
     | "mentorship_offer"
-    | "mentorship_pairing";
+    | "mentorship_pairing"
+    | "outcome";
   entityId: string;
   from: string | null;
   to: string;

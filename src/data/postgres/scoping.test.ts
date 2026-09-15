@@ -11,10 +11,13 @@ import { sql, joinSql } from "./client";
 import {
   applicationScope,
   marketScope,
+  outcomeScope,
   postingOwnershipScope,
   studentScope,
 } from "./scoping";
 import { contextFor } from "@/data/session";
+import { canReadOutcomes } from "@/domain/outcome";
+import type { ActorRole } from "@/domain/types";
 
 const admin = contextFor("admin");
 const business = contextFor("business");
@@ -129,6 +132,55 @@ describe("student scope", () => {
 
   it("lets a college see its market's roster", () => {
     expect(studentScope(college).text).toBe("students.market_id = $1");
+  });
+});
+
+describe("outcome scope", () => {
+  it("refuses an employer outright", () => {
+    // FALSE rather than an omitted clause, so the refusal is in the statement
+    // where a reviewer can see it.
+    expect(outcomeScope(business).text).toBe("FALSE");
+  });
+
+  it("restricts a student to their own", () => {
+    const scope = outcomeScope(student);
+    expect(scope.text).toContain("outcomes.market_id = $1");
+    expect(scope.text).toContain("SELECT id FROM students WHERE user_id = $2");
+    expect(scope.params[1]).toBe(student.user.id);
+  });
+
+  it("gives a board its market, because the narrowing it needs is a projection", () => {
+    // Unlike an introduction, which a board may not read at all: it has a
+    // statutory interest in how many learners were employed. What it does not
+    // get is the free text, and that is stripped on the way out rather than
+    // filtered here.
+    expect(outcomeScope(board).text).toBe("outcomes.market_id = $1");
+  });
+
+  it("gives a college its market", () => {
+    expect(outcomeScope(college).text).toBe("outcomes.market_id = $1");
+  });
+
+  it("leaves an administrator unrestricted", () => {
+    expect(outcomeScope(admin).text).toBe("TRUE");
+  });
+
+  it("always emits at least one predicate for a non-admin", () => {
+    for (const actor of [business, college, board, student]) {
+      expect(outcomeScope(actor).text).not.toBe("TRUE");
+    }
+  });
+
+  it("refuses exactly the roles the domain says cannot read one", () => {
+    // `canReadOutcomes` is what every derived view consults to tell "no outcome
+    // exists" from "you may not see one". If it and this scope disagree, the
+    // follow-up queue starts reporting finished work as outstanding — which is
+    // the bug it was written for.
+    const roles: ActorRole[] = ["admin", "student", "business", "college", "board"];
+    for (const role of roles) {
+      const refused = outcomeScope(contextFor(role)).text === "FALSE";
+      expect(refused, role).toBe(!canReadOutcomes(role));
+    }
   });
 });
 

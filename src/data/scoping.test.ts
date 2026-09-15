@@ -114,6 +114,61 @@ describe("who may read an introduction", () => {
   });
 });
 
+describe("who may read a follow-up outcome", () => {
+  it("shows the college the ones in its market", async () => {
+    const theirs = await repositories.outcomes.list(college);
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((o) => o.marketId === college.membership.marketId)).toBe(true);
+  });
+
+  it("shows a student only their own", async () => {
+    // A record held about someone that they cannot see is the kind of thing a
+    // privacy regime asks about, and there is no reason here to be one.
+    const self = seed.studentForUser(student.user.id)!;
+    const theirs = await repositories.outcomes.list(student);
+    expect(theirs.every((o) => o.studentId === self.id)).toBe(true);
+  });
+
+  it("shows an employer none of them", async () => {
+    // No surface it has reads one, and where a different employer's intern
+    // ended up is not its business.
+    expect(await repositories.outcomes.list(business)).toEqual([]);
+  });
+
+  it("shows the board the counts and never the free text", async () => {
+    // Its obligation is how many were employed and how many stayed, which is
+    // what the kind says. The sentence naming a learner's new employer is not
+    // part of that count — the same rule that strips work summaries from a
+    // timesheet, applied at the other end of the lifecycle.
+    const theirs = await repositories.outcomes.list(board);
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((o) => o.detail === undefined)).toBe(true);
+
+    const withDetail = seed.outcomes.filter((o) => o.detail);
+    expect(withDetail.length).toBeGreaterThan(0);
+  });
+
+  it("strips the detail on every accessor, not only the list", async () => {
+    // A narrowing applied in `list` and forgotten in `forStudent` is how the
+    // review found three unscoped accessors the first time.
+    const seeded = seed.outcomes.find((o) => o.detail)!;
+    const byStudent = await repositories.outcomes.forStudent(board, seeded.studentId);
+    const byApplication = await repositories.outcomes.forApplication(
+      board,
+      seeded.applicationId!,
+    );
+    expect(byStudent.every((o) => o.detail === undefined)).toBe(true);
+    expect(byApplication.every((o) => o.detail === undefined)).toBe(true);
+    expect(byApplication.length).toBeGreaterThan(0);
+  });
+
+  it("returns the newest observation first", async () => {
+    const theirs = await repositories.outcomes.list(admin);
+    const dates = theirs.map((o) => o.observedOn);
+    expect([...dates].sort().reverse()).toEqual(dates);
+  });
+});
+
 describe("business ownership", () => {
   it("lists only its own postings", async () => {
     const foreign = (await repositories.postings

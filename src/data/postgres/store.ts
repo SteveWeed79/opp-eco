@@ -26,6 +26,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
@@ -367,6 +368,20 @@ class PostgresUnitOfWork implements UnitOfWork {
   }
 
   // -- Audit and notification ----------------------------------------------
+
+  createOutcome(outcome: Outcome) {
+    this.add(sql`
+      INSERT INTO outcomes (
+        id, market_id, student_id, application_id, kind,
+        observed_on, recorded_on, recorded_by, source, detail
+      ) VALUES (
+        ${outcome.id}, ${outcome.marketId}, ${outcome.studentId},
+        ${outcome.applicationId}, ${outcome.kind},
+        ${outcome.observedOn}, ${outcome.recordedOn},
+        ${outcome.recordedByUserId}, ${outcome.source},
+        ${outcome.detail ?? null}
+      )`);
+  }
 
   appendAuditEvent(event: Omit<AuditEvent, "id">) {
     this.add(sql`

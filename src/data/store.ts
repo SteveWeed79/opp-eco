@@ -19,6 +19,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
@@ -140,6 +141,15 @@ export interface UnitOfWork {
   createTimeEntry(entry: TimeEntry): void;
   saveTimeEntry(entry: TimeEntry, expectedVersion: number): void;
   saveCreditAward(award: CreditAward): void;
+  /**
+   * Record a follow-up observation.
+   *
+   * Create-only, and there is deliberately no `saveOutcome` beside it. An
+   * outcome is an observation rather than a record that moves — a learner
+   * followed up again six months later gets a second row, because the history
+   * is the evidence and an update would destroy it.
+   */
+  createOutcome(outcome: Outcome): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;
 }

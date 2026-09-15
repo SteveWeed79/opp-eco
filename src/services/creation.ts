@@ -16,12 +16,15 @@ import type {
   MentorshipOffer,
   MentorshipOfferStatus,
   MentorshipPairing,
+  Outcome,
+  OutcomeKind,
   Posting,
   PostingStatus,
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
 import { INTRODUCERS, placesLeft } from "@/domain/mentorship";
+import { canRecordOutcome, followUpBlockReason } from "@/domain/outcome";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -443,4 +446,131 @@ export async function introduceStudentToMentor(
   });
 
   return { ok: true, created: pairing };
+}
+
+// ---------------------------------------------------------------------------
+// Follow-up outcomes
+// ---------------------------------------------------------------------------
+
+export interface RecordOutcomeInput {
+  studentId: string;
+  /** Null when the learner was reached some way other than a placement. */
+  applicationId: string | null;
+  kind: OutcomeKind;
+  /** ISO date the outcome was true as of, not the day it is being entered. */
+  observedOn: string;
+  detail?: string;
+}
+
+/**
+ * Record what a learner did next.
+ *
+ * A creation rather than a transition, and there is no update beside it: an
+ * outcome is an observation, so a second follow-up six months later is a second
+ * row. Nothing here can rewrite what an earlier one said, which is the point —
+ * the history is the evidence a funder is being offered.
+ */
+export async function recordOutcome(
+  actor: ActorContext,
+  input: RecordOutcomeInput,
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<Outcome>> {
+  if (!canRecordOutcome(actor.membership.role)) {
+    return {
+      ok: false,
+      error: "Only the college or an administrator can record an outcome.",
+      code: "forbidden",
+    };
+  }
+
+  const student = await repositories.students.find(actor, input.studentId);
+  if (!student) {
+    return { ok: false, error: "Student not found.", code: "not_found" };
+  }
+
+  const at = deps.now();
+  const observedOn = new Date(input.observedOn);
+  if (Number.isNaN(observedOn.getTime())) {
+    return { ok: false, error: "That is not a date.", code: "forbidden" };
+  }
+  if (observedOn.getTime() > at.getTime()) {
+    // Nothing is observed before it happens. The schema refuses this too; it is
+    // checked here so the caller gets a sentence rather than a constraint name.
+    return {
+      ok: false,
+      error: "An outcome cannot be observed in the future.",
+      code: "forbidden",
+    };
+  }
+
+  let application = null;
+  if (input.applicationId) {
+    application = await repositories.applications.find(actor, input.applicationId);
+    if (!application) {
+      return { ok: false, error: "Placement not found.", code: "not_found" };
+    }
+    if (application.studentId !== student.id) {
+      // Unreachable through the repositories, which scope both reads. Stated
+      // anyway: an outcome filed against someone else's placement would
+      // attribute one learner's job to another learner's experience.
+      return {
+        ok: false,
+        error: "That placement belongs to a different learner.",
+        code: "forbidden",
+      };
+    }
+    const blocked = followUpBlockReason(application);
+    if (blocked) return { ok: false, error: blocked, code: "forbidden" };
+  }
+
+  // Same-kind, same-date, same-experience is a double-submitted form rather
+  // than a second follow-up. The unique index behind this says so too.
+  const existing = await repositories.outcomes.forStudent(actor, student.id);
+  const duplicate = existing.some(
+    (o) =>
+      o.applicationId === (input.applicationId ?? null) &&
+      o.kind === input.kind &&
+      o.observedOn === observedOn.toISOString(),
+  );
+  if (duplicate) {
+    return {
+      ok: false,
+      error: `That outcome is already recorded for ${student.name} on this date.`,
+      code: "duplicate",
+    };
+  }
+
+  const detail = input.detail?.trim();
+  const outcome: Outcome = {
+    id: deps.id("out"),
+    marketId: student.marketId,
+    studentId: student.id,
+    applicationId: application?.id ?? null,
+    kind: input.kind,
+    observedOn: observedOn.toISOString(),
+    recordedOn: at.toISOString(),
+    recordedByUserId: actor.user.id,
+    // Frozen from the acting membership, never taken from the caller. A caller
+    // who could name the source could file their own guess as a college's
+    // finding.
+    source: actor.membership.role,
+    detail: detail ? detail : undefined,
+  };
+
+  await deps.store.transaction((uow) => {
+    uow.createOutcome(outcome);
+    uow.appendAuditEvent({
+      marketId: outcome.marketId,
+      at: outcome.recordedOn,
+      actorUserId: actor.user.id,
+      actorRole: actor.membership.role,
+      entityType: "outcome",
+      entityId: outcome.id,
+      from: null,
+      to: outcome.kind,
+      viaOverride: false,
+    });
+  });
+
+  return { ok: true, created: outcome };
 }

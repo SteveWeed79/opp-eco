@@ -111,6 +111,39 @@ export const introductionOutcomeInput = z.object({
 });
 
 /**
+ * A follow-up observation.
+ *
+ * `applicationId` is nullable rather than optional, matching the domain: a
+ * learner reached some way other than a placement is a real case, and an
+ * absent key and an explicit null must not mean different things at the trust
+ * boundary.
+ *
+ * The kind is an enum here as well as in the database, because the whole value
+ * of an outcome taxonomy is that nobody can invent a seventh category that
+ * reporting then has to guess about. `source` is deliberately **not** accepted:
+ * it is frozen from the acting membership, and a caller who could name it could
+ * file their own guess as a college's finding.
+ */
+export const recordOutcomeInput = z.object({
+  studentId: id,
+  applicationId: id.nullable(),
+  kind: z.enum([
+    "employed_by_host",
+    "employed_in_region",
+    "employed_elsewhere",
+    "continued_education",
+    "entered_training",
+    "still_seeking",
+  ]),
+  observedOn: z.string().min(1).max(40),
+  // Optional, unlike the note closing an introduction. A college that knows
+  // only "she is working locally" should be able to say so — demanding the
+  // employer's name as the price of recording the fact is how a follow-up
+  // queue goes unworked.
+  detail: z.string().trim().min(1).max(1000).optional(),
+});
+
+/**
  * A week of logged hours.
  *
  * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered

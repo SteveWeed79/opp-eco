@@ -10,7 +10,13 @@
  * enough to make a decision and nothing more until the placement is real.
  */
 
-import type { Application, ApplicationStatus, Student, TimeEntry } from "./types";
+import type {
+  Application,
+  ApplicationStatus,
+  Outcome,
+  Student,
+  TimeEntry,
+} from "./types";
 
 export type DisclosureLevel = "summary" | "full";
 
@@ -79,4 +85,22 @@ export function redactStudent(student: Student, level: DisclosureLevel): Student
  */
 export function redactTimeEntry(entry: TimeEntry): TimeEntry {
   return { ...entry, summary: "", reviewNote: undefined };
+}
+
+/**
+ * An outcome with the free-text detail removed.
+ *
+ * The same rule as the timesheet, applied to the record on the other end of the
+ * lifecycle. A workforce board's reporting obligation is a *count* — how many
+ * learners were employed, and how many of those stayed in the region — and the
+ * kind is exactly that count. What it does not need is the sentence naming the
+ * employer who hired a named person, or the programme they enrolled in, which
+ * is a fact about someone's life rather than a performance measure.
+ *
+ * The distinction matters more here than on a timesheet, because an outcome is
+ * recorded *after* the board's interest has ended. It has already reimbursed
+ * the placement; nothing it does next turns on where that learner works now.
+ */
+export function redactOutcome(outcome: Outcome): Outcome {
+  return { ...outcome, detail: undefined };
 }
