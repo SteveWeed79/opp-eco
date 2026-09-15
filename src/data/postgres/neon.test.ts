@@ -291,6 +291,30 @@ describe("configuration", () => {
     );
   });
 
+  it("picks the driver the host requires", () => {
+    // Neither driver can serve the other's host: Neon's speaks the protocol
+    // over a WebSocket to Neon's proxy, `pg` over an ordinary socket.
+    const neon =
+      "postgresql://user:pw@ep-cool-name-123456-pooler.us-east-2.aws.neon.tech/opp_eco";
+    expect(databaseConfig({ DATABASE_URL: neon }).driver).toBe("neon");
+    expect(
+      databaseConfig({ DATABASE_URL: "postgresql://you@localhost:5432/oppeco" }).driver,
+    ).toBe("pg");
+    expect(
+      databaseConfig({ DATABASE_URL: "postgresql://u:p@db.internal:5432/oppeco" }).driver,
+    ).toBe("pg");
+  });
+
+  it("lets an operator override the inference, and refuses a driver it has no adapter for", () => {
+    const neon = "postgresql://user:pw@ep-x.aws.neon.tech/db";
+    expect(
+      databaseConfig({ DATABASE_URL: neon, DATABASE_DRIVER: "pg" }).driver,
+    ).toBe("pg");
+    expect(() =>
+      databaseConfig({ DATABASE_URL: neon, DATABASE_DRIVER: "postgres.js" }),
+    ).toThrow(DatabaseConfigError);
+  });
+
   it("routes loose reads over HTTP unless told otherwise", () => {
     expect(databaseConfig({}).queryViaFetch).toBe(true);
     expect(databaseConfig({ DATABASE_QUERY_VIA_FETCH: "false" }).queryViaFetch).toBe(

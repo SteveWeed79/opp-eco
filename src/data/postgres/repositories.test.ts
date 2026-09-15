@@ -90,7 +90,14 @@ describe("market isolation", () => {
 
     // `users.find` is the one deliberate exception and is not in `everyRead`:
     // it resolves the name behind an audit entry, which crosses markets.
-    const unscoped = statements.filter((s) => !/\.market_id = \$/.test(s.text));
+    //
+    // The `markets` table is isolated by its own primary key, because a market
+    // has no `market_id` — a rule composed against the generic fragment there
+    // produced `markets.market_id = $1`, which is not a column at all.
+    const isScoped = (text: string) =>
+      /\.market_id = \$/.test(text) ||
+      (/FROM markets/.test(text) && /markets\.id = \$/.test(text));
+    const unscoped = statements.filter((s) => !isScoped(s.text));
     expect(
       unscoped.map((s) => s.text.replace(/\s+/g, " ").trim().slice(0, 90)),
     ).toEqual([]);

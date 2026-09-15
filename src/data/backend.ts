@@ -22,7 +22,7 @@ import type { Store } from "./store";
 import { databaseConfig } from "./postgres/config";
 import { postgresRepositories } from "./postgres/repositories";
 import { postgresStore } from "./postgres/store";
-import { postgresClient } from "./postgres/neon";
+import { postgresClient } from "./postgres/pool";
 
 /**
  * Raised when a write is attempted against a read-only deployment.

@@ -4,16 +4,29 @@
 -- a name written here is a name that survives the next rename — which is
 -- exactly what happened to the last one.
 --
--- Written against the domain types in src/domain/types.ts. The app does not
--- connect to a database yet; this exists so the data model is settled and
--- reviewable, and so switching from fixtures to Postgres is an adapter swap
--- rather than a design exercise.
+-- Written against the domain types in src/domain/types.ts, which remain the
+-- source of truth: the app runs on in-memory fixtures with DATABASE_URL unset,
+-- and on this schema with it set.
 --
 -- The guiding rule: invariants the domain layer enforces in TypeScript are
 -- restated here as constraints. A rule enforced in only one of the two places
 -- is a rule that will eventually be violated by the other.
 
 BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Extensions.
+--
+-- `citext` backs the case-insensitive uniqueness of an email address, which is
+-- a real constraint rather than a preference: addresses are compared
+-- case-insensitively by every mail system, so a schema that lets
+-- Dana@apex.example and dana@apex.example both exist has two accounts for one
+-- person. Postgres ships the type but does not load it into a database until
+-- asked, on Neon as everywhere else, so the schema that depends on it is the
+-- schema that must create it.
+-- ---------------------------------------------------------------------------
+
+CREATE EXTENSION IF NOT EXISTS citext;
 
 -- ---------------------------------------------------------------------------
 -- Enumerations. These mirror the TypeScript unions exactly; adding a value in

@@ -1,9 +1,11 @@
 /**
  * Repository contracts.
  *
- * There is no database in this build — the only implementation is in-memory
- * over seeded fixtures. The interfaces exist so that swapping in Postgres
- * later is a new class behind the same contract, with no screen touched.
+ * Two implementations satisfy these: the in-memory one over the seeded
+ * fixtures, and the SQL one in `postgres/`. `backend.ts` picks between them
+ * from a single environment variable, and no screen can tell the difference —
+ * which is the point, and what `postgres/integration.test.ts` asserts
+ * accessor by accessor.
  *
  * Every read takes an ActorContext and is scoped by it. Market isolation is
  * enforced here rather than in each route, so a college in one market cannot

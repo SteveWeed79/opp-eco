@@ -57,7 +57,18 @@ export interface UnitOfWork {
   /** Insert a new posting. Same reasoning as `createApplication`. */
   createPosting(posting: Posting): void;
   saveApplication(application: Application, expectedVersion: number): void;
-  saveStudent(student: Student): void;
+  /**
+   * Persist a student, and who verified them.
+   *
+   * `verifiedBy` is a second argument rather than a field on `Student` because
+   * the domain type is what a screen renders and nobody renders it — but the
+   * schema requires it: a student in `verified` without an attributable
+   * verifier violates a CHECK constraint, so the acting user has to reach the
+   * write. Null clears it, which is what a student leaving the verified state
+   * needs; a stale verifier on a rejected record is the same auditor's finding
+   * as a stale verification date.
+   */
+  saveStudent(student: Student, verifiedBy: string | null): void;
   /**
    * Vetting and publication decisions.
    *

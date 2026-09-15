@@ -39,6 +39,7 @@ import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   marketScope,
+  ownMarketScope,
   postingOwnershipScope,
   studentScope,
 } from "./scoping";
@@ -156,7 +157,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
   ): Promise<TimeEntry[]> {
     const where = joinSql([timeEntryScope(actor), extra], " AND ");
     const rows = await all(
-      sql`SELECT * FROM time_entries WHERE ${where}`,
+      sql`SELECT * FROM time_entries WHERE ${where}
+          ORDER BY time_entries.week_starting DESC, time_entries.id`,
       toTimeEntry,
     );
     return rows.map((entry) => narrowTimeEntry(actor, entry));
@@ -166,13 +168,14 @@ export function postgresRepositories(db: SqlClient): Repositories {
     markets: {
       list: (actor) =>
         all(
-          sql`${rawText(MARKET_SELECT)} WHERE ${marketScope(actor, "markets")}`,
+          sql`${rawText(MARKET_SELECT)} WHERE ${ownMarketScope(actor)}
+              ORDER BY markets.name`,
           toMarket,
         ),
       find: (actor, id) =>
         one(
           sql`${rawText(MARKET_SELECT)}
-              WHERE ${marketScope(actor, "markets")} AND markets.id = ${id}`,
+              WHERE ${ownMarketScope(actor)} AND markets.id = ${id}`,
           toMarket,
         ),
     },
@@ -183,7 +186,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         if (filter?.kind) parts.push(sql`organizations.kind = ${filter.kind}`);
         return all(
           sql`SELECT * FROM organizations WHERE ${joinSql(parts, " AND ")}
-              ORDER BY name`,
+              ORDER BY organizations.name, organizations.id`,
           toOrganization,
         );
       },
@@ -198,7 +201,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM organizations
               WHERE ${marketScope(actor, "organizations")}
                 AND organizations.status IN ('applied', 'under_review', 'info_requested')
-              ORDER BY applied_on`,
+              ORDER BY organizations.applied_on, organizations.id`,
           toOrganization,
         ),
     },
@@ -206,7 +209,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
     students: {
       list: (actor) =>
         all(
-          sql`${rawText(STUDENT_SELECT)} WHERE ${studentScope(actor)}`,
+          sql`${rawText(STUDENT_SELECT)} WHERE ${studentScope(actor)}
+              ORDER BY users.name, students.id`,
           toStudent,
         ),
       find: (actor, id) =>
@@ -219,7 +223,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`${rawText(STUDENT_SELECT)}
               WHERE ${studentScope(actor)}
-                AND students.status IN ('pending_verification', 'profile_complete')`,
+                AND students.status IN ('pending_verification', 'profile_complete')
+              ORDER BY users.name, students.id`,
           toStudent,
         ),
       forUser: (actor, userId) =>
@@ -247,7 +252,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
         const parts = [marketScope(actor, "postings"), postingOwnershipScope(actor)];
         if (filter?.status) parts.push(sql`postings.status = ${filter.status}`);
         return all(
-          sql`SELECT * FROM postings WHERE ${joinSql(parts, " AND ")}`,
+          sql`SELECT * FROM postings WHERE ${joinSql(parts, " AND ")}
+              ORDER BY postings.created_at DESC, postings.id`,
           toPosting,
         );
       },
@@ -265,14 +271,16 @@ export function postgresRepositories(db: SqlClient): Repositories {
         // ownership-scoped.
         all(
           sql`SELECT * FROM postings
-              WHERE ${marketScope(actor, "postings")} AND postings.status = 'published'`,
+              WHERE ${marketScope(actor, "postings")} AND postings.status = 'published'
+              ORDER BY postings.created_at DESC, postings.id`,
           toPosting,
         ),
       awaitingCollegeHelp: (actor) =>
         all(
           sql`SELECT * FROM postings
               WHERE ${marketScope(actor, "postings")}
-                AND postings.status IN ('help_requested', 'college_drafting')`,
+                AND postings.status IN ('help_requested', 'college_drafting')
+              ORDER BY postings.created_at DESC, postings.id`,
           toPosting,
         ),
     },
@@ -286,7 +294,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
           );
         }
         return all(
-          sql`SELECT * FROM mentorship_offers WHERE ${joinSql(parts, " AND ")}`,
+          sql`SELECT * FROM mentorship_offers WHERE ${joinSql(parts, " AND ")}
+              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id`,
           toMentorshipOffer,
         );
       },
@@ -311,7 +320,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`SELECT * FROM mentorship_offers
               WHERE ${marketScope(actor, "mentorship_offers")}
-                AND mentorship_offers.status = 'open'`,
+                AND mentorship_offers.status = 'open'
+              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id`,
           toMentorshipOffer,
         ),
     },
@@ -319,7 +329,8 @@ export function postgresRepositories(db: SqlClient): Repositories {
     applications: {
       list: (actor) =>
         all(
-          sql`${rawText(APPLICATION_SELECT)} WHERE ${applicationScope(actor)}`,
+          sql`${rawText(APPLICATION_SELECT)} WHERE ${applicationScope(actor)}
+              ORDER BY applications.submitted_on DESC, applications.id`,
           toApplication,
         ),
       find: (actor, id) =>
@@ -331,13 +342,15 @@ export function postgresRepositories(db: SqlClient): Repositories {
       forStudent: (actor, studentId) =>
         all(
           sql`${rawText(APPLICATION_SELECT)}
-              WHERE ${applicationScope(actor)} AND applications.student_id = ${studentId}`,
+              WHERE ${applicationScope(actor)} AND applications.student_id = ${studentId}
+              ORDER BY applications.submitted_on DESC, applications.id`,
           toApplication,
         ),
       forPosting: (actor, postingId) =>
         all(
           sql`${rawText(APPLICATION_SELECT)}
-              WHERE ${applicationScope(actor)} AND applications.posting_id = ${postingId}`,
+              WHERE ${applicationScope(actor)} AND applications.posting_id = ${postingId}
+              ORDER BY applications.submitted_on DESC, applications.id`,
           toApplication,
         ),
     },
@@ -347,7 +360,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`SELECT * FROM interview_slots
               WHERE ${marketScope(actor, "interview_slots")}
-              ORDER BY starts_at`,
+              ORDER BY interview_slots.starts_at, interview_slots.id`,
           toInterviewSlot,
         ),
       open: (actor) =>
@@ -355,7 +368,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM interview_slots
               WHERE ${marketScope(actor, "interview_slots")}
                 AND interview_slots.booked_by IS NULL
-              ORDER BY starts_at`,
+              ORDER BY interview_slots.starts_at, interview_slots.id`,
           toInterviewSlot,
         ),
     },
@@ -387,14 +400,16 @@ export function postgresRepositories(db: SqlClient): Repositories {
     creditAwards: {
       list: (actor) =>
         all(
-          sql`${rawText(CREDIT_SELECT)} WHERE ${marketScope(actor, "credit_awards")}`,
+          sql`${rawText(CREDIT_SELECT)} WHERE ${marketScope(actor, "credit_awards")}
+              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id`,
           toCreditAward,
         ),
       forStudent: (actor, studentId) =>
         all(
           sql`${rawText(CREDIT_SELECT)}
               WHERE ${marketScope(actor, "credit_awards")}
-                AND credit_awards.student_id = ${studentId}`,
+                AND credit_awards.student_id = ${studentId}
+              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id`,
           toCreditAward,
         ),
     },

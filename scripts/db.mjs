@@ -10,32 +10,22 @@
  *   npm run db:migrate   apply everything pending
  *   npm run db:verify    prove the connection and report what is there
  *
- * Reads DATABASE_URL from .env.local, then .env, then the ambient environment.
- * Use Neon's **direct** (non-pooled) connection string here — DDL through a
- * connection pooler can be refused or land on a different session than the one
- * holding the transaction.
+ * Reads DATABASE_URL from .env.local, then .env, then the ambient environment,
+ * and opens it with whichever driver that host needs — Neon's over a WebSocket,
+ * node-postgres over a socket for everything else. On Neon, use the **direct**
+ * (non-pooled) connection string here: DDL through a connection pooler can be
+ * refused or land on a different session than the one holding the transaction.
  */
 
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Pool, neonConfig } from "@neondatabase/serverless";
 import { withLedgerInsert } from "./migrations.mjs";
+import { connect, driverName } from "./pool.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS = join(ROOT, "src", "data", "postgres", "migrations");
-
-for (const file of [".env.local", ".env"]) {
-  const path = join(ROOT, file);
-  if (existsSync(path)) {
-    try {
-      process.loadEnvFile(path);
-    } catch {
-      // A malformed env file should not stop an explicit DATABASE_URL working.
-    }
-  }
-}
 
 const LEDGER = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -56,23 +46,6 @@ function migrationFiles() {
         checksum: createHash("sha256").update(body).digest("hex").slice(0, 16),
       };
     });
-}
-
-function connect() {
-  const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) {
-    console.error(
-      "DATABASE_URL is not set.\n\n" +
-        "  1. Create a project at https://console.neon.tech\n" +
-        "  2. Copy the connection string (use the DIRECT one for migrations)\n" +
-        "  3. Put it in .env.local as DATABASE_URL=postgresql://...\n",
-    );
-    process.exit(1);
-  }
-  if (!neonConfig.webSocketConstructor) {
-    neonConfig.webSocketConstructor = globalThis.WebSocket;
-  }
-  return new Pool({ connectionString, max: 1 });
 }
 
 async function appliedMigrations(pool) {
@@ -142,6 +115,7 @@ async function migrate(pool) {
 async function verify(pool) {
   const { rows: version } = await pool.query("SELECT version()");
   console.log(`connected: ${String(version[0].version).split(",")[0]}`);
+  console.log(`driver:    ${await driverName()}`);
 
   const { rows: tables } = await pool.query(
     `SELECT table_name FROM information_schema.tables
@@ -177,7 +151,7 @@ if (!(command in COMMANDS)) {
   process.exit(1);
 }
 
-const pool = connect();
+const pool = await connect();
 try {
   await COMMANDS[command](pool);
 } catch (error) {

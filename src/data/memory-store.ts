@@ -65,7 +65,17 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
-  saveStudent(student: import("@/domain/types").Student) {
+  /**
+   * `verifiedBy` is accepted and dropped: the fixtures store a `Student`, which
+   * has no field for it. Taking the argument anyway keeps one contract for both
+   * stores, so the Postgres path cannot be the only one a call site remembers
+   * to satisfy.
+   */
+  saveStudent(
+    student: import("@/domain/types").Student,
+    verifiedBy: string | null,
+  ) {
+    void verifiedBy;
     const index = seed.students.findIndex((s) => s.id === student.id);
     if (index === -1) throw new Error(`Unknown student ${student.id}`);
     this.effects.push(() => {

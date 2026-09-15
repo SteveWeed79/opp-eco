@@ -166,13 +166,14 @@ class PostgresUnitOfWork implements UnitOfWork {
    * Name and email are absent on purpose: they live on `users`, and a student
    * record changing does not change who the person is.
    *
-   * `verified_by` is left untouched rather than written, because the domain's
-   * `Student` does not carry it and the schema requires it once a student is
-   * verified. A verification performed through the app therefore needs the
-   * acting user threaded into this method before writes are switched on — the
-   * seed sets it directly, which is why nothing fails today.
+   * `verified_by` comes in beside the student rather than on it. The schema
+   * will not accept a verified student without one — `students_verified_check`
+   * — and the domain's `Student` has no field to carry it, so the acting user
+   * is threaded from the transition that made the decision. Writing it here
+   * rather than leaving the column untouched is what makes the college's
+   * verification survive against a real database.
    */
-  saveStudent(student: Student) {
+  saveStudent(student: Student, verifiedBy: string | null) {
     this.add(sql`
       UPDATE students SET
         program_of_study = ${student.programOfStudy},
@@ -185,6 +186,7 @@ class PostgresUnitOfWork implements UnitOfWork {
         eligibility = ${student.eligibility},
         eligibility_determined_on = ${student.eligibilityDeterminedOn},
         verified_on = ${student.verifiedOn},
+        verified_by = ${verifiedBy},
         updated_at = now()
       WHERE id = ${student.id}`);
   }
