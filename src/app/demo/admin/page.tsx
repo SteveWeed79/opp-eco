@@ -39,6 +39,7 @@ import {
   ORGANIZATION_CONFIRM,
 } from "@/components/TransitionActions";
 import { actorForPortal } from "@/auth/session";
+import { healthReport } from "@/services/health";
 import {
   allMarketHealth,
   averagePauseDays,
@@ -103,6 +104,10 @@ const STAGE_LABEL: Record<MarketStage, string> = {
 
 export default async function AdminPage() {
   const admin = await actorForPortal("admin");
+  // Cheap enough to run on every load: four of the five checks are reading
+  // configuration, and the two that touch the database are a `SELECT 1` and a
+  // single-row lookup.
+  const system = await healthReport();
   const { organizationName, marketName } = await nameLookups(admin);
 
   // Mentorship, across every market — the view only this console has. An offer
@@ -934,6 +939,30 @@ export default async function AdminPage() {
             >
               Notification outbox{" "}
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </Link>
+            {/* The verdict is on the link rather than behind it. A health page
+                nobody opens while things look fine is a health page that gets
+                opened for the first time during the incident. */}
+            <Link
+              href={`${PORTAL_PATH.admin}/health`}
+              className="text-sm font-bold text-brand-700 hover:text-ink-950 flex items-center gap-1.5"
+            >
+              System health
+              <Badge
+                tone={
+                  system.status === "ok"
+                    ? "good"
+                    : system.status === "degraded"
+                      ? "warn"
+                      : "crit"
+                }
+              >
+                {system.status === "ok"
+                  ? "Working"
+                  : system.status === "degraded"
+                    ? "Degraded"
+                    : "Failing"}
+              </Badge>
             </Link>
           </div>
         </div>

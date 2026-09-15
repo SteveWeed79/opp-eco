@@ -115,6 +115,10 @@ src/services/    Write paths (executeTransition for existing records,
                  retrieval — whose store follows DATABASE_URL like the rest.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
+src/services/health.ts
+                 Whether this deployment is working, and which part is not.
+                 Read by /api/health and by the admin console, and forbidden
+                 from naming anybody.
 src/components/  Component library, rendered at /demo/design.
 src/routes.ts    Every path, in one place. The `/demo` prefix, the portal
                  paths, and which surface a pathname belongs to.
@@ -643,6 +647,78 @@ about them. `purgeLearnerIdentity` now sweeps the learner's files after the
 record commits, and `canRetrieve` refuses any file whose learner has been
 purged. The second one is the control, because it does not depend on the first
 having succeeded; the sweep is cleanup.
+
+## Knowing it works
+
+The question an operator actually has is never "is the process running" — the
+process is nearly always running. It is *why did nobody get told*, *why can't
+anyone sign in*, and *is the database the one I think it is*. So the checks are
+against the things that have silently failed in this codebase's own history: a
+queue that filled while nothing drained it, a mode switch that made every page
+throw at boot, a schema one migration behind the code reading it.
+
+| Check | Answers |
+|---|---|
+| `data` | Where records are read from, and whether that place responds |
+| `schema` | Whether the database has the columns this build expects |
+| `notifications` | Whether anyone is actually being told, and whether the queue is draining |
+| `sign-on` | How people get in, and whether that configuration boots |
+| `uploads` | Whether files are accepted, and what is scanning them |
+
+**`degraded` answers 200, not 503.** A status page that pages somebody at 3am
+because email is redirected to a test address has taught them to ignore it, and
+an application serving requests is up. Only `failing` — the database gone, the
+schema behind, sign-on refusing to boot — is a 503. Degraded is the state that
+misleads people, because it looks working from outside; that is the whole
+reason it has a name of its own.
+
+**The endpoint answers at two resolutions.** An uptime monitor needs an
+unauthenticated endpoint, and an unauthenticated endpoint is reconnaissance the
+moment it answers in detail. "Postgres is not answering", `0010_files.sql has
+not been applied`, `clamd at 10.0.0.4:3310` — each is a sentence written for an
+operator and a gift to anybody else. So an anonymous caller gets the verdict and
+nothing else, and an administrator gets the report:
+
+```bash
+curl -i localhost:3000/api/health     # {"status":"ok"} and nothing more
+```
+
+`/demo/admin/health` is the same checks for the person the monitor wakes up,
+and the console carries the verdict on the link rather than behind it — a health
+page nobody opens while things look fine is one first opened during the
+incident.
+
+**Nothing in a health report may name a person.** It is the one thing here
+designed to be read by a monitor, a status page and whoever is on call, none of
+which have the access controls the database has; under FERPA a log holding a
+participant's details inherits the handling rules of the data itself. Every
+detail is a count, a duration or a setting, and `health.test.ts` asserts that
+against every seeded person rather than a sample.
+
+The check for a pending migration carries the expected filename as a constant
+rather than listing the directory, because on a serverless deployment the
+repository's files are not there at runtime. `migrations.test.ts` asserts the
+constant matches the newest file, so it cannot drift into reporting a schema
+that is up to date while the code reads columns nobody created.
+
+### Finding one request again
+
+`proxy.ts` mints an `x-request-id` per request and echoes it on the response,
+keeping an id the platform already set rather than minting a second — two ids
+for one request is worse than none, because each looks authoritative in a
+different system. It is eight characters from an alphabet with no `0`, `O`, `1`,
+`I` or `L`, because its job is to survive being read down a phone line and typed
+into a search box.
+
+An inbound value that is not plausibly an id is replaced rather than escaped: it
+is attacker-controlled and ends up in a log line and a response header, so a
+newline that would forge a second log entry gets a fresh id instead of careful
+quoting.
+
+The route-level error boundary shows Next's own `digest`, which is the
+server-side handle for that specific error. Worth knowing: that boundary's
+`logger.error` call runs in the browser, so it reaches the console and not the
+server — the digest is the correlation that works, not the log line beside it.
 
 ## Theming
 

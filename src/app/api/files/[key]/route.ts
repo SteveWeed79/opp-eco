@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getActor } from "@/auth/session";
 import { logger } from "@/services/logging";
+import { logRequest } from "@/services/request-id";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import {
   canRetrieve,
@@ -48,7 +49,10 @@ export async function GET(
     url.searchParams.get("sig"),
   );
   if (!signature.ok) {
-    logger.warn("download.signature_refused", { key, reason: signature.reason });
+    await logRequest("warn", "download.signature_refused", {
+      key,
+      reason: signature.reason,
+    });
     // An expired link is worth distinguishing, because the fix is to reload
     // the page rather than to ask for access.
     return signature.reason === "expired"
@@ -63,7 +67,9 @@ export async function GET(
 
   const decision = await canRetrieve(actor, stored.meta);
   if (!decision.ok) {
-    logger.warn("download.refused", {
+    // With the request id: a refused download is the thing somebody reports,
+    // and "I couldn't open the file" is unsearchable without one.
+    await logRequest("warn", "download.refused", {
       key,
       reason: decision.reason,
       userId: actor.user.id,
