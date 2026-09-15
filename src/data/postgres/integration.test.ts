@@ -783,3 +783,54 @@ withDatabase("uploaded files", () => {
     await expect(store.put(file("s-nobody"), payload())).rejects.toThrow();
   });
 });
+
+withDatabase("saving a learner who is already verified", () => {
+  it("keeps the attribution when the write is not a verification", async () => {
+    // The bug this is here for: `saveStudent` took `verifiedBy` and wrote it
+    // straight into the column, so any non-verification save sent null and
+    // blanked it — which for a verified learner trips
+    // `verification_is_attributable` and fails the whole write. It stayed
+    // hidden because until a learner could edit their own profile, every
+    // caller that saved a verified student *was* the verification, and because
+    // the in-memory layer ignores the parameter, so parity agreed on nothing.
+    await reseed();
+    const college = contextFor("college");
+    const verified = (await memoryRepositories.students.list(college)).find(
+      (s) => s.status === "verified",
+    )!;
+
+    const store = postgresStore(client);
+    await store.transaction((uow) => {
+      uow.saveStudent({ ...verified, programOfStudy: "Welding Technology" }, null);
+    });
+
+    const [row] = await client.query<{ verified_by: string | null; program_of_study: string }>(
+      "SELECT verified_by, program_of_study FROM students WHERE id = $1",
+      [verified.id],
+    );
+    expect(row.program_of_study).toBe("Welding Technology");
+    expect(row.verified_by).not.toBeNull();
+  });
+
+  it("still records a new verifier when the write is one", async () => {
+    await reseed();
+    const college = contextFor("college");
+    const pending = (await memoryRepositories.students.list(college)).find(
+      (s) => s.status !== "verified",
+    )!;
+
+    const store = postgresStore(client);
+    await store.transaction((uow) => {
+      uow.saveStudent(
+        { ...pending, status: "verified", verifiedOn: new Date().toISOString() },
+        "u-ellen",
+      );
+    });
+
+    const [row] = await client.query<{ verified_by: string | null }>(
+      "SELECT verified_by FROM students WHERE id = $1",
+      [pending.id],
+    );
+    expect(row.verified_by).toBe("u-ellen");
+  });
+});

@@ -13,6 +13,7 @@
 import type {
   ActorContext,
   Application,
+  InterviewSlot,
   MentorshipOffer,
   MentorshipOfferStatus,
   MentorshipPairing,
@@ -31,7 +32,16 @@ import type { NotificationIntent, Store } from "@/data/store";
 
 export type CreateResult<T> =
   | { ok: true; created: T }
-  | { ok: false; error: string; code: "forbidden" | "not_found" | "duplicate" };
+  | {
+      ok: false;
+      error: string;
+      /**
+       * `invalid` is a field the caller can fix; the other three are not.
+       * Worth the distinction because a form should put the first beside the
+       * input that caused it and the rest at the top of the page.
+       */
+      code: "forbidden" | "not_found" | "duplicate" | "invalid";
+    };
 
 export interface CreationDeps {
   store: Store;
@@ -575,4 +585,161 @@ export async function recordOutcome(
   });
 
   return { ok: true, created: outcome };
+}
+
+// ---------------------------------------------------------------------------
+// Interview slots
+// ---------------------------------------------------------------------------
+
+/**
+ * How far ahead a board may publish. Beyond a term nobody knows their calendar,
+ * and a slot that exists for six months is a slot nobody will honour.
+ */
+export const MAX_SLOT_LEAD_DAYS = 120;
+
+/** Sanity bounds on an eligibility interview, not a policy about its length. */
+export const MIN_SLOT_MINUTES = 15;
+export const MAX_SLOT_MINUTES = 120;
+
+export interface SlotRequest {
+  /** ISO instants, one per slot. Published together or not at all. */
+  startsAt: string[];
+  durationMinutes: number;
+  officerName: string;
+  meetingUrl: string | null;
+}
+
+/**
+ * Publish interview slots.
+ *
+ * The board's own capability, and until now the button for it did nothing: a
+ * board could only offer the times somebody had written into the fixtures,
+ * which meant the eligibility interview — the step every subsidised placement
+ * waits on — could not be scheduled by the people who run it.
+ *
+ * Published as a batch, because that is how the work actually happens. An
+ * officer blocks out a morning, not one appointment; and doing it in one
+ * transaction means a board never ends up with half a morning published and no
+ * idea which half.
+ *
+ * The officer's name is on the slot rather than derived from the session,
+ * deliberately: the person who publishes a calendar is routinely not the person
+ * who sits the interviews, and a student turning up expecting one name and
+ * meeting another is a bad first impression of a public agency.
+ */
+export async function publishInterviewSlots(
+  actor: ActorContext,
+  fields: SlotRequest,
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<InterviewSlot[]>> {
+  if (actor.membership.role !== "board") {
+    return {
+      ok: false,
+      error: "Only the workforce board publishes interview slots.",
+      code: "forbidden",
+    };
+  }
+
+  const { organizationId, marketId } = actor.membership;
+  if (!organizationId || !marketId) {
+    return { ok: false, error: "This account has no organization.", code: "forbidden" };
+  }
+
+  const officerName = fields.officerName.trim();
+  if (officerName.length < 2) {
+    return { ok: false, error: "Say who is sitting these interviews.", code: "invalid" };
+  }
+
+  if (
+    !Number.isInteger(fields.durationMinutes) ||
+    fields.durationMinutes < MIN_SLOT_MINUTES ||
+    fields.durationMinutes > MAX_SLOT_MINUTES
+  ) {
+    return {
+      ok: false,
+      error: `An interview runs between ${MIN_SLOT_MINUTES} and ${MAX_SLOT_MINUTES} minutes.`,
+      code: "invalid",
+    };
+  }
+
+  if (fields.startsAt.length === 0) {
+    return { ok: false, error: "Pick at least one time.", code: "invalid" };
+  }
+
+  const now = deps.now();
+  const horizon = now.getTime() + MAX_SLOT_LEAD_DAYS * 86_400_000;
+
+  const times: string[] = [];
+  for (const raw of fields.startsAt) {
+    const at = new Date(raw);
+    if (Number.isNaN(at.getTime())) {
+      return { ok: false, error: "One of those times is not a date.", code: "invalid" };
+    }
+    // A slot in the past is not a slot. Worth refusing rather than accepting
+    // and hiding, because the board would see it published and nobody would
+    // ever be offered it.
+    if (at.getTime() <= now.getTime()) {
+      return { ok: false, error: "Those times have already passed.", code: "invalid" };
+    }
+    if (at.getTime() > horizon) {
+      return {
+        ok: false,
+        error: `Slots can be published up to ${MAX_SLOT_LEAD_DAYS} days ahead.`,
+        code: "invalid",
+      };
+    }
+    times.push(at.toISOString());
+  }
+
+  // Within the batch as well as against what is already published: an officer
+  // double-booking themselves is the mistake a form makes easy.
+  const existing = await repositories.interviewSlots.list(actor);
+  const taken = new Set(
+    existing
+      .filter((slot) => slot.officerName === officerName)
+      .map((slot) => slot.startsAt),
+  );
+  for (const at of times) {
+    if (taken.has(at)) {
+      return {
+        ok: false,
+        error: "One of those times is already published for that officer.",
+        code: "invalid",
+      };
+    }
+    taken.add(at);
+  }
+
+  const publishedAt = now.toISOString();
+  const slots: InterviewSlot[] = times.map((startsAt) => ({
+    id: deps.id("slot"),
+    marketId,
+    boardId: organizationId,
+    startsAt,
+    durationMinutes: fields.durationMinutes,
+    officerName,
+    bookedByStudentId: null,
+    bookedAt: null,
+    meetingUrl: fields.meetingUrl?.trim() || null,
+    version: 1,
+  }));
+
+  await deps.store.transaction((uow) => {
+    for (const slot of slots) {
+      uow.createInterviewSlot(slot);
+      uow.appendAuditEvent({
+        marketId,
+        at: publishedAt,
+        actorUserId: actor.user.id,
+        actorRole: actor.membership.role,
+        entityType: "interview_slot",
+        entityId: slot.id,
+        from: null,
+        to: "open",
+        viaOverride: false,
+      });
+    }
+  });
+
+  return { ok: true, created: slots };
 }

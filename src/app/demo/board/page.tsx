@@ -1,5 +1,4 @@
 import {
-  CalendarPlus,
   CircleDollarSign,
   ClipboardList,
   Gavel,
@@ -27,10 +26,11 @@ import {
 } from "@/components/ui";
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
-import { boardTransition } from "./actions";
+import { boardTransition, publishSlots } from "./actions";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
+import { PublishSlots } from "./PublishSlots";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
 import { DEMO_NOW } from "@/data/seed";
@@ -121,13 +121,7 @@ export default async function BoardPage() {
         eyebrow="Local workforce board"
         title={board.name}
         subtitle={`${market.name} · ${market.programYear}`}
-        action={
-          <Button variant="dark">
-            <span className="flex items-center gap-1.5">
-              <CalendarPlus className="w-4 h-4" aria-hidden="true" /> Publish slots
-            </span>
-          </Button>
-        }
+        action={<PublishSlots action={publishSlots} />}
       />
 
       {/* ------------------------------------------------------------------ */}
@@ -310,7 +304,19 @@ export default async function BoardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <DwellBadge days={days} />
-                    <Button size="sm" variant="dark">
+                    {/* Disabled with a reason rather than live with no handler.
+                        Nudging a stalled pair is a real need and there is no
+                        messaging path to do it through — and the board reaching
+                        a learner directly would go around the college, which
+                        owns that relationship and holds the consent. Saying
+                        that is more useful than a button that swallows the
+                        click. */}
+                    <Button
+                      size="sm"
+                      variant="dark"
+                      disabled
+                      title="No messaging path yet. A nudge would go through the college, which owns the learner relationship."
+                    >
                       Reach out
                     </Button>
                   </div>

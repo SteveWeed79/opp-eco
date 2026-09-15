@@ -11,7 +11,6 @@ import {
 import {
   Assumption,
   Badge,
-  Button,
   Card,
   CardHeader,
   Empty,
@@ -566,9 +565,17 @@ export default async function BusinessPage() {
               well.
             </p>
             <div className="mt-4">
-              <Button variant="primary" size="sm">
-                Post a project
-              </Button>
+              {/* The same control as the one in the header, opened on the track
+                  this card just explained. It used to be a second button that
+                  did nothing at all. */}
+              <NewPosting
+                county={org.county}
+                skillVocabulary={skillVocabulary}
+                hoursPerCredit={hoursPerCredit}
+                startingTrack="micro"
+                label="Post a project"
+                size="sm"
+              />
             </div>
           </div>
           <div className="space-y-3">

@@ -11,7 +11,6 @@ import {
 import {
   Assumption,
   Badge,
-  Button,
   Card,
   CardHeader,
   Empty,
@@ -29,7 +28,7 @@ import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
-import { DEMO_NOW, studentForUser } from "@/data/seed";
+import { DEMO_NOW } from "@/data/seed";
 import { LogHours } from "./LogHours";
 import { marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
@@ -39,15 +38,23 @@ import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
 import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
-import { studentTransition } from "./actions";
+import { saveProfile, studentTransition } from "./actions";
+import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
   const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
-  // Resolved from the session rather than hardcoded.
-  const student = studentForUser(actor.user.id)!;
+  // Through the repository, not the fixtures.
+  //
+  // This read `studentForUser` out of `seed.ts` directly — the one place in the
+  // application that reached around the repository contract. On the fixtures
+  // the two are the same object, so nothing showed; on Postgres the portal
+  // rendered the seeded learner's programme, hours, skills and eligibility
+  // whatever the database held, and a learner editing their own profile saved
+  // to the database and watched the page keep showing the old values.
+  const student = (await repositories.students.forUser(actor, actor.user.id))!;
   const STUDENT_ID = student.id;
 
   const [ownApplications, openSlots, college, market, published] = await Promise.all([
@@ -58,6 +65,13 @@ export default async function StudentPage() {
     await repositories.postings.published(actor),
   ]);
   const applications = ownApplications.filter((a) => !isTerminal(a.status));
+  // The vocabulary this market's employers already use, offered when a learner
+  // edits their own tags. Free text sprawls into "JS", "Javascript" and
+  // "JavaScript", and match scoring compares them literally — so the fix is the
+  // same on both sides of the match.
+  const skillVocabulary = Array.from(
+    new Set(published.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
+  ).sort();
   const [progress, funding] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
     marketFunding(actor, market!.id),
@@ -147,7 +161,21 @@ export default async function StudentPage() {
         eyebrow="Student portal"
         title={`Welcome back, ${student.name.split(" ")[0]}`}
         subtitle={`${student.programOfStudy} · ${student.classStanding} · ${college?.name}`}
-        action={<Button variant="primary">Update profile</Button>}
+        action={
+          <EditProfile
+            profile={{
+              programOfStudy: student.programOfStudy,
+              classStanding: student.classStanding,
+              expectedGraduation: student.expectedGraduation,
+              skills: student.skills,
+              interests: student.interests,
+              availableHoursPerWeek: student.availableHoursPerWeek,
+            }}
+            skillVocabulary={skillVocabulary}
+            collegeName={college?.name ?? "Your college"}
+            action={saveProfile}
+          />
+        }
       />
 
       <div className="flex flex-wrap gap-3">

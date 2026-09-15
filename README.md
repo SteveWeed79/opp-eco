@@ -720,6 +720,67 @@ server-side handle for that specific error. Worth knowing: that boundary's
 `logger.error` call runs in the browser, so it reaches the console and not the
 server — the digest is the correlation that works, not the log line beside it.
 
+## No button that does nothing
+
+Two controls shipped that swallowed the click: "Publish slots" on the board's
+header and "Update profile" on the learner's. Both rendered as raised, primary,
+entirely convincing buttons. In a demonstration shown to funders that is worse
+than a missing feature — a missing feature reads as not built yet, and a button
+that does nothing reads as broken.
+
+`Button` no longer accepts one. Its props are a union: it calls something, it
+submits a form, or it is `disabled` with a `title` saying why. The third is not
+a loophole — a disabled control with a reason tells somebody what would make it
+work, while a live one with no handler tells them the software is broken.
+Turning that on found four in the product, two of which I had not catalogued:
+
+| Was | Is |
+|---|---|
+| "Publish slots" | The board publishing a morning of interview slots |
+| "Update profile" | A learner editing what a match is scored on |
+| "Post a project" | The same posting form as the header's, opened on the micro track |
+| "Reach out" | Disabled, with the reason: there is no messaging path, and a nudge would go through the college |
+
+**Publishing slots** is a batch, because that is how the work happens — an
+officer blocks out a morning, not one appointment — and doing it in one
+transaction means a board never ends up with half a morning published and no way
+to tell which half. The officer's name is on the slot rather than taken from the
+session, because the person who publishes a calendar is routinely not the person
+who sits the interviews, and a student meeting a different name than they were
+promised is a bad first impression of a public agency. A published slot keeps
+the time the board chose; seeded ones are regenerated relative to now so the
+demonstration never opens on appointments that have already happened.
+
+**Editing a profile** covers what a learner owns and nothing else. Name, email
+and college are what the registrar verified — and the email is the credential
+under real sign-on, so self-service editing of it is an account-takeover
+primitive rather than a profile feature. Eligibility and status are absent for
+the same reason: they are somebody else's determination about this person. The
+form says so rather than leaving somebody hunting for a field that is not there.
+
+### Two bugs this turned up
+
+Neither was in the new code, and neither could have been found without a
+database.
+
+**`saveStudent` blanked the verification attribution.** It took a `verifiedBy`
+and wrote it straight into the column, so every non-verification save sent
+`null` and erased who verified the learner. For a verified record that trips
+`verification_is_attributable` — status says verified, `verified_on` is set, and
+`verified_by` has just been cleared — and the write fails outright. It stayed
+hidden because until a learner could edit their own profile, every caller that
+saved a verified student *was* the verification; and because the in-memory layer
+ignores the parameter, parity agreed on nothing. `null` now means "leave it as it
+was", which is what the parameter always meant.
+
+**The student portal read its own learner out of the fixtures.** `page.tsx`
+called `studentForUser` from `seed.ts` directly — the one place in the
+application that reached around the repository contract. On the fixtures the two
+are the same object, so nothing showed. On Postgres the portal rendered the
+seeded learner's programme, hours, skills and eligibility whatever the database
+held, and a learner editing their profile saved to the database and watched the
+page keep showing the old values.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
@@ -850,6 +911,11 @@ AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test e2e/zzzzzzz-sign-in
 because `AUTH_ECHO_CODES` is refused in production — the test bends around that
 rather than the other way about. The code is read back out of the server's log,
 which is the only place it exists outside a mailbox.
+
+It keeps earning its keep. The most recent run found `saveStudent` blanking a
+learner's verification attribution on every non-verification save, and the
+student portal reading its own learner out of the fixtures rather than through
+the repositories — neither of which the in-memory layer can express.
 
 The first run of that suite found six faults that no amount of TypeScript would
 have caught: a `citext` column whose extension was never created, two seeded

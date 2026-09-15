@@ -919,6 +919,7 @@ export interface AuditEvent {
     | "time_entry"
     | "mentorship_offer"
     | "mentorship_pairing"
+    | "interview_slot"
     | "outcome"
     | "funding_source"
     | "funding_commitment"

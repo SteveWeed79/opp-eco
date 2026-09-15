@@ -1,6 +1,14 @@
 "use server";
 
-import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { revalidatePath } from "next/cache";
+import {
+  attemptWrite,
+  runTransition,
+  type ActionResult,
+} from "@/app/_actions/transition";
+import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
+import { publishInterviewSlots } from "@/services/creation";
+import { PORTAL_PATH } from "@/routes";
 import { changeAllocation } from "@/app/_actions/funding";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
@@ -150,4 +158,69 @@ export async function adjustAllocation(
   reason: string,
 ): Promise<ActionResult> {
   return changeAllocation("board", sourceId, allocated, ratePerHour, reason);
+}
+
+/**
+ * Publish interview slots.
+ *
+ * A creation rather than a transition, so it does not run through
+ * `runTransition` — there is no record to move and no state machine to consult.
+ * What it shares with every other write here is the shape: the role is
+ * hardcoded, the actor comes from the session rather than the request, and the
+ * service checks the role again regardless of which wrapper called it.
+ */
+export async function publishSlots(
+  startsAt: unknown,
+  durationMinutes: unknown,
+  officerName: unknown,
+  meetingUrl: unknown,
+): Promise<ActionResult> {
+  const actor = await actorForPortal("board");
+
+  const limit = checkRateLimit(callerKey("publishSlots", actor.user.id), LIMITS.mutation);
+  if (!limit.ok) {
+    return {
+      ok: false,
+      error: `Too many changes at once. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
+  if (
+    !Array.isArray(startsAt) ||
+    startsAt.some((value) => typeof value !== "string") ||
+    typeof officerName !== "string"
+  ) {
+    return { ok: false, error: "That form did not arrive intact." };
+  }
+
+  // A batch, but not an unbounded one: this is a morning of appointments, and
+  // a request for ten thousand is not a board using the feature.
+  if (startsAt.length > 40) {
+    return { ok: false, error: "Publish at most 40 slots at a time." };
+  }
+
+  const duration = Number(durationMinutes);
+  if (!Number.isInteger(duration)) {
+    return { ok: false, error: "How long is each interview?" };
+  }
+
+  const url = typeof meetingUrl === "string" ? meetingUrl.trim() : "";
+  if (url && !/^https:\/\/\S+$/.test(url)) {
+    // `https` only. A meeting link is pasted into a page a student opens, and
+    // a `javascript:` or `http:` URL there is a different kind of problem.
+    return { ok: false, error: "A meeting link must be an https:// address." };
+  }
+
+  const result = await attemptWrite(() =>
+    publishInterviewSlots(actor, {
+      startsAt: startsAt as string[],
+      durationMinutes: duration,
+      officerName,
+      meetingUrl: url || null,
+    }),
+  );
+
+  if (!result.ok) return result;
+  for (const path of Object.values(PORTAL_PATH)) revalidatePath(path);
+  return { ok: true };
 }

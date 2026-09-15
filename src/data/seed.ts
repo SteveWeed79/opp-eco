@@ -1663,8 +1663,20 @@ const slotSeeds: SlotSeed[] = [
  */
 export const slotOverrides = new Map<string, InterviewSlot>();
 
+/**
+ * Slots the board published during this session.
+ *
+ * Held separately from `slotSeeds` because the two answer to different clocks.
+ * A seeded slot is a fixture whose time is regenerated relative to now, so the
+ * demonstration never opens on a page of appointments that have already
+ * happened. A published slot is a real appointment at the time somebody chose,
+ * and moving it forward every render would be the opposite of what they asked
+ * for.
+ */
+export const publishedSlots: InterviewSlot[] = [];
+
 export function interviewSlotsAt(now: Date = new Date()): InterviewSlot[] {
-  return slotSeeds.map((s) => {
+  const seeded = slotSeeds.map((s) => {
     const startsAt = new Date(now.getTime() + s.inDays * 86_400_000);
     startsAt.setUTCHours(s.hour, 0, 0, 0);
     const base: InterviewSlot = {
@@ -1683,6 +1695,14 @@ export function interviewSlotsAt(now: Date = new Date()): InterviewSlot[] {
     // The override carries the booking; the time always comes from the clock.
     return override ? { ...override, startsAt: base.startsAt } : base;
   });
+
+  // Published slots take a booking from the same override map, and keep their
+  // own time — that is the whole difference between the two lists.
+  const published = publishedSlots.map(
+    (slot) => slotOverrides.get(slot.id) ?? slot,
+  );
+
+  return [...seeded, ...published];
 }
 
 // ---------------------------------------------------------------------------

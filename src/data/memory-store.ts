@@ -158,6 +158,15 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+
+  createInterviewSlot(slot: import("@/domain/types").InterviewSlot) {
+    if (seed.publishedSlots.some((existing) => existing.id === slot.id)) {
+      throw new Error(`Interview slot ${slot.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.publishedSlots.push(slot);
+    });
+  }
   saveInterviewSlot(slot: import("@/domain/types").InterviewSlot, expectedVersion: number) {
     const current = seed.slotOverrides.get(slot.id);
     const version = current?.version ?? 1;

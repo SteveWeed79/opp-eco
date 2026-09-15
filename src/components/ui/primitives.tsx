@@ -502,6 +502,40 @@ export function DwellBadge({ days, threshold = 7 }: { days: number; threshold?: 
 // Buttons
 // ---------------------------------------------------------------------------
 
+interface ButtonLook {
+  children: ReactNode;
+  variant?: "primary" | "dark" | "ghost" | "quiet" | "danger";
+  size?: "sm" | "md";
+  title?: string;
+}
+
+/**
+ * What a button does, and there is no option for "nothing".
+ *
+ * This union exists because two buttons shipped that did nothing at all —
+ * "Publish slots" on the board's header and "Update profile" on the student's.
+ * Both rendered as raised, primary, entirely convincing controls, and both
+ * swallowed the click. In a demonstration shown to funders that is worse than
+ * a missing feature: a missing feature reads as not built yet, and a button
+ * that does nothing reads as broken.
+ *
+ * `onClick?: () => void` made that unrepresentable-in-review but perfectly
+ * representable in code. So the prop is required, in one of three shapes:
+ *
+ *  - it calls something;
+ *  - it submits the form it is in;
+ *  - it is deliberately unavailable, and `title` says why — which is the
+ *    honest version of a control that cannot act yet.
+ *
+ * The third is not a loophole. A disabled button with a reason tells somebody
+ * what would make it work; a live button with no handler tells them the
+ * software is broken.
+ */
+type ButtonAction =
+  | { onClick: () => void; type?: "button"; disabled?: boolean }
+  | { type: "submit"; onClick?: never; disabled?: boolean }
+  | { disabled: true; title: string; onClick?: never; type?: never };
+
 export function Button({
   children,
   variant = "primary",
@@ -510,15 +544,7 @@ export function Button({
   type = "button",
   disabled,
   title,
-}: {
-  children: ReactNode;
-  variant?: "primary" | "dark" | "ghost" | "quiet" | "danger";
-  size?: "sm" | "md";
-  onClick?: () => void;
-  type?: "button" | "submit";
-  disabled?: boolean;
-  title?: string;
-}) {
+}: ButtonLook & ButtonAction) {
   // Filled buttons get a top highlight and a coloured shadow, so they read as
   // raised rather than as a rectangle of flat colour. The shadow is tinted
   // with the button's own hue — a grey drop shadow under a blue button is the

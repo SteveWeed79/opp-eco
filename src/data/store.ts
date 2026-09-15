@@ -139,6 +139,15 @@ export interface UnitOfWork {
    */
   createMentorshipOffer(offer: MentorshipOffer): void;
   saveMentorshipOffer(offer: MentorshipOffer): void;
+  /**
+   * Publish a slot the board is offering.
+   *
+   * Separate from `saveInterviewSlot` for the same reason every other create
+   * here is separate from its save: the preconditions are opposites. A save
+   * must find a row at a known version; a create must find none, and collapsing
+   * them would let a stale version check quietly become an insert.
+   */
+  createInterviewSlot(slot: InterviewSlot): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
   /** Insert a week of logged hours. Same create/save split as applications. */
   createTimeEntry(entry: TimeEntry): void;

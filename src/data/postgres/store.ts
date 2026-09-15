@@ -179,6 +179,23 @@ class PostgresUnitOfWork implements UnitOfWork {
    * rather than leaving the column untouched is what makes the college's
    * verification survive against a real database.
    */
+  /**
+   * `verifiedBy` is "who verified them, if this write is a verification".
+   *
+   * It is **not** a column to be overwritten with whatever the caller happened
+   * to pass, which is what this did: every non-verification save sent `null`
+   * and blanked the attribution. For an already-verified learner that trips
+   * `verification_is_attributable` — status says verified, `verified_on` is
+   * set, and `verified_by` has just been erased — so the write fails outright.
+   *
+   * Latent until a learner edited their own profile, because until then every
+   * caller that saved a verified student was the verification itself. The
+   * in-memory layer ignores the parameter entirely, so parity could not see it
+   * either; the Postgres end-to-end run is what found it.
+   *
+   * `COALESCE` makes null mean "leave it as it was", which is what the
+   * parameter always meant and what the other layer already did.
+   */
   saveStudent(student: Student, verifiedBy: string | null) {
     this.add(sql`
       UPDATE students SET
@@ -193,7 +210,7 @@ class PostgresUnitOfWork implements UnitOfWork {
         eligibility = ${student.eligibility},
         eligibility_determined_on = ${student.eligibilityDeterminedOn},
         verified_on = ${student.verifiedOn},
-        verified_by = ${verifiedBy},
+        verified_by = COALESCE(${verifiedBy}, verified_by),
         updated_at = now()
       WHERE id = ${student.id}`);
   }
@@ -276,6 +293,19 @@ class PostgresUnitOfWork implements UnitOfWork {
   }
 
   // -- Interview slots ------------------------------------------------------
+
+  createInterviewSlot(slot: InterviewSlot) {
+    this.add(sql`
+      INSERT INTO interview_slots (
+        id, market_id, board_id, starts_at, duration_minutes, officer_name,
+        booked_by, booked_at, meeting_url, version
+      ) VALUES (
+        ${slot.id}, ${slot.marketId}, ${slot.boardId}, ${slot.startsAt},
+        ${slot.durationMinutes}, ${slot.officerName},
+        ${slot.bookedByStudentId}, ${slot.bookedAt ?? null},
+        ${slot.meetingUrl}, ${slot.version}
+      )`);
+  }
 
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number) {
     // Two students racing for the last slot is the likeliest write conflict in
