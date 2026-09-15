@@ -17,8 +17,12 @@ import { logger } from "@/services/logging";
  * the same drain, which is already idempotent, already never throws, and
  * already records every outcome in the outbox.
  *
- * Wire it up with a Vercel cron entry, or any scheduler that can send an
- * authenticated GET:
+ * `vercel.json` carries a daily entry, and daily is the Hobby plan's ceiling
+ * rather than a considered interval — a transient failure waiting up to
+ * twenty-four hours for a sweep is a floor, not a schedule. Every write path
+ * still drains as it commits, so this catches what nothing else swept. On Pro,
+ * or on any scheduler that can send an authenticated GET, every five minutes is
+ * the number to use:
  *
  *   { "crons": [{ "path": "/api/cron/notifications", "schedule": "*\/5 * * * *" }] }
  */

@@ -670,8 +670,16 @@ it commits, which covers the common case and hides the interesting one: a
 message that fails transiently goes back on the queue and then waits for
 *somebody else's* unrelated write to push it out. On a quiet evening in a rural
 market that is not a retry, it is a night. `/api/cron/notifications` runs the
-same drain on a schedule — `vercel.json` carries a five-minute entry — guarded
-by `CRON_SECRET` and compared in constant time. Unset, it refuses: failing open
+same drain on a schedule, guarded by `CRON_SECRET` and compared in constant
+time.
+
+`vercel.json` carries a **daily** entry, and that is the Hobby plan's ceiling
+rather than a considered interval — Vercel refuses anything more frequent at
+build time, which is how this was found: the deployment failed on the first
+push. A sweep that waits up to twenty-four hours is a floor, not a schedule.
+Every write path still drains as it commits, so the timer only catches what
+nothing else swept. On Pro, or on any scheduler that can send an authenticated
+GET, `*/5 * * * *` is the number to use. Unset, it refuses: failing open
 would mean the deployment that forgot to configure it is the one left exposed,
 and it answers 404 rather than 401 because a 401 confirms there is something
 there worth guessing at.
