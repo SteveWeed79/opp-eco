@@ -11,6 +11,7 @@ import type {
   ActorContext,
   Application,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -68,6 +69,27 @@ function visibleStudents(actor: ActorContext): Student[] {
   const rows = inScope(actor, seed.students);
   if (actor.membership.role !== "student") return rows;
   return rows.filter((s) => s.userId === actor.user.id);
+}
+
+/**
+ * Every introduction the actor may see.
+ *
+ * One definition for all four accessors, as everywhere else. The board is
+ * absent by design rather than by omission — see `MentorshipPairingRepository`.
+ */
+function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
+  const rows = inScope(actor, seed.mentorshipPairings);
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") {
+    return rows.filter((p) => p.businessId === organizationId);
+  }
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((p) => p.studentId === self.id) : [];
+  }
+  if (role === "board") return [];
+  return rows;
 }
 
 /** Students waiting on the college before students who have not asked yet. */
@@ -213,6 +235,16 @@ export const repositories: Repositories = {
    * scope meant a business could read a competitor's pipeline by passing an
    * id it did not own.
    */
+  mentorshipPairings: {
+    list: async (actor) => visibleMentorshipPairings(actor),
+    find: async (actor, id) =>
+      visibleMentorshipPairings(actor).find((p) => p.id === id) ?? null,
+    forOffer: async (actor, offerId) =>
+      visibleMentorshipPairings(actor).filter((p) => p.offerId === offerId),
+    forStudent: async (actor, studentId) =>
+      visibleMentorshipPairings(actor).filter((p) => p.studentId === studentId),
+  },
+
   applications: {
     list: async (actor) => visibleApplications(actor),
     find: async (actor, id) => visibleApplications(actor).find((a) => a.id === id) ?? null,

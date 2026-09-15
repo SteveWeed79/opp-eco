@@ -19,6 +19,7 @@ import type {
   InterviewSlot,
   Market,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -894,6 +895,55 @@ export const mentorshipOffers: MentorshipOffer[] = [
     status: "withdrawn",
     capacity: 1,
     createdOn: daysAgo(150),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Introductions — who the college has actually put in front of a mentor
+// ---------------------------------------------------------------------------
+
+/**
+ * Three, deliberately covering all three states.
+ *
+ * One live introduction occupying a place, one that happened, and one that did
+ * not — because an employer's declared capacity is only checkable against a
+ * mixture, and a surface that renders only the happy state is a surface nobody
+ * has looked at with a real market in it.
+ */
+export const mentorshipPairings: MentorshipPairing[] = [
+  {
+    id: "pair-1",
+    marketId: "mkt-pittsburg",
+    offerId: "men-apex-controls",
+    businessId: "org-apex",
+    studentId: "stu-nina",
+    introducedByUserId: "u-ellen",
+    introducedOn: daysAgo(12),
+    status: "introduced",
+  },
+  {
+    id: "pair-2",
+    marketId: "mkt-pittsburg",
+    offerId: "men-bluestem-portfolio",
+    businessId: "org-bluestem",
+    studentId: "stu-hana",
+    introducedByUserId: "u-ellen",
+    introducedOn: daysAgo(40),
+    status: "met",
+    outcomeNote: "Hour on her portfolio; she rewrote two case studies after it.",
+    outcomeOn: daysAgo(31),
+  },
+  {
+    id: "pair-3",
+    marketId: "mkt-pittsburg",
+    offerId: "men-cherokee-shadow",
+    businessId: "org-cherokee",
+    studentId: "stu-marcus",
+    introducedByUserId: "u-ellen",
+    introducedOn: daysAgo(55),
+    status: "declined",
+    outcomeNote: "Student took a placement instead and withdrew from the visit.",
+    outcomeOn: daysAgo(48),
   },
 ];
 

@@ -34,6 +34,7 @@ import type {
   MarketStage,
   MatchFactor,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -256,6 +257,21 @@ export function toMentorshipOffer(row: Row): MentorshipOffer {
     capacity: number(row.capacity),
     status: text(row.status) as MentorshipOffer["status"],
     createdOn: timestamp(row.created_at),
+  };
+}
+
+export function toMentorshipPairing(row: Row): MentorshipPairing {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    offerId: text(row.offer_id),
+    businessId: text(row.business_id),
+    studentId: text(row.student_id),
+    introducedByUserId: text(row.introduced_by),
+    introducedOn: timestamp(row.introduced_on),
+    status: text(row.status) as MentorshipPairing["status"],
+    outcomeNote: optionalText(row.outcome_note),
+    outcomeOn: optionalTimestamp(row.outcome_on),
   };
 }
 

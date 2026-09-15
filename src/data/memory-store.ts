@@ -107,6 +107,23 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createMentorshipPairing(pairing: import("@/domain/types").MentorshipPairing) {
+    if (seed.mentorshipPairings.some((p) => p.id === pairing.id)) {
+      throw new Error(`Mentorship pairing ${pairing.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.mentorshipPairings.push(pairing);
+    });
+  }
+
+  saveMentorshipPairing(pairing: import("@/domain/types").MentorshipPairing) {
+    const index = seed.mentorshipPairings.findIndex((p) => p.id === pairing.id);
+    if (index === -1) throw new Error(`Unknown mentorship pairing ${pairing.id}`);
+    this.effects.push(() => {
+      seed.mentorshipPairings[index] = pairing;
+    });
+  }
+
   saveOrganization(organization: import("@/domain/types").Organization) {
     const index = seed.organizations.findIndex((o) => o.id === organization.id);
     if (index === -1) throw new Error(`Unknown organization ${organization.id}`);

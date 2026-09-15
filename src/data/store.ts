@@ -17,6 +17,7 @@ import type {
   CreditAward,
   InterviewSlot,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -103,6 +104,15 @@ export interface UnitOfWork {
    * as a stale verification date.
    */
   saveStudent(student: Student, verifiedBy: string | null): void;
+  /**
+   * Record an introduction, and close one.
+   *
+   * A create rather than an upsert, for the reason `createApplication` is: the
+   * same student may be introduced to the same mentor twice, months apart, and
+   * an upsert would turn the second into an edit of the first.
+   */
+  createMentorshipPairing(pairing: MentorshipPairing): void;
+  saveMentorshipPairing(pairing: MentorshipPairing): void;
   /**
    * Vetting and publication decisions.
    *

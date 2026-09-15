@@ -23,7 +23,10 @@ import type {
   MentorshipFormat,
   MentorshipOffer,
   MentorshipOfferStatus,
+  MentorshipPairing,
+  MentorshipPairingStatus,
 } from "./types";
+import type { ActorRole } from "./types";
 import { createMachine, type StateTransition } from "./machine";
 
 // ---------------------------------------------------------------------------
@@ -163,5 +166,101 @@ export const mentorshipMachine = createMachine<
     actor.membership.role === "business" &&
     actor.membership.organizationId !== ctx.offer.businessId
       ? "That mentorship offer belongs to another organization"
+      : null,
+});
+
+// ---------------------------------------------------------------------------
+// The introduction
+// ---------------------------------------------------------------------------
+
+/**
+ * Who may introduce a student to a mentor, and why it is nobody else.
+ *
+ * The college, because it is the local operator and already vouches for the
+ * student; the administrator, because a market whose college has not acted is
+ * exactly the case an operator exists to unstick. Deliberately **not** the
+ * student, and not the employer: mentorship is the one form here with no
+ * supervisor, no timesheet and no board interview between an adult and a
+ * student, so the first contact runs through the party that knows both.
+ *
+ * That is the answer to the open question this file used to defer (Q22), and
+ * the reason the college's mentor list was a list rather than a queue.
+ */
+export const INTRODUCERS: ActorRole[] = ["college", "admin"];
+
+/**
+ * Places on an offer that are not currently spoken for.
+ *
+ * `capacity` is what the employer said they could take at once, and only a
+ * live introduction spends one. A pairing that has run its course — met, or
+ * declined — gives the place back, because the alternative is an employer
+ * whose declared capacity silently drains to zero over a year of successful
+ * mentorships.
+ */
+export function placesLeft(
+  offer: MentorshipOffer,
+  pairings: MentorshipPairing[],
+): number {
+  const live = pairings.filter(
+    (p) => p.offerId === offer.id && p.status === "introduced",
+  ).length;
+  return Math.max(0, offer.capacity - live);
+}
+
+/** Whether this offer can take another student right now. */
+export function canIntroduceTo(
+  offer: MentorshipOffer,
+  pairings: MentorshipPairing[],
+): boolean {
+  return isOfferedToStudents(offer) && placesLeft(offer, pairings) > 0;
+}
+
+export interface PairingContext {
+  pairing: MentorshipPairing;
+}
+
+export type PairingTransition = StateTransition<
+  MentorshipPairingStatus,
+  PairingContext
+>;
+
+/**
+ * Two ways out of an introduction, and no way back into one.
+ *
+ * The employer owns both, because they are the only party who knows whether
+ * the student turned up — but the college and the administrator can record it
+ * too, since an introduction the employer never closes would otherwise hold a
+ * place open forever. A new introduction is a new pairing rather than a
+ * reopened one: the same student can be introduced to the same mentor twice,
+ * and flattening those into one record loses the first.
+ */
+export const PAIRING_TRANSITIONS: PairingTransition[] = [
+  {
+    from: "introduced",
+    to: "met",
+    roles: ["business", "college", "admin"],
+    label: "It happened",
+  },
+  {
+    from: "introduced",
+    to: "declined",
+    roles: ["business", "college", "admin"],
+    label: "It did not happen",
+  },
+];
+
+export const pairingMachine = createMachine<
+  MentorshipPairingStatus,
+  PairingContext,
+  PairingTransition
+>({
+  subject: "mentorship introduction",
+  transitions: PAIRING_TRANSITIONS,
+  statusOf: (ctx) => ctx.pairing.status,
+  marketIdOf: (ctx) => ctx.pairing.marketId,
+  ownership: (actor, ctx) =>
+    actor.membership.role === "business" &&
+    actor.membership.organizationId !== ctx.pairing.businessId
+      ? "That introduction was made to another organization"
       : null,
 });

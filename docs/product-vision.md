@@ -122,11 +122,11 @@ Recorded so the vision is not quietly read as a description of what exists.
 | Claim | Reality |
 |---|---|
 | Supports several experience forms | Three are modelled — standard, micro, and mentorship. Still not the dimensional model described above: `Track` remains a two-value enum, and mentorship sits beside it as its own entity rather than as a configuration of paid/credit/clearance/output. Sustained placements and project-based work are each represented by one form, not the several listed. |
-| Relational experiences are supported | Partly. An employer can offer job shadows, portfolio reviews, group sessions, and one-to-one mentoring, and students see who is offering — but the pairing itself is off-platform, so nothing records that a mentorship happened or counts toward the outcome the platform measures. |
+| Relational experiences are supported | Mostly. An employer can offer job shadows, portfolio reviews, group sessions, and one-to-one mentoring; students see who is offering; and the introduction is now recorded, so a mentorship that happened is on the record and a mentor's declared capacity is checkable. What it still does not do is *count* — the employment outcome it would count toward is not modelled yet. |
 | Scope is defined by credit, not school | True of the concept; the model has no way to record that a student attends a high school. `organization_kind` is `('business','college','board')` and `Student` carries only a `collegeId`. |
 | Minor status governs consent and hours | Not modelled. Nothing distinguishes a dual-enrolled sixteen-year-old from a college sophomore, so nothing can decline a placement it should. |
 | Measures transitions into employment | Not modelled. The lifecycle currently ends at credit granted or closed. |
-| Employers surfaced as a queue for colleges | Built and visible; the actions on it are not yet wired. |
+| Employers surfaced as a queue for colleges | **Built and wired.** The college and the administrator introduce students to mentors; an offer shows the places it has free, and an introduction is a record that can be closed with what happened. |
 | Committed-versus-unspent allocation | Built — the board portal tracks it against a finite program year. |
 | Clearance per applicant per job | Built, and enforced by the state machine. |
 

@@ -89,6 +89,28 @@ export const lifecycleInput = z.object({
 });
 
 /**
+ * An introduction: which mentor, which student.
+ *
+ * Two ids and nothing else. The market, the employer and the introducer are
+ * all derived server-side — a caller who could name the introducer would be
+ * naming who vouched for a student in front of an adult.
+ */
+export const introduceInput = z.object({
+  offerId: id,
+  studentId: id,
+});
+
+/**
+ * Closing an introduction. The note is required, not optional: see
+ * `recordMentorshipOutcome`.
+ */
+export const introductionOutcomeInput = z.object({
+  id,
+  to: z.enum(["met", "declined"]),
+  note: reason,
+});
+
+/**
  * A week of logged hours.
  *
  * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered
