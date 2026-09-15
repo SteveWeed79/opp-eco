@@ -22,6 +22,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
@@ -133,6 +134,28 @@ export interface CreditAwardRepository {
   forStudent(actor: ActorContext, studentId: string): Promise<CreditAward[]>;
 }
 
+/**
+ * Follow-up observations, narrowed by who has a reason to read one.
+ *
+ * The college and the administrator see their market's, because they are the
+ * parties who record them. A learner sees their own — a record held about
+ * someone that they cannot see is the kind of thing a privacy regime asks
+ * about, and there is no reason here to be one. **The board sees the market's
+ * with the detail stripped**: its reporting obligation is a count of who was
+ * employed and who stayed, and the sentence naming a learner's new employer is
+ * not part of that count. See `redactOutcome`.
+ *
+ * **The employer sees none.** No surface it has reads one, and where a
+ * different employer's intern ended up is not its business. That changes the
+ * day an employer can record the hire it made, which is the open question the
+ * domain names (Q23).
+ */
+export interface OutcomeRepository {
+  list(actor: ActorContext): Promise<Outcome[]>;
+  forStudent(actor: ActorContext, studentId: string): Promise<Outcome[]>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<Outcome[]>;
+}
+
 export interface AuditEventRepository {
   list(actor: ActorContext, filter?: { entityId?: string }): Promise<AuditEvent[]>;
 }
@@ -152,6 +175,7 @@ export interface Repositories {
   interviewSlots: InterviewSlotRepository;
   timeEntries: TimeEntryRepository;
   creditAwards: CreditAwardRepository;
+  outcomes: OutcomeRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;
 }

@@ -358,6 +358,24 @@ migration eats a semester.
 
 ### D4. Nothing records what happened afterwards
 
+> **Built.** `Outcome` is a follow-up observation against a learner and, when
+> there is one, the experience it followed. Six kinds, with
+> `employed_by_host` / `employed_in_region` / `employed_elsewhere` kept apart as
+> argued below. The college works a follow-up queue of finished placements
+> nobody has asked about; the administrator's console reports regional
+> employment beside the count of follow-ups not yet done. The board reads the
+> counts and never the free text, the same rule that strips work summaries from
+> a timesheet.
+>
+> **Two things came out differently.** `no_outcome_recorded` is not a kind —
+> absence has no row, so an unworked queue can never be read as a result, and
+> `still_seeking` covers the learner who *was* asked. And `monthsAfter` is not
+> stored: the record carries the date the outcome was true as of, separately
+> from the date it was entered. **What still needs a decision** is the fixed
+> follow-up interval — workforce reporting measures at set quarters after exit,
+> and this records whenever somebody asks — along with whether the learner and
+> the employer may record one. Both are Q23.
+
 The lifecycle ends at `credit_granted` or `closed`. The application's measurable
 impact section promises employment after participation, employment *within the
 region*, continued education, and employer retention of participants.
@@ -585,9 +603,10 @@ A, since it changes who the front door addresses.
 | ~~Now~~ **Done** | A (front door split, real numbers, name bridge, contact) | A funder may type the URL this week. Days of work, not weeks. |
 | ~~Now~~ **Done** | F (seed alignment to the pilot) | One file. Makes the demo show the pilot the application describes. |
 | **Now** | E, cheap half — name the dashboard "CCLN Pro", screenshot it | Answers "what is the $20,000 building" with a picture. |
-| **Next** | B (`/partners`) and G (claim discipline) | The revenue model's first public expression. Needs the pricing decision above. |
+| ~~Next~~ **Done** | B (`/partners`) and G (claim discipline) | Both landed with the front-door split: `/partners` describes the three tiers by scope, and the landing page no longer promises $20/hour in every market. |
 | **Next** | C (phases, reopen Q8) | Cheap, and it is what stops the other changes reading as overreach. |
-| **Before the pilot** | D1 (funding sources), D4 (outcomes) | Both need to exist *before* data starts arriving, or year one is unmeasurable in the terms the application promises. |
+| ~~Before the pilot~~ **Done** | D4 (outcomes) | Built. The record exists before the data does, which was the whole argument for doing it early. |
+| **Before the pilot** | D1 (funding sources) | Needs to exist *before* data starts arriving, or year one is unmeasurable in the terms the application promises. |
 | **Before the pilot** | D3 (`Learner`) | Identity refactors get more expensive every month there is real data. |
 | **With phase 2** | D2 (partner kinds), E full (partner portal) | Follow the first partner who is neither a college nor a board. |
 | **With phase 3** | D5 (experience profiles) | The refactor pays for itself at the third experience type, not the second. |

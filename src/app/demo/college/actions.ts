@@ -2,6 +2,7 @@
 
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
+import { recordFollowUp } from "@/app/_actions/outcome";
 
 /**
  * College-side transitions: submitting for credit, granting it, denying it,
@@ -57,4 +58,22 @@ export async function collegeCloseIntroduction(
   note: unknown,
 ): Promise<ActionResult> {
   return closeIntroduction("college", pairingId, to, note);
+}
+
+/**
+ * Record what one of this college's learners did next.
+ *
+ * The college rather than the employer or the learner, for now: follow-up is
+ * local-operator work and the college already holds the relationship that makes
+ * the call get answered. Widening it to the two parties with first-hand
+ * knowledge is the open question the domain names (Q23).
+ */
+export async function collegeRecordOutcome(
+  studentId: unknown,
+  applicationId: unknown,
+  kind: unknown,
+  observedOn: unknown,
+  detail?: unknown,
+): Promise<ActionResult> {
+  return recordFollowUp("college", studentId, applicationId, kind, observedOn, detail);
 }

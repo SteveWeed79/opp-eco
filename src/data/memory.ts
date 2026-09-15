@@ -13,13 +13,20 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
 } from "@/domain/types";
-import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
+import {
+  disclosureFor,
+  redactOutcome,
+  redactStudent,
+  redactTimeEntry,
+} from "@/domain/disclosure";
 import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
+import { byObservedDescending } from "@/domain/outcome";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 
@@ -89,6 +96,30 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
     return self ? rows.filter((p) => p.studentId === self.id) : [];
   }
   if (role === "board") return [];
+  return rows;
+}
+
+/**
+ * Every follow-up observation the actor may see, already reduced to what their
+ * role needs.
+ *
+ * Three narrowings. The employer sees **none**: no surface it has reads one, and
+ * where a different employer's intern ended up is not its business. A student
+ * sees their own, because a record held about someone they cannot see is the
+ * kind of thing a privacy regime asks about. The board sees its market's with
+ * the free text stripped — its obligation is a count of who was employed and
+ * who stayed, not the sentence naming a learner's new employer.
+ */
+function visibleOutcomes(actor: ActorContext): Outcome[] {
+  const { role } = actor.membership;
+  if (role === "business") return [];
+
+  const rows = inScope(actor, seed.outcomes);
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((o) => o.studentId === self.id) : [];
+  }
+  if (role === "board") return rows.map(redactOutcome);
   return rows;
 }
 
@@ -282,6 +313,18 @@ export const repositories: Repositories = {
     list: async (actor) => inScope(actor, seed.creditAwards),
     forStudent: async (actor, studentId) =>
       inScope(actor, seed.creditAwards).filter((c) => c.studentId === studentId),
+  },
+
+  outcomes: {
+    list: async (actor) => visibleOutcomes(actor).slice().sort(byObservedDescending),
+    forStudent: async (actor, studentId) =>
+      visibleOutcomes(actor)
+        .filter((o) => o.studentId === studentId)
+        .sort(byObservedDescending),
+    forApplication: async (actor, applicationId) =>
+      visibleOutcomes(actor)
+        .filter((o) => o.applicationId === applicationId)
+        .sort(byObservedDescending),
   },
 
   auditEvents: {

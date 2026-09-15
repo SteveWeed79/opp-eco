@@ -36,6 +36,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
@@ -85,6 +86,18 @@ function text(value: unknown): string {
 
 function optionalText(value: unknown): string | undefined {
   return value === null || value === undefined ? undefined : String(value);
+}
+
+/**
+ * A nullable column as `string | null`, keeping the null.
+ *
+ * Distinct from `optionalText` on purpose. A column the domain models as
+ * `string | null` is one where absence carries meaning — an outcome with no
+ * application is a learner reached some other way — and mapping it to
+ * `undefined` would make it indistinguishable from a field that was never set.
+ */
+function nullableText(value: unknown): string | null {
+  return value === null || value === undefined ? null : String(value);
 }
 
 function bool(value: unknown): boolean {
@@ -272,6 +285,25 @@ export function toMentorshipPairing(row: Row): MentorshipPairing {
     status: text(row.status) as MentorshipPairing["status"],
     outcomeNote: optionalText(row.outcome_note),
     outcomeOn: optionalTimestamp(row.outcome_on),
+  };
+}
+
+export function toOutcome(row: Row): Outcome {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    studentId: text(row.student_id),
+    // `nullableText` rather than `optionalText`: the domain declares this
+    // `string | null` because a learner with no application is a real case, not
+    // a field somebody forgot to fill in, and `undefined` would say the
+    // opposite of what the column means.
+    applicationId: nullableText(row.application_id),
+    kind: text(row.kind) as Outcome["kind"],
+    observedOn: timestamp(row.observed_on),
+    recordedOn: timestamp(row.recorded_on),
+    recordedByUserId: text(row.recorded_by),
+    source: text(row.source) as Outcome["source"],
+    detail: optionalText(row.detail),
   };
 }
 
