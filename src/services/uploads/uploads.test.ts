@@ -385,7 +385,7 @@ describe("retrieval authorization", () => {
     // app-11 is shortlisted — the stage at which a surname is still withheld.
     const result = await canRetrieve(contextFor("business"), clean, {
       key: "k",
-      studentId: "stu-omar",
+      studentId: "stu-jordan",
       applicationId: "app-11",
     });
     expect(result.ok).toBe(false);

@@ -14,6 +14,18 @@
  * handshake with an error nobody can act on; failing here names the variable.
  */
 
+/**
+ * Which driver opens the connection.
+ *
+ * `neon` speaks the wire protocol over a WebSocket to Neon's proxy and is what
+ * a serverless deployment wants; `pg` is an ordinary TCP connection and is the
+ * only one that can reach a local or self-hosted Postgres. Inferred from the
+ * host rather than configured, because the host is what decides it — a
+ * `.neon.tech` URL cannot be served by `pg` over a plain socket, and a
+ * `localhost` URL cannot be served by Neon's proxy at all.
+ */
+export type DatabaseDriver = "neon" | "pg";
+
 /** Postgres transaction isolation, spelled the way `BEGIN` wants it. */
 export type IsolationLevel =
   | "read committed"
@@ -23,6 +35,12 @@ export type IsolationLevel =
 export interface DatabaseConfig {
   /** Null when unset — the caller falls back to the in-memory store. */
   connectionString: string | null;
+  /**
+   * The driver to open it with. Inferred from the host, overridable with
+   * `DATABASE_DRIVER` for a Neon-compatible proxy that does not carry the
+   * hostname — which is the only case inference cannot get right.
+   */
+  driver: DatabaseDriver;
   /**
    * Send non-transactional statements over HTTP rather than the WebSocket.
    *
@@ -79,9 +97,11 @@ export class DatabaseConfigError extends Error {
 
 export function databaseConfig(env: DatabaseEnv = process.env): DatabaseConfig {
   const raw = env.DATABASE_URL?.trim();
+  const connectionString = raw ? validateConnectionString(raw) : null;
 
   return {
-    connectionString: raw ? validateConnectionString(raw) : null,
+    connectionString,
+    driver: driverFrom(env.DATABASE_DRIVER, connectionString),
     // Opt out rather than in. The fast path should be the default, and the
     // variable exists so a bug in it can be turned off without a deploy.
     queryViaFetch: env.DATABASE_QUERY_VIA_FETCH !== "false",
@@ -130,6 +150,37 @@ function validateConnectionString(raw: string): string {
   }
 
   return raw;
+}
+
+const DRIVERS: DatabaseDriver[] = ["neon", "pg"];
+
+/**
+ * Pick a driver, preferring what the operator said over what the host implies.
+ *
+ * The inference is one-directional on purpose: a Neon host *must* use Neon's
+ * driver, and everything else must use `pg`. There is no host for which both
+ * work, so this is a dispatch rather than a preference — and getting it wrong
+ * fails inside a handshake with an error that names neither the host nor the
+ * driver, which is why it is decided here where both are in hand.
+ */
+function driverFrom(
+  value: string | undefined,
+  connectionString: string | null,
+): DatabaseDriver {
+  if (value !== undefined && value.trim() !== "") {
+    const normalized = value.trim().toLowerCase();
+    const match = DRIVERS.find((driver) => driver === normalized);
+    if (!match) {
+      throw new DatabaseConfigError(
+        `DATABASE_DRIVER must be one of ${DRIVERS.join(", ")} — got "${value}"`,
+      );
+    }
+    return match;
+  }
+
+  if (!connectionString) return "pg";
+  const host = new URL(connectionString).hostname.toLowerCase();
+  return host === "neon.tech" || host.endsWith(".neon.tech") ? "neon" : "pg";
 }
 
 const ISOLATION_LEVELS: IsolationLevel[] = [

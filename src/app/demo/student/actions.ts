@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
 import { executeTransition } from "@/services/transitions";
@@ -74,34 +74,36 @@ export async function bookInterviewSlot(
     return { ok: false, error: "Application not found." };
   }
 
-  const result = await executeTransition(actor, {
-    applicationId: input.data.applicationId,
-    to: "interview_scheduled",
-    patch: { interviewSlotId: input.data.slotId },
-    // Claiming the slot belongs to the same transaction as moving the
-    // application. A booked slot with an unmoved application, or the reverse,
-    // is a placement nobody is tracking.
-    sideEffects: (uow, moved) => {
-      uow.saveInterviewSlot(
-        {
-          ...slot,
-          bookedByStudentId: moved.studentId,
-          bookedAt: new Date().toISOString(),
-          meetingUrl: `https://meet.example.org/${slot.boardId}-${moved.studentId}`,
-        },
-        slot.version,
-      );
-    },
-    // Who hears about a booking is decided by the notification policy, not
-    // here — the student, the board, and the employer all get a message keyed
-    // to `interview_scheduled`. All this adds is the one fact the policy
-    // cannot know: which slot was taken.
-    payload: {
-      startsAt: slot.startsAt,
-      officerName: slot.officerName,
-      durationMinutes: slot.durationMinutes,
-    },
-  });
+  const result = await attemptWrite(() =>
+    executeTransition(actor, {
+      applicationId: input.data.applicationId,
+      to: "interview_scheduled",
+      patch: { interviewSlotId: input.data.slotId },
+      // Claiming the slot belongs to the same transaction as moving the
+      // application. A booked slot with an unmoved application, or the reverse,
+      // is a placement nobody is tracking.
+      sideEffects: (uow, moved) => {
+        uow.saveInterviewSlot(
+          {
+            ...slot,
+            bookedByStudentId: moved.studentId,
+            bookedAt: new Date().toISOString(),
+            meetingUrl: `https://meet.example.org/${slot.boardId}-${moved.studentId}`,
+          },
+          slot.version,
+        );
+      },
+      // Who hears about a booking is decided by the notification policy, not
+      // here — the student, the board, and the employer all get a message keyed
+      // to `interview_scheduled`. All this adds is the one fact the policy
+      // cannot know: which slot was taken.
+      payload: {
+        startsAt: slot.startsAt,
+        officerName: slot.officerName,
+        durationMinutes: slot.durationMinutes,
+      },
+    }),
+  );
 
   if (!result.ok) {
     logger.warn("transition.refused", {
@@ -174,7 +176,7 @@ export async function logPlacementHours(
     };
   }
 
-  const result = await logHours(actor, input.data);
+  const result = await attemptWrite(() => logHours(actor, input.data));
   if (!result.ok) {
     logger.warn("hours.refused", { code: result.code });
     return { ok: false, error: result.error };
@@ -214,7 +216,9 @@ export async function applyToPosting(postingId: unknown): Promise<ActionResult> 
     };
   }
 
-  const result = await submitApplication(actor, input.data.postingId);
+  const result = await attemptWrite(() =>
+    submitApplication(actor, input.data.postingId),
+  );
   if (!result.ok) {
     logger.warn("application.refused", { code: result.code });
     return { ok: false, error: result.error };

@@ -81,8 +81,8 @@ describe("the notification outbox", () => {
     });
     await drainPending();
 
-    expect(outboxFor("mkt-pittsburg").delivered).toHaveLength(1);
-    expect(outboxFor(null).delivered).toHaveLength(2);
+    expect((await outboxFor("mkt-pittsburg")).delivered).toHaveLength(1);
+    expect((await outboxFor(null)).delivered).toHaveLength(2);
   });
 
   it("requeues a transient failure so it is retried", async () => {

@@ -31,7 +31,7 @@ export default async function OutboxPage() {
   const admin = await actorForPortal("admin");
   // Administrators are the one cross-market role; scoping to their own market
   // when they have one keeps a market operator from reading another's traffic.
-  const { delivered, pending } = outboxFor(admin.membership.marketId);
+  const { delivered, pending } = await outboxFor(admin.membership.marketId);
 
   const config = emailConfig();
   const emailOn = config.enabled;

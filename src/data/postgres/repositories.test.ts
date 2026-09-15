@@ -83,6 +83,51 @@ async function everyRead(
   await repositories.auditEvents.list(actor, { entityId: "app-1" });
 }
 
+/** Every ORDER BY in a statement, aggregate ones included, as written. */
+function orderByClauses(text: string): string[] {
+  return [...text.matchAll(/ORDER BY\s+([^)]*?)(?:\)|$)/gi)].map((m) =>
+    m[1].replace(/\s+/g, " ").trim(),
+  );
+}
+
+describe("ordering does not depend on the server", () => {
+  it("collates every id it sorts by as C", async () => {
+    // An id is a surrogate key with no linguistic meaning, and ordering one by
+    // the database's own collation makes the result depend on how that database
+    // was created: `en_US.UTF-8` ignores punctuation and sorts `te-app-20-1`
+    // before `te-app-2-1`, `C.UTF-8` does the reverse. The rows are identical
+    // either way — only their order moves — so it surfaces as a list that
+    // reshuffles between a local database and a deployed one, and as an
+    // `array_agg` handing the domain its members in a different order.
+    const { repositories, statements } = recorder();
+    await everyRead(repositories, college);
+
+    const unpinned: string[] = [];
+    for (const { text } of statements) {
+      for (const clause of orderByClauses(text)) {
+        for (const term of clause.split(",")) {
+          // `audit_events.id` is a bigserial: a number has one order everywhere.
+          if (/audit_events\.id/i.test(term)) continue;
+          if (!/(^|[.\s])\w*id\b/i.test(term)) continue;
+          if (/COLLATE "C"/.test(term)) continue;
+          unpinned.push(term.trim());
+        }
+      }
+    }
+
+    expect(unpinned).toEqual([]);
+  });
+
+  it("leaves human names to the database's collation", async () => {
+    // The opposite case, and deliberately so: a roster sorted by name is
+    // exactly where the locale is the point.
+    const { repositories, statements } = recorder();
+    await repositories.students.list(college);
+    expect(statements[0].text).toMatch(/ORDER BY users\.name/);
+    expect(statements[0].text).not.toMatch(/users\.name COLLATE/);
+  });
+});
+
 describe("market isolation", () => {
   it("scopes every read to the actor's market", async () => {
     const { repositories, statements } = recorder();
@@ -90,7 +135,14 @@ describe("market isolation", () => {
 
     // `users.find` is the one deliberate exception and is not in `everyRead`:
     // it resolves the name behind an audit entry, which crosses markets.
-    const unscoped = statements.filter((s) => !/\.market_id = \$/.test(s.text));
+    //
+    // The `markets` table is isolated by its own primary key, because a market
+    // has no `market_id` — a rule composed against the generic fragment there
+    // produced `markets.market_id = $1`, which is not a column at all.
+    const isScoped = (text: string) =>
+      /\.market_id = \$/.test(text) ||
+      (/FROM markets/.test(text) && /markets\.id = \$/.test(text));
+    const unscoped = statements.filter((s) => !isScoped(s.text));
     expect(
       unscoped.map((s) => s.text.replace(/\s+/g, " ").trim().slice(0, 90)),
     ).toEqual([]);
@@ -276,7 +328,7 @@ describe("statement shape", () => {
   it("orders the audit log newest first", async () => {
     const { repositories, last } = recorder();
     await repositories.auditEvents.list(admin);
-    expect(last().text).toMatch(/ORDER BY occurred_at DESC/);
+    expect(last().text).toMatch(/ORDER BY audit_events\.occurred_at DESC/);
   });
 
   it("never lets a caller's value reach the statement text", async () => {

@@ -9,7 +9,7 @@ import { postingInput, validate } from "@/services/validation";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { drainPending } from "@/services/outbox";
-import type { ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, type ActionResult } from "@/app/_actions/transition";
 
 /**
  * Publish a new opportunity — or rather, submit one for review.
@@ -54,25 +54,27 @@ export async function submitPosting(fields: unknown): Promise<ActionResult> {
     actor.membership.organizationId ?? "",
   );
 
-  const result = await createPosting(actor, input.data, (posting) =>
-    college
-      ? [
-          {
-            marketId: posting.marketId,
-            recipientUserId: `contact:${college.id}`,
-            recipientOrganizationId: college.id,
-            kind: "posting.submitted",
-            payload: {
-              postingTitle: posting.title,
-              businessName: business?.name ?? "An employer",
-              selfSufficient: isSelfSufficientForCredit(
-                posting,
-                college.hoursPerCredit ?? 45,
-              ),
+  const result = await attemptWrite(() =>
+    createPosting(actor, input.data, (posting) =>
+      college
+        ? [
+            {
+              marketId: posting.marketId,
+              recipientUserId: `contact:${college.id}`,
+              recipientOrganizationId: college.id,
+              kind: "posting.submitted",
+              payload: {
+                postingTitle: posting.title,
+                businessName: business?.name ?? "An employer",
+                selfSufficient: isSelfSufficientForCredit(
+                  posting,
+                  college.hoursPerCredit ?? 45,
+                ),
+              },
             },
-          },
-        ]
-      : [],
+          ]
+        : [],
+    ),
   );
 
   if (!result.ok) {

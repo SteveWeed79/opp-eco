@@ -189,7 +189,41 @@ export function openWeeksFor(
  */
 export const MAX_HOURS_PER_WEEK = 60;
 
-/** Sort newest first, which is the order every surface displays them in. */
+/**
+ * Sort newest first, which is the order every surface displays them in.
+ *
+ * **Ties fall to the id, compared by code point.** Two placements can claim the
+ * same week — a student on two micro-internships routinely does — and leaving
+ * that to a stable sort means the order is whatever order the rows arrived in:
+ * the fixture array on one data layer, an `ORDER BY` on the other. The SQL side
+ * pins the same tie with `COLLATE "C"` for the same reason, because a
+ * database's own collation decides it otherwise. `en_US.UTF-8` ignores
+ * punctuation and puts `te-app-20-1` before `te-app-2-1`; `C.UTF-8` does the
+ * reverse. Neither is wrong, and a list that reorders itself depending on which
+ * locale a database was created with is.
+ *
+ * `localeCompare` is deliberately not used here: it is locale-sensitive too,
+ * which is the bug rather than the fix.
+ */
 export function byWeekDescending(a: TimeEntry, b: TimeEntry): number {
-  return b.weekStarting.localeCompare(a.weekStarting);
+  if (a.weekStarting !== b.weekStarting) {
+    return a.weekStarting < b.weekStarting ? 1 : -1;
+  }
+  return byId(a, b);
+}
+
+/**
+ * Oldest first — the review queue, where the week a student has been waiting
+ * longest on is the one to clear. Same tie-break, for the same reason.
+ */
+export function byWeekAscending(a: TimeEntry, b: TimeEntry): number {
+  if (a.weekStarting !== b.weekStarting) {
+    return a.weekStarting < b.weekStarting ? -1 : 1;
+  }
+  return byId(a, b);
+}
+
+function byId(a: TimeEntry, b: TimeEntry): number {
+  if (a.id === b.id) return 0;
+  return a.id < b.id ? -1 : 1;
 }

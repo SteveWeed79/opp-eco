@@ -485,6 +485,10 @@ export interface AuditEvent {
   /**
    * True when an administrator overrode a role or guard check. Overrides are
    * legitimate — unsticking stalled work is the job — but never silent.
+   *
+   * Required rather than optional, matching the NOT NULL column behind it: an
+   * audit entry that is silent about whether it was an override is the one
+   * question an auditor is certain to ask.
    */
-  viaOverride?: boolean;
+  viaOverride: boolean;
 }

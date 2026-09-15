@@ -26,6 +26,20 @@ export function marketScope(actor: ActorContext, table: string): Sql {
 }
 
 /**
+ * Restrict the `markets` table to the actor's market.
+ *
+ * Separate from `marketScope` because a market has no `market_id`: its own id
+ * *is* the market. Composing the generic rule here produced
+ * `markets.market_id = $1`, which is not a column — so every market read by a
+ * college, a board, a business or a student failed outright against a real
+ * database while passing every test that only inspected the generated text.
+ */
+export function ownMarketScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "admin") return sql`TRUE`;
+  return sql`markets.id = ${actor.membership.marketId}`;
+}
+
+/**
  * Restrict postings to the ones a business owns.
  *
  * Colleges are absent on purpose: a college operates its market and must see
