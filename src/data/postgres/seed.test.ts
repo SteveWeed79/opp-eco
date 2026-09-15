@@ -174,13 +174,22 @@ describe("coverage", () => {
   });
 
   it("records how each organization signs in", () => {
-    // Boards default to federated, which is the seeded claim: a government
-    // organization is locked to its own identity provider.
+    // The board seeds onto codes plus a required second factor rather than
+    // `federated`: it still holds no password for a public employee, and it no
+    // longer locks the agency out of a pilot for want of an SSO adapter.
     const board = statements.find(
       (s) =>
         s.text.startsWith("INSERT INTO organizations") && s.params.includes("board"),
     )!;
-    expect(board.params).toContain("federated");
+    expect(board.params).toContain("email_code");
+    expect(board.params).not.toContain("password");
+
+    // Colleges and employers get passwords, and their learners inherit it.
+    const college = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO organizations") && s.params.includes("college"),
+    )!;
+    expect(college.params).toContain("password");
   });
 
   it("writes no rate on a fund that is not paid by the hour", () => {

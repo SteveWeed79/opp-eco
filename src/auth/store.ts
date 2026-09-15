@@ -16,6 +16,7 @@
  */
 
 import type {
+  CodePurpose,
   Membership,
   MfaChallenge,
   RecoveryCode,
@@ -43,12 +44,21 @@ export interface AuthStore {
    */
   membershipForUser(userId: string): Promise<Membership | null>;
 
-  /** Replaces any outstanding code for this user. */
+  /**
+   * Replaces any outstanding code of the same purpose for this user.
+   *
+   * Of the *same purpose*: asking to reset a password must not silently
+   * invalidate the sign-in code somebody is already holding, and the reverse.
+   */
   putSignInCode(code: SignInCode): Promise<void>;
-  findSignInCode(userId: string): Promise<SignInCode | null>;
+  findSignInCode(userId: string, purpose: CodePurpose): Promise<SignInCode | null>;
   /** Records a failed guess without consuming the code. */
-  recordCodeAttempt(userId: string, attempts: number): Promise<void>;
-  consumeSignInCode(userId: string, at: string): Promise<void>;
+  recordCodeAttempt(
+    userId: string,
+    purpose: CodePurpose,
+    attempts: number,
+  ): Promise<void>;
+  consumeSignInCode(userId: string, purpose: CodePurpose, at: string): Promise<void>;
 
   createSession(session: Session): Promise<void>;
   findSession(id: string): Promise<Session | null>;

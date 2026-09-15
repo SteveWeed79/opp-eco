@@ -690,7 +690,21 @@ export interface CreditAward {
  * IdP is not wired should be locked out, not quietly issued a platform-held
  * identity for a public employee.
  */
-export type IdentityMode = "email_code" | "federated";
+/**
+ * How an organization's people prove who they are.
+ *
+ *  - `password` — an address and a password. Colleges, employers, and the
+ *    learners whose membership points at their college.
+ *  - `email_code` — a one-time code to a work address, no password anywhere.
+ *    Government organizations, and the platform's own administrators.
+ *  - `federated` — the agency's own identity provider. The destination for a
+ *    government organization, and refused at sign-in until an adapter exists.
+ *
+ * An institutional property rather than a per-person one: a college decides
+ * that its people use passwords, and a public agency decides that its officers
+ * do not. Nobody picks individually.
+ */
+export type IdentityMode = "password" | "email_code" | "federated";
 
 /**
  * A signed-in session, held server-side.
@@ -721,8 +735,18 @@ export interface Session {
  * code and cannot reproduce one, which matters because an unconsumed code is a
  * bearer token for somebody's account.
  */
+/**
+ * What an emailed code is for.
+ *
+ * A code sent to prove an address is not a code sent to reset a password, and
+ * until this existed there was nothing in the row to tell them apart — so
+ * either could have been spent as the other by whoever got hold of it first.
+ */
+export type CodePurpose = "sign_in" | "password_reset";
+
 export interface SignInCode {
   userId: string;
+  purpose: CodePurpose;
   codeHash: string;
   createdAt: string;
   expiresAt: string;

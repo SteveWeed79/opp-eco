@@ -64,10 +64,33 @@ describe("a government organization is locked to its own provider", () => {
     expect(signInBlockReason(board, "anyone@sekwp.example.org")).not.toBeNull();
   });
 
-  it("defaults a board to federated and everything else to codes", () => {
-    expect(defaultIdentityMode("board")).toBe("federated");
+  it("defaults a board to codes and everything else to passwords", () => {
+    // A government organization holds no password here — that part has not
+    // moved. What moved is what "no password" costs them: `federated` with no
+    // adapter shipped meant a board officer could not use the platform at all,
+    // which does not make a pilot safer. A one-time code to their agency
+    // address is what they get, and federation remains the upgrade.
+    expect(defaultIdentityMode("board")).toBe("email_code");
+
+    // And the rest get passwords, because the rule about replicating a
+    // government identity was never about a sophomore at a community college.
     for (const kind of ["college", "business", "nonprofit"] as const) {
-      expect(defaultIdentityMode(kind)).toBe("email_code");
+      expect(defaultIdentityMode(kind)).toBe("password");
+    }
+  });
+
+  it("asks no second factor of a government account", async () => {
+    const { requiresSecondFactor } = await import("./identity");
+    // Deliberate, and not a weaker choice than issuing one. A board officer's
+    // factor is their agency's mailbox, which their own IT department already
+    // protects; handing them an authenticator seed would mean this platform
+    // holding a second credential for a public employee, which is the thing the
+    // data rules say not to do.
+    expect(requiresSecondFactor("board")).toBe(false);
+    // The administrator is ours, reads every market, and is offered one.
+    expect(requiresSecondFactor("admin")).toBe(true);
+    for (const role of ["college", "business", "student"] as const) {
+      expect(requiresSecondFactor(role)).toBe(false);
     }
   });
 });

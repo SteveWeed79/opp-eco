@@ -89,23 +89,77 @@ describe("asking for a code", () => {
   });
 });
 
-describe("a federated organization", () => {
-  it("is refused, and told where to go instead", async () => {
-    // The board is a government organization. No SSO adapter ships, so its
-    // officers cannot sign in here at all — which is correct, not a gap.
+describe("a government organization", () => {
+  it("signs in with a code to its agency address", async () => {
+    // Not locked out any more. `federated` was the honest destination and, with
+    // no adapter shipped, it meant a board officer could not use the platform
+    // at all — which does not make a pilot safer, it makes it unusable by the
+    // agency that determines eligibility.
     const result = await requestSignInCode(BOARD_EMAIL, deps);
+    expect(result.ok).toBe(true);
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0].to).toBe(BOARD_EMAIL);
+  });
+
+  it("holds no password for a public employee", () => {
+    // The part of the rule that has not moved, and the reason it is `email_code`
+    // rather than `password`.
+    const board = seed.organizations.find((o) => o.kind === "board")!;
+    expect(board.identityMode).toBe("email_code");
+  });
+
+  it("is asked for no second factor either", async () => {
+    // Their factor is the agency's mailbox, which the agency's own IT
+    // department protects. An authenticator seed from us would be a second
+    // credential this platform holds for a public employee.
+    const { requiresSecondFactor } = await import("@/domain/identity");
+    expect(requiresSecondFactor("board")).toBe(false);
+  });
+
+  it("binds the code to the agency's own domain", async () => {
+    // What makes leaning on the agency's mailbox sound rather than aspirational:
+    // the code cannot be sent to a personal address the officer controls.
+    const board = seed.organizations.find((o) => o.kind === "board")!;
+    expect(board.emailDomains.length).toBeGreaterThan(0);
+    const result = await requestSignInCode("mdelgado@gmail.example", deps);
+    // Generic, because an address nobody holds must look the same as one
+    // somebody does — but nothing is sent.
+    expect(result.ok).toBe(true);
+    expect(delivered).toHaveLength(0);
+  });
+});
+
+describe("a federated organization", () => {
+  /**
+   * Federation still exists as a mode; nothing is seeded into it yet.
+   *
+   * `await`ed inside the helper, not just returned from it — restoring the mode
+   * in a `finally` around an un-awaited promise puts it back before the service
+   * ever reads it, which made this pass against the wrong mode.
+   */
+  async function federate<T>(run: () => Promise<T>): Promise<T> {
+    const board = seed.organizations.find((o) => o.kind === "board")!;
+    const before = board.identityMode;
+    board.identityMode = "federated";
+    try {
+      return await run();
+    } finally {
+      board.identityMode = before;
+    }
+  }
+
+  it("is refused, and told where to go instead", async () => {
+    const result = await federate(() => requestSignInCode(BOARD_EMAIL, deps));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/own identity provider/i);
     expect(delivered).toHaveLength(0);
   });
 
   it("cannot be talked into a session by any code", async () => {
-    expect((await verifySignInCode(BOARD_EMAIL, "ABCD2345", deps)).ok).toBe(false);
-  });
-
-  it("is the seeded state, not something a test invented", () => {
-    const board = seed.organizations.find((o) => o.kind === "board")!;
-    expect(board.identityMode).toBe("federated");
+    const result = await federate(() =>
+      verifySignInCode(BOARD_EMAIL, "ABCD2345", deps),
+    );
+    expect(result.ok).toBe(false);
   });
 });
 

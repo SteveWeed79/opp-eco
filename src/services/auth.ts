@@ -187,6 +187,7 @@ export async function requestSignInCode(
 
   const record: SignInCode = {
     userId: user.id,
+    purpose: "sign_in",
     codeHash: sha256(code),
     createdAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -221,7 +222,7 @@ export async function verifySignInCode(
   const user = await store.findUserByEmail(address);
   if (!user) return generic;
 
-  const record = await store.findSignInCode(user.id);
+  const record = await store.findSignInCode(user.id, "sign_in");
   if (!record || record.consumedAt) return generic;
 
   const now = deps.now();
@@ -229,7 +230,7 @@ export async function verifySignInCode(
   if (record.attempts >= CODE_MAX_ATTEMPTS) return generic;
 
   if (!hashesMatch(record.codeHash, sha256(code.trim().toUpperCase()))) {
-    await store.recordCodeAttempt(user.id, record.attempts + 1);
+    await store.recordCodeAttempt(user.id, "sign_in", record.attempts + 1);
     logger.warn("auth.code_rejected", { userId: user.id, attempts: record.attempts + 1 });
     return generic;
   }
@@ -240,7 +241,7 @@ export async function verifySignInCode(
   // Spent before the session exists. A crash between the two leaves somebody
   // unable to sign in, which is recoverable; the other order leaves a code that
   // has already produced a session still usable.
-  await store.consumeSignInCode(user.id, now.toISOString());
+  await store.consumeSignInCode(user.id, "sign_in", now.toISOString());
 
   // Every other session for this account goes. Signing in is the moment a
   // person can prove who they are, and it is the cheapest place to make a

@@ -91,6 +91,7 @@ function toChallenge(row: Row): MfaChallenge {
 function toCode(row: Row): SignInCode {
   return {
     userId: text(row.user_id),
+    purpose: text(row.purpose) as SignInCode["purpose"],
     codeHash: text(row.code_hash),
     createdAt: stamp(row.created_at),
     expiresAt: stamp(row.expires_at),
@@ -143,38 +144,43 @@ export function postgresAuthStore(client: PostgresClient): AuthStore {
     },
 
     async putSignInCode(code) {
-      // Upsert, because the table is keyed by user: asking for a new code
-      // replaces the outstanding one rather than leaving two live.
+      // Upsert on (user, purpose): asking for a new sign-in code replaces the
+      // outstanding sign-in code rather than leaving two live, and leaves an
+      // outstanding password reset alone.
       await client.query(
-        `INSERT INTO sign_in_codes (user_id, code_hash, created_at, expires_at, attempts, consumed_at)
-         VALUES ($1,$2,$3,$4,0,NULL)
-         ON CONFLICT (user_id) DO UPDATE SET
+        `INSERT INTO sign_in_codes
+           (user_id, purpose, code_hash, created_at, expires_at, attempts, consumed_at)
+         VALUES ($1,$2,$3,$4,$5,0,NULL)
+         ON CONFLICT (user_id, purpose) DO UPDATE SET
            code_hash = EXCLUDED.code_hash,
            created_at = EXCLUDED.created_at,
            expires_at = EXCLUDED.expires_at,
            attempts = 0,
            consumed_at = NULL`,
-        [code.userId, code.codeHash, code.createdAt, code.expiresAt],
+        [code.userId, code.purpose, code.codeHash, code.createdAt, code.expiresAt],
       );
     },
 
-    async findSignInCode(userId) {
-      const row = await first(`SELECT * FROM sign_in_codes WHERE user_id = $1`, [userId]);
+    async findSignInCode(userId, purpose) {
+      const row = await first(
+        `SELECT * FROM sign_in_codes WHERE user_id = $1 AND purpose = $2`,
+        [userId, purpose],
+      );
       return row ? toCode(row) : null;
     },
 
-    async recordCodeAttempt(userId, attempts) {
-      await client.query(`UPDATE sign_in_codes SET attempts = $2 WHERE user_id = $1`, [
-        userId,
-        attempts,
-      ]);
+    async recordCodeAttempt(userId, purpose, attempts) {
+      await client.query(
+        `UPDATE sign_in_codes SET attempts = $3 WHERE user_id = $1 AND purpose = $2`,
+        [userId, purpose, attempts],
+      );
     },
 
-    async consumeSignInCode(userId, at) {
-      await client.query(`UPDATE sign_in_codes SET consumed_at = $2 WHERE user_id = $1`, [
-        userId,
-        at,
-      ]);
+    async consumeSignInCode(userId, purpose, at) {
+      await client.query(
+        `UPDATE sign_in_codes SET consumed_at = $3 WHERE user_id = $1 AND purpose = $2`,
+        [userId, purpose, at],
+      );
     },
 
     async createSession(session) {

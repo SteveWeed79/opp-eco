@@ -49,21 +49,23 @@ export const memoryAuthStore: AuthStore = {
   },
 
   async putSignInCode(code) {
-    codes.set(code.userId, code);
+    codes.set(`${code.userId}:${code.purpose}`, code);
   },
 
-  async findSignInCode(userId) {
-    return codes.get(userId) ?? null;
+  async findSignInCode(userId, purpose) {
+    return codes.get(`${userId}:${purpose}`) ?? null;
   },
 
-  async recordCodeAttempt(userId, attempts) {
-    const code = codes.get(userId);
-    if (code) codes.set(userId, { ...code, attempts });
+  async recordCodeAttempt(userId, purpose, attempts) {
+    const key = `${userId}:${purpose}`;
+    const code = codes.get(key);
+    if (code) codes.set(key, { ...code, attempts });
   },
 
-  async consumeSignInCode(userId, at) {
-    const code = codes.get(userId);
-    if (code) codes.set(userId, { ...code, consumedAt: at });
+  async consumeSignInCode(userId, purpose, at) {
+    const key = `${userId}:${purpose}`;
+    const code = codes.get(key);
+    if (code) codes.set(key, { ...code, consumedAt: at });
   },
 
   async createSession(session) {

@@ -110,10 +110,18 @@ export function isPrivileged(role: ActorRole): boolean {
  * the one standing behind the weakest thing, and that is the asymmetry worth
  * closing first.
  *
- * A workforce board officer is absent for a different reason: they cannot sign
- * in here at all. Their organisation is federated, their agency owns their
- * identity, and their second factor is their agency's business rather than
- * something this platform should be inventing for a public employee.
+ * **Not the board officer, deliberately.** A public employee signs in with a
+ * one-time code to their agency address and nothing else — no password here,
+ * and no authenticator from us. That is not a weaker choice than issuing them a
+ * second factor; it is the same principle as federation, one step earlier. The
+ * factor is their agency's mailbox, which their own IT department already
+ * protects with its own controls, and `emailDomains` is what makes that true
+ * rather than aspirational: the code can only be sent to an address on the
+ * agency's domain, never to a personal one they control.
+ *
+ * Handing a government employee an authenticator seed would mean this platform
+ * holding a second credential for them, which is the thing the data rules say
+ * not to do.
  */
 export function requiresSecondFactor(role: ActorRole): boolean {
   return role === "admin";
@@ -220,12 +228,20 @@ export function signInBlockReason(
 /**
  * The mode an organization should start in.
  *
- * Boards default to `federated`, which is the claim this whole file is about:
- * a government organization is locked to its own identity provider unless
- * somebody deliberately says otherwise. Everything else starts on email codes,
- * which is what a small employer or a college department can actually use on
- * the day they join.
+ * **A government organization holds no password on this platform**, and that is
+ * the claim this file is really about. What changed is what "no password" is
+ * allowed to cost them: `federated` was the honest destination and, with no
+ * adapter shipped, it meant a board officer could not use the platform at all.
+ * A pilot that locks out the agency determining eligibility has not been made
+ * safer. So a board signs in with a one-time code and a required second factor
+ * — ephemeral, plus an app — and federation remains the upgrade rather than the
+ * blocker.
+ *
+ * Everything else gets a password, because the rule about replicating a
+ * government identity was never about a sophomore at a community college. The
+ * mode sits on the organization, so a learner inherits their college's choice
+ * and a college that later adopts SSO changes one field.
  */
 export function defaultIdentityMode(kind: Organization["kind"]): IdentityMode {
-  return kind === "board" ? "federated" : "email_code";
+  return kind === "board" ? "email_code" : "password";
 }
