@@ -16,6 +16,8 @@
 import type {
   ActorContext,
   MentorshipOffer,
+  MentorshipPairing,
+  MentorshipPairingStatus,
   MentorshipOfferStatus,
   Organization,
   OrganizationStatus,
@@ -29,7 +31,7 @@ import {
   postingMachine,
   studentMachine,
 } from "@/domain/lifecycle";
-import { mentorshipMachine } from "@/domain/mentorship";
+import { mentorshipMachine, pairingMachine } from "@/domain/mentorship";
 import { isTerminal } from "@/domain/workflow";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
@@ -37,7 +39,10 @@ import type { NotificationIntent, Store, UnitOfWork } from "@/data/store";
 
 export type LifecycleResult<T> =
   | { ok: true; value: T; viaOverride: boolean }
-  | { ok: false; error: string; code: "forbidden" | "not_found" };
+  // `invalid` is the reason a *well-formed* move is still refused — a closing
+  // note that is only whitespace, say. Distinct from `forbidden`, which says
+  // the actor may not make the move at all.
+  | { ok: false; error: string; code: "forbidden" | "not_found" | "invalid" };
 
 export interface LifecycleDeps {
   store: Store;
@@ -85,7 +90,9 @@ export async function transitionStudent(
   };
 
   await deps.store.transaction((uow) => {
-    uow.saveStudent(updated);
+    // The verifier is the person who made the decision, and is cleared with the
+    // date when a student leaves the verified state.
+    uow.saveStudent(updated, to === "verified" ? actor.user.id : null);
     audit(uow, actor, {
       marketId: student.marketId,
       at,
@@ -281,6 +288,74 @@ export async function transitionMentorshipOffer(
 }
 
 // ---------------------------------------------------------------------------
+// Mentorship introductions
+// ---------------------------------------------------------------------------
+
+/**
+ * Close an introduction: it happened, or it did not.
+ *
+ * The employer owns this because they are the only party who knows whether the
+ * student turned up — but the college and an administrator can record it too,
+ * since an introduction nobody ever closes holds one of the mentor's places
+ * open forever, and the mentor is the person that costs.
+ *
+ * A note is required rather than optional. "It did not happen" with no reason
+ * is a row that tells a college nothing about whether to try that mentor
+ * again, and "it happened" with no reason is the only evidence this platform
+ * will ever have that a mentorship took place.
+ */
+export async function recordMentorshipOutcome(
+  actor: ActorContext,
+  pairingId: string,
+  to: MentorshipPairingStatus,
+  note: string,
+  deps: LifecycleDeps = defaultDeps,
+): Promise<LifecycleResult<MentorshipPairing>> {
+  const pairing = await repositories.mentorshipPairings.find(actor, pairingId);
+  if (!pairing) {
+    return { ok: false, error: "Introduction not found.", code: "not_found" };
+  }
+
+  const verdict = pairingMachine.attempt(actor, { pairing }, to, note);
+  if (!verdict.ok) {
+    return { ok: false, error: verdict.error ?? "Refused", code: "forbidden" };
+  }
+
+  const trimmed = note.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      error: "Say what happened — a closed introduction with no note is a dead end.",
+      code: "invalid",
+    };
+  }
+
+  const at = deps.now().toISOString();
+  const updated: MentorshipPairing = {
+    ...pairing,
+    status: to,
+    outcomeNote: trimmed,
+    outcomeOn: at,
+  };
+
+  await deps.store.transaction((uow) => {
+    uow.saveMentorshipPairing(updated);
+    audit(uow, actor, {
+      marketId: pairing.marketId,
+      at,
+      entityType: "mentorship_pairing",
+      entityId: pairing.id,
+      from: pairing.status,
+      to,
+      reason: trimmed,
+      viaOverride: Boolean(verdict.viaOverride),
+    });
+  });
+
+  return { ok: true, value: updated, viaOverride: Boolean(verdict.viaOverride) };
+}
+
+// ---------------------------------------------------------------------------
 // Organizations
 // ---------------------------------------------------------------------------
 
@@ -361,7 +436,12 @@ function audit(
   event: {
     marketId: string;
     at: string;
-    entityType: "student" | "posting" | "organization" | "mentorship_offer";
+    entityType:
+      | "student"
+      | "posting"
+      | "organization"
+      | "mentorship_offer"
+      | "mentorship_pairing";
     entityId: string;
     from: string;
     to: string;

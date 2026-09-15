@@ -1,9 +1,11 @@
 /**
  * Repository contracts.
  *
- * There is no database in this build — the only implementation is in-memory
- * over seeded fixtures. The interfaces exist so that swapping in Postgres
- * later is a new class behind the same contract, with no screen touched.
+ * Two implementations satisfy these: the in-memory one over the seeded
+ * fixtures, and the SQL one in `postgres/`. `backend.ts` picks between them
+ * from a single environment variable, and no screen can tell the difference —
+ * which is the point, and what `postgres/integration.test.ts` asserts
+ * accessor by accessor.
  *
  * Every read takes an ActorContext and is scoped by it. Market isolation is
  * enforced here rather than in each route, so a college in one market cannot
@@ -18,6 +20,7 @@ import type {
   InterviewSlot,
   Market,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -77,6 +80,24 @@ export interface MentorshipOfferRepository {
   openInMarket(actor: ActorContext): Promise<MentorshipOffer[]>;
 }
 
+/**
+ * Introductions, narrowed by who has a reason to read one.
+ *
+ * An employer sees the students introduced to them; a student sees their own
+ * introductions. The college and the administrator see the market's, because
+ * they are the parties who make them. **The board sees none** — it reimburses
+ * placements, and a mentorship carries no wage, no credit and no public money,
+ * so who was introduced to whom is not its business. That is a narrowing rather
+ * than an oversight, and the same reasoning that hides work summaries from it
+ * on a timesheet.
+ */
+export interface MentorshipPairingRepository {
+  list(actor: ActorContext): Promise<MentorshipPairing[]>;
+  find(actor: ActorContext, id: string): Promise<MentorshipPairing | null>;
+  forOffer(actor: ActorContext, offerId: string): Promise<MentorshipPairing[]>;
+  forStudent(actor: ActorContext, studentId: string): Promise<MentorshipPairing[]>;
+}
+
 export interface ApplicationRepository {
   list(actor: ActorContext): Promise<Application[]>;
   find(actor: ActorContext, id: string): Promise<Application | null>;
@@ -126,6 +147,7 @@ export interface Repositories {
   students: StudentRepository;
   postings: PostingRepository;
   mentorshipOffers: MentorshipOfferRepository;
+  mentorshipPairings: MentorshipPairingRepository;
   applications: ApplicationRepository;
   interviewSlots: InterviewSlotRepository;
   timeEntries: TimeEntryRepository;

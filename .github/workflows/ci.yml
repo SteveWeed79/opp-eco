@@ -82,6 +82,70 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
+  # The schema, the fixtures, and the repository layer against a real Postgres.
+  #
+  # Everything in `src/data/postgres` is otherwise tested against a recording
+  # client, which proves the SQL text and nothing about whether Postgres accepts
+  # it. The first time the schema was actually applied it failed on a missing
+  # extension, two foreign keys pointing at users that do not exist, and a
+  # market scoped by a column the table does not have — none of which any amount
+  # of TypeScript would have caught. This job is what keeps that gap closed.
+  database:
+    name: Schema and repositories on Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: oppeco
+          POSTGRES_PASSWORD: oppeco
+          POSTGRES_DB: oppeco
+        ports:
+          - 5432:5432
+        # Without this the job races the container: the steps below start
+        # before Postgres is listening and fail on connection refused.
+        options: >-
+          --health-cmd "pg_isready -U oppeco"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://oppeco:oppeco@localhost:5432/oppeco
+      TEST_DATABASE_URL: postgresql://oppeco:oppeco@localhost:5432/oppeco
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The operator path, run exactly as a person would run it, so a break in
+      # the scripts is a red check rather than a surprise during a deployment.
+      - name: Prove the connection
+        run: npm run db:verify
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Load the fixtures
+        run: npm run db:seed
+
+      # Re-applying must be a no-op: a migration runner that reruns applied
+      # files is one that fails on the second deployment rather than the first.
+      - name: Re-apply, expecting nothing to do
+        run: npm run db:migrate
+
+      - name: Run the database integration suite
+        run: npx vitest run src/data/postgres/integration.test.ts
+
   # Runs alongside `verify` rather than after it. It repeats the install and
   # build, which costs about a minute of machine time and saves more than that
   # in wall-clock — and it means a browser-only failure can't be confused with

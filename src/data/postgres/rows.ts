@@ -25,6 +25,7 @@
  *    award's applications — which arrive aggregated rather than as columns.
  */
 
+import { clearanceExpiry } from "@/domain/eligibility";
 import type {
   Application,
   AuditEvent,
@@ -33,6 +34,7 @@ import type {
   MarketStage,
   MatchFactor,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -136,20 +138,6 @@ export function dateOnly(value: unknown): string {
   return String(value).slice(0, 10);
 }
 
-/**
- * How long a board's eligibility determination stands.
- *
- * An assumption, and the same one the fixtures make. Written down here rather
- * than left implicit in a seed expression, so the day it becomes a real policy
- * there is one place holding the number.
- */
-export const CLEARANCE_WINDOW_DAYS = 365;
-
-function addDays(at: string | null, days: number): string | null {
-  if (!at) return null;
-  return new Date(new Date(at).getTime() + days * 86_400_000).toISOString();
-}
-
 // ---------------------------------------------------------------------------
 // Entities
 // ---------------------------------------------------------------------------
@@ -215,14 +203,10 @@ export function toStudent(row: Row): Student {
     status: text(row.status) as Student["status"],
     eligibility: text(row.eligibility) as Student["eligibility"],
     eligibilityDeterminedOn: nullableTimestamp(row.eligibility_determined_on),
-    // Derived, not stored. The schema has one date because two would be free
-    // to disagree, and an expiry that contradicts its own determination is
-    // worse than one computed on read. The window matches what the fixtures
-    // already assume; nothing in the product reads this field yet, so when the
-    // real clearance rule is settled it belongs in the domain, not here.
-    eligibilityExpiresOn: addDays(
+    // Derived, not stored, from the domain's rule — the same call the fixtures
+    // make, so both data layers give one student one expiry.
+    eligibilityExpiresOn: clearanceExpiry(
       nullableTimestamp(row.eligibility_determined_on),
-      CLEARANCE_WINDOW_DAYS,
     ),
     verifiedOn: nullableTimestamp(row.verified_on),
   };
@@ -273,6 +257,21 @@ export function toMentorshipOffer(row: Row): MentorshipOffer {
     capacity: number(row.capacity),
     status: text(row.status) as MentorshipOffer["status"],
     createdOn: timestamp(row.created_at),
+  };
+}
+
+export function toMentorshipPairing(row: Row): MentorshipPairing {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    offerId: text(row.offer_id),
+    businessId: text(row.business_id),
+    studentId: text(row.student_id),
+    introducedByUserId: text(row.introduced_by),
+    introducedOn: timestamp(row.introduced_on),
+    status: text(row.status) as MentorshipPairing["status"],
+    outcomeNote: optionalText(row.outcome_note),
+    outcomeOn: optionalTimestamp(row.outcome_on),
   };
 }
 

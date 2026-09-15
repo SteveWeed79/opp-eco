@@ -17,6 +17,7 @@ import type {
   CreditAward,
   InterviewSlot,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -41,6 +42,40 @@ export interface NotificationIntent {
 }
 
 /**
+ * A message that has been queued and not yet sent.
+ *
+ * `id` is the queue's own handle on the row, which the Postgres queue needs to
+ * put a transient failure back and the in-memory queue has no use for. It is
+ * deliberately opaque: nothing above the dispatcher reads it.
+ */
+export interface QueuedNotification {
+  id: string | null;
+  intent: NotificationIntent;
+}
+
+/**
+ * The handoff between a committed transaction and the dispatcher.
+ *
+ * A seam rather than an array because the two data layers hold this queue in
+ * different places: the fixtures in a module-level array, Postgres in the
+ * `notification_outbox` table written inside the same transaction as the state
+ * change. `outbox.ts` imported the array directly, which meant that on a
+ * database deployment every message was written to the table and none was ever
+ * sent — the dispatcher was draining a queue nothing filled.
+ */
+export interface NotificationQueue {
+  /**
+   * Claim everything pending. Claimed messages leave the queue, exactly as a
+   * `splice` does, and come back only through `requeue`.
+   */
+  take(): Promise<QueuedNotification[]>;
+  /** Return a message that failed for a reason a retry could fix. */
+  requeue(item: QueuedNotification, error: string): Promise<void>;
+  /** What is still waiting, for the administrator's outbox. */
+  pending(marketId: string | null): Promise<NotificationIntent[]>;
+}
+
+/**
  * The mutations available inside a transaction. Deliberately narrow — anything
  * not listed here cannot be written, which keeps the write surface reviewable.
  */
@@ -57,7 +92,27 @@ export interface UnitOfWork {
   /** Insert a new posting. Same reasoning as `createApplication`. */
   createPosting(posting: Posting): void;
   saveApplication(application: Application, expectedVersion: number): void;
-  saveStudent(student: Student): void;
+  /**
+   * Persist a student, and who verified them.
+   *
+   * `verifiedBy` is a second argument rather than a field on `Student` because
+   * the domain type is what a screen renders and nobody renders it — but the
+   * schema requires it: a student in `verified` without an attributable
+   * verifier violates a CHECK constraint, so the acting user has to reach the
+   * write. Null clears it, which is what a student leaving the verified state
+   * needs; a stale verifier on a rejected record is the same auditor's finding
+   * as a stale verification date.
+   */
+  saveStudent(student: Student, verifiedBy: string | null): void;
+  /**
+   * Record an introduction, and close one.
+   *
+   * A create rather than an upsert, for the reason `createApplication` is: the
+   * same student may be introduced to the same mentor twice, months apart, and
+   * an upsert would turn the second into an edit of the first.
+   */
+  createMentorshipPairing(pairing: MentorshipPairing): void;
+  saveMentorshipPairing(pairing: MentorshipPairing): void;
   /**
    * Vetting and publication decisions.
    *

@@ -3,8 +3,8 @@
  *
  * `client.ts` describes the minimum a driver must provide; this is that
  * minimum, implemented over `@neondatabase/serverless`. Everything specific to
- * Neon is in this file, so swapping to `pg` against any other Postgres is a
- * second file and no change anywhere else.
+ * Neon is in this file; `node-pg.ts` is the second adapter that prediction
+ * called for, and `pool.ts` picks between them.
  *
  * **Why the pool and not the HTTP function.** Neon ships two interfaces. The
  * `neon()` function sends one statement per HTTP request and cannot hold a
@@ -25,7 +25,7 @@
 
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import type { SqlClient, TransactionalSqlClient } from "./client";
-import { databaseConfig, type DatabaseConfig, type IsolationLevel } from "./config";
+import type { DatabaseConfig, IsolationLevel } from "./config";
 
 /**
  * The slice of a driver pool this adapter uses.
@@ -233,28 +233,4 @@ export function neonPool(config: DatabaseConfig): PoolLike {
     connectionString: config.connectionString,
     max: config.maxConnections,
   }) as unknown as PoolLike;
-}
-
-/**
- * The process-wide client.
- *
- * Lazy because importing this module must not require a database — most of the
- * test suite and the entire in-memory demo import things that transitively
- * reach here. Cached because a pool per request is not a pool.
- */
-let cached: PostgresClient | null = null;
-
-export function postgresClient(): PostgresClient {
-  if (cached) return cached;
-  const config = databaseConfig();
-  cached = createPostgresClient(neonPool(config), config);
-  return cached;
-}
-
-/** Drops the cached client. For tests and for scripts that need to exit. */
-export async function closePostgresClient(): Promise<void> {
-  if (!cached) return;
-  const client = cached;
-  cached = null;
-  await client.end();
 }

@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Building2,
   ClipboardCheck,
+  HandHeart,
   MapPin,
   TrendingUp,
 } from "lucide-react";
@@ -41,7 +42,10 @@ import {
   stalledApplications,
   subsidyDeployed,
 } from "@/lib/queries";
-import type { MarketStage } from "@/domain/types";
+import type { MarketStage, MentorshipPairing } from "@/domain/types";
+import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
+import { IntroduceStudent } from "@/components/IntroduceStudent";
+import { adminIntroduceStudent } from "./actions";
 import { PORTAL_PATH } from "@/routes";
 
 const STAGE_ORDER: MarketStage[] = [
@@ -68,7 +72,34 @@ const STAGE_LABEL: Record<MarketStage, string> = {
 
 export default async function AdminPage() {
   const admin = await actorForPortal("admin");
-  const { organizationName } = await nameLookups(admin);
+  const { organizationName, marketName } = await nameLookups(admin);
+
+  // Mentorship, across every market — the view only this console has. An offer
+  // with places nobody has been introduced to is the administrator's to act on
+  // when a college has not.
+  const openMentorships = (await repositories.mentorshipOffers.list(admin)).filter(
+    (offer) => offer.status === "open",
+  );
+  const pairingsByOffer = new Map<string, MentorshipPairing[]>();
+  for (const pairing of await repositories.mentorshipPairings.list(admin)) {
+    pairingsByOffer.set(pairing.offerId, [
+      ...(pairingsByOffer.get(pairing.offerId) ?? []),
+      pairing,
+    ]);
+  }
+  const verified = (await repositories.students.list(admin)).filter(
+    (student) => student.status === "verified",
+  );
+  /** Verified students in one market — an introduction never crosses one. */
+  const introducibleIn = (marketId: string) =>
+    verified
+      .filter((student) => student.marketId === marketId)
+      .map((student) => ({
+        id: student.id,
+        name: student.name,
+        programOfStudy: student.programOfStudy,
+        classStanding: student.classStanding,
+      }));
   // Independent of one another, so resolved together rather than in a queue
   // of six sequential round trips.
   const [health, stalled, pendingOrgs, stages, deployed, pauseDays] =
@@ -414,6 +445,77 @@ export default async function AdminPage() {
           </div>
         </Card>
       </div>
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Mentorship, which is the one form the administrator can move        */}
+      {/* directly. A market whose college has not made an introduction is    */}
+      {/* exactly the case an operator exists to unstick, and that is not an  */}
+      {/* override — every check the college's path runs, this one runs too.  */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Mentors waiting for a student"
+        description="Employers offering time that nobody has been introduced to yet. Across every market, which is the view only this console has."
+      >
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<HandHeart className="w-5 h-5" />}
+            title="Open mentorship offers"
+            subtitle="No wage, no credit, no board clearance — an hour of somebody's time"
+          />
+          {openMentorships.length === 0 ? (
+            <Empty>No employer is currently offering to mentor.</Empty>
+          ) : (
+            <ul className="row-list divide-y divide-line">
+              {openMentorships.map((offer) => {
+                const free = placesLeft(offer, pairingsByOffer.get(offer.id) ?? []);
+                return (
+                  <li
+                    key={offer.id}
+                    className="px-6 py-4 flex flex-wrap items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-ink-950">
+                          {offer.mentorName}
+                        </span>
+                        <span className="text-xs text-ink-500">{offer.mentorRole}</span>
+                        <Badge tone="brand">{mentorshipFormatLabel(offer.format)}</Badge>
+                      </div>
+                      <p className="text-xs text-ink-500 mt-0.5">
+                        {organizationName(offer.businessId)} ·{" "}
+                        {marketName(offer.marketId)}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className="text-xs text-ink-500 whitespace-nowrap">
+                        {free} of {offer.capacity} place{offer.capacity === 1 ? "" : "s"}{" "}
+                        free
+                      </span>
+                      <IntroduceStudent
+                        offerId={offer.id}
+                        mentorName={offer.mentorName}
+                        employerName={organizationName(offer.businessId)}
+                        formatLabel={mentorshipFormatLabel(offer.format)}
+                        placesLeft={free}
+                        students={introducibleIn(offer.marketId).filter(
+                          (student) =>
+                            !(pairingsByOffer.get(offer.id) ?? []).some(
+                              (p) =>
+                                p.studentId === student.id &&
+                                p.status === "introduced",
+                            ),
+                        )}
+                        action={adminIntroduceStudent}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
       </PageSection>
 
       <Card className="p-6">

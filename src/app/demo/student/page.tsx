@@ -132,6 +132,12 @@ export default async function StudentPage() {
   // offers are absent by the repository's definition of "open", so a mentor
   // mid-installation is not someone the student is invited to ask for.
   const mentors = await repositories.mentorshipOffers.openInMarket(actor);
+  const mentorById = new Map(mentors.map((offer) => [offer.id, offer]));
+  // Their own introductions, live ones only: a mentorship that has run its
+  // course is not something to chase.
+  const introductions = (await repositories.mentorshipPairings.list(actor)).filter(
+    (pairing) => pairing.status === "introduced",
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 pb-16 space-y-8">
@@ -497,10 +503,12 @@ export default async function StudentPage() {
           {/* -------------------------------------------------------------- */}
           {/* Employers offering time rather than a placement                 */}
           {/*                                                                 */}
-          {/* Read-only, and no "request" button, because there is no pairing */}
-          {/* record behind it — the college makes the introduction. A button */}
-          {/* that submitted nothing would be worse than the sentence saying  */}
-          {/* who to ask.                                                     */}
+          {/* Read-only, and no "request" button: the college or an           */}
+          {/* administrator makes the introduction, because nothing else      */}
+          {/* stands between an adult and a student on this form (Q22). What  */}
+          {/* is new is that an introduction now leaves a record, so a student */}
+          {/* can see they have one rather than wait on an email they may     */}
+          {/* have missed.                                                    */}
           {/* -------------------------------------------------------------- */}
           {mentors.length > 0 && (
             <Card>
@@ -510,6 +518,32 @@ export default async function StudentPage() {
                 title="Mentors in your market"
                 subtitle="Employers offering time — no application, no credit"
               />
+              {introductions.length > 0 && (
+                <div className="px-6 pt-4">
+                  <div className="rounded-card border border-brand-200 bg-brand-50 px-4 py-3">
+                    <h4 className="text-sm font-semibold text-ink-950">
+                      {introductions.length === 1
+                        ? "You have been introduced to a mentor"
+                        : `You have been introduced to ${introductions.length} mentors`}
+                    </h4>
+                    <ul className="mt-1.5 space-y-1">
+                      {introductions.map((pairing) => {
+                        const offer = mentorById.get(pairing.offerId);
+                        return (
+                          <li key={pairing.id} className="text-xs text-ink-600">
+                            <strong className="text-ink-950">
+                              {offer?.mentorName ?? "A mentor"}
+                            </strong>{" "}
+                            at {organizationName(pairing.businessId)} — they are
+                            expecting you to make contact.
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               <ul className="row-list divide-y divide-line">
                 {mentors.map((offer) => (
                   <li key={offer.id} className="px-6 py-4">

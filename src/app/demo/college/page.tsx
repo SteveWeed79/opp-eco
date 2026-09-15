@@ -21,19 +21,25 @@ import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { availableTransitions, isTerminal } from "@/domain/workflow";
 import { postingMachine, studentMachine } from "@/domain/lifecycle";
-import { mentorshipFormatLabel } from "@/domain/mentorship";
+import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
+import { IntroduceStudent } from "@/components/IntroduceStudent";
+import { IntroductionOutcome } from "@/components/IntroductionOutcome";
 import {
   postingLifecycleAsCollege,
   studentLifecycle,
 } from "@/app/_actions/lifecycle";
-import { postingTotalHours, type Posting } from "@/domain/types";
+import { postingTotalHours, type MentorshipPairing, type Posting } from "@/domain/types";
 import {
   TransitionActions,
   POSTING_CONFIRM,
   STUDENT_CONFIRM,
 } from "@/components/TransitionActions";
 import { platformTheme } from "@/theme/theme";
-import { collegeTransition } from "./actions";
+import {
+  collegeCloseIntroduction,
+  collegeIntroduceStudent,
+  collegeTransition,
+} from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
 import { WeeklyRecord } from "./WeeklyRecord";
 import { opportunityPath } from "@/routes";
@@ -67,6 +73,44 @@ export default async function CollegePage() {
   // The employers currently offering time. The college is told when one is
   // made and the message links here, so this is the page that has to show it.
   const mentors = await repositories.mentorshipOffers.openInMarket(actor);
+
+  // The introductions behind them. Without these the capacity on an offer is a
+  // number nobody can check — which is exactly what this list used to show.
+  const pairings = await repositories.mentorshipPairings.list(actor);
+  const liveByOffer = new Map<string, MentorshipPairing[]>();
+  for (const pairing of pairings) {
+    liveByOffer.set(pairing.offerId, [
+      ...(liveByOffer.get(pairing.offerId) ?? []),
+      pairing,
+    ]);
+  }
+
+  /**
+   * Who the college can put in front of a mentor.
+   *
+   * Verified only, and that is the safeguarding rule rather than a filter for
+   * tidiness: mentorship has no supervisor, no timesheet and no board
+   * interview behind it, so the college's own verification is the only check
+   * standing between an adult and a student.
+   */
+  const live = pairings.filter((p) => p.status === "introduced");
+  // Resolved from the roster this page already read, rather than a second
+  // query per row.
+  const studentNames = new Map(
+    (await repositories.students.list(actor)).map((s) => [s.id, s.name]),
+  );
+  const studentName = (id: string) => studentNames.get(id) ?? "A student";
+  const mentorNames = new Map(mentors.map((offer) => [offer.id, offer.mentorName]));
+  const mentorName = (offerId: string) => mentorNames.get(offerId) ?? "a mentor";
+
+  const introducible = (await repositories.students.list(actor))
+    .filter((student) => student.status === "verified")
+    .map((student) => ({
+      id: student.id,
+      name: student.name,
+      programOfStudy: student.programOfStudy,
+      classStanding: student.classStanding,
+    }));
 
   /**
    * Publication moves the college may make on a posting right now.
@@ -545,18 +589,80 @@ export default async function CollegePage() {
                       {offer.description}
                     </p>
                   </div>
-                  <span className="text-xs text-ink-500 whitespace-nowrap">
-                    Up to {offer.capacity} at once
-                  </span>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <span className="text-xs text-ink-500 whitespace-nowrap">
+                      {placesLeft(offer, liveByOffer.get(offer.id) ?? [])} of{" "}
+                      {offer.capacity} place
+                      {offer.capacity === 1 ? "" : "s"} free
+                    </span>
+                    <IntroduceStudent
+                      offerId={offer.id}
+                      mentorName={offer.mentorName}
+                      employerName={organizationName(offer.businessId)}
+                      formatLabel={mentorshipFormatLabel(offer.format)}
+                      placesLeft={placesLeft(offer, liveByOffer.get(offer.id) ?? [])}
+                      students={introducible.filter(
+                        (student) =>
+                          !(liveByOffer.get(offer.id) ?? []).some(
+                            (p) =>
+                              p.studentId === student.id && p.status === "introduced",
+                          ),
+                      )}
+                      action={collegeIntroduceStudent}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
           )}
+
+          {/* The introductions themselves. A place is spoken for until one of  */}
+          {/* these is closed, so this is the part that has to be visible —     */}
+          {/* an employer's capacity drains to nothing otherwise.               */}
+          {live.length > 0 && (
+            <div className="px-6 pb-2">
+              {/* Every live one in this market, not only this college's — an
+                  administrator can introduce too, and a college that could not
+                  see those would double-book a mentor's last place. */}
+              <h4 className="text-xs font-bold text-ink-500 uppercase tracking-widest mb-2">
+                Introductions in flight
+              </h4>
+              <ul className="row-list divide-y divide-line border border-line rounded-card">
+                {live.map((pairing) => (
+                  <li
+                    key={pairing.id}
+                    className="px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink-950">
+                        {studentName(pairing.studentId)}
+                      </p>
+                      <p className="text-xs text-ink-500 mt-0.5">
+                        {mentorName(pairing.offerId)} ·{" "}
+                        {organizationName(pairing.businessId)} · introduced{" "}
+                        {new Date(pairing.introducedOn).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <IntroductionOutcome
+                      pairingId={pairing.id}
+                      studentName={studentName(pairing.studentId)}
+                      action={collegeCloseIntroduction}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="px-6 pb-5">
             <Assumption>
-              Who starts a pairing is unsettled (Q22), so this is a list to introduce
-              students from rather than a queue to work. Nothing here records that a
-              mentorship happened.
+              The college and an administrator make introductions; a student cannot
+              ask a mentor directly, because nothing else stands between an adult
+              and a student here (Q22). Closing one records whether it happened and
+              gives the mentor their place back.
             </Assumption>
           </div>
         </Card>

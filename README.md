@@ -84,9 +84,9 @@ src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  PII disclosure. No UI, no database.
 src/auth/        Session resolution behind a provider interface. Replacing
                  simulated sign-on touches this and nothing else.
-src/data/        Repository contracts + in-memory seeded implementation;
-                 Store/UnitOfWork for writes; Postgres schema and SQL
-                 scoping alongside, not connected.
+src/data/        Repository contracts, two implementations behind them — the
+                 in-memory fixtures and Postgres — and the Store/UnitOfWork
+                 for writes. One environment variable picks which.
 src/services/    Write paths (executeTransition for existing records,
                  creation for new ones), input validation, notification
                  dispatch and the outbox that records it.
@@ -101,13 +101,13 @@ src/app/         `/` and the venture pages; `/demo/*` per portal. One shell
 
 Properties worth knowing:
 
-- **No database.** Everything runs off seeded fixtures. The Postgres schema and its scoping SQL are written and tested; connecting is an adapter swap.
+- **Two data layers, one contract.** With `DATABASE_URL` unset everything runs off the seeded fixtures — that is the demo, the unit suite, and a zero-configuration checkout. Set it and the same screens read Postgres, through the same repository interfaces, with writes refused unless `DATABASE_READ_ONLY=false`. A CI job applies the schema, seeds it, and asserts the two layers return the same records for every accessor and every role; see [Running on Postgres](#running-on-postgres).
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
 - **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
-- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
+- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. The queue is part of the data layer — an array on the fixtures, `notification_outbox` on Postgres — and the dispatcher drains whichever one it was handed. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 - **A portal is named zones, not a stack of cards.** Every page was a flat run of identical `Card`s, so reading order carried no rank — a queue blocking a placement, a reference table, and a settings panel touched once a year all looked the same. Two things followed, and both were live: anything appended to the end became invisible, and the college's brand picker read exactly like a queue. `PageSection` groups a page into two to four named zones, and its `settings` tone recesses configuration behind a rule, because a page that gives equal weight to "four students are waiting on you" and "pick a brand colour" has not decided what it is for.
 
@@ -163,6 +163,16 @@ Two consequences worth stating plainly:
 - **No college review.** A posting waits at `pending_review` because review is what makes it credit-bearing — the college is underwriting an academic claim. A mentorship carries no credit, no wage, and no public money, so there is nothing to underwrite, and a queue in front of the one offer an employer makes on impulse would only lose it. The college is still *told*, because it is the party that makes the introduction.
 - **Vetting still applies, and does more work here.** Mentorship puts an adult in front of a student with no supervisor, no timesheet, and no board interview in between. Every check that surrounds a placement is absent, which leaves "is this employer who they say they are" carrying the whole load — so `canTransact` gates creating an offer exactly as it gates posting a job.
 
+### The introduction
+
+**The college or an administrator introduces a student; the student does not ask and the employer does not accept.** That is the same argument as vetting, applied to the other side: with nothing standing between an adult and a student on this form, the first contact runs through the party that knows both. A student requesting directly would put an unvetted first contact in exactly the place this model is most exposed, and would hand employers a second inbox to work.
+
+For a long time the introduction was the thing that *didn't* happen here — the college's mentor list was visible and inert, and the pairing lived in somebody's email. Two things were lost with it. An employer declaring "up to two students at once" was declaring a number nothing could check, and a mentorship that did happen counted toward nothing.
+
+So an introduction is a record. A live one spends one of the mentor's declared places; closing it — *it happened*, or *it did not* — gives the place back, which is what stops a year of successful mentorships silently draining an employer's capacity to zero. Closing requires a note from whoever records it: "it did not happen" with no reason tells the college nothing about whether to try that mentor again, and "it happened" with no reason is the only evidence this platform will ever hold that a mentorship took place.
+
+Who may do what follows from that. The employer normally closes an introduction, being the only party who knows whether the student turned up; the college and the administrator can too, because one nobody ever closes holds a mentor's place open forever. Only verified students can be introduced. The board sees none of it — it reimburses placements, and a mentorship carries no wage, no credit and no public money, so who was introduced to whom is not its business.
+
 `paused` exists so that a busy quarter is not a resignation. An offer whose only exit was `withdrawn` would take an employer off the mentor list permanently the first time they were short-handed, and a paused offer disappears from the student's list in the same request it is paused — an employer still listed after saying they could not take anyone is fielding introductions they just declined.
 
 ## Hours
@@ -214,6 +224,110 @@ Guaranteeing a readable result is half the job; the other half is saying so. A c
 
 **Nothing blocks.** A school knows its own brand, and refusing a legitimate institutional colour is worse than explaining the trade-off. The seeded college is green and gold — an extremely common institutional pairing, and one that collides twice. It was kept rather than swapped for something that reports clean: a checker that only ever produces good news on the data it ships with has not been tested against anything.
 
+## Running on Postgres
+
+The app has two data layers behind one set of repository contracts, and
+`DATABASE_URL` is the whole switch.
+
+| `DATABASE_URL` | Reads | Writes |
+|---|---|---|
+| unset | Seeded fixtures in the server process | Land in the fixture arrays |
+| set | Postgres | **Refused**, unless `DATABASE_READ_ONLY=false` |
+
+Read-only is the default whenever a database is configured, because pointing
+the demo at real Postgres and letting anyone who opens it mutate what everyone
+else is looking at are different decisions. The seed script bypasses the guard:
+loading fixtures is an operator action, not a write the web application makes.
+
+**The driver is chosen from the host, not configured.** A `.neon.tech` URL
+opens through Neon's serverless driver over a WebSocket — which is what a
+serverless deployment wants and the only thing that reaches Neon. Every other
+host opens through `pg` over an ordinary socket, which is the only thing that
+reaches a local or self-hosted Postgres. `DATABASE_DRIVER` overrides the
+inference for a Neon-compatible proxy that does not carry the hostname.
+
+Locally, against any Postgres you have:
+
+```bash
+createdb oppeco
+export DATABASE_URL=postgresql://you@localhost:5432/oppeco
+npm run db:verify     # prove the connection and report the driver
+npm run db:migrate    # apply the schema
+npm run db:seed       # load the same fixtures the demo runs on
+DATABASE_READ_ONLY=false npm run dev
+```
+
+On Neon, use the **direct** connection string for migrations — DDL through a
+connection pooler can land on a different session than the one holding the
+transaction — and the **pooler** host for the running app.
+
+### Pointing a deployment at it
+
+Four variables, in this order:
+
+| Variable | Value | Why |
+|---|---|---|
+| `DATABASE_URL` | the **pooler** host | A serverless deployment opens a connection per invocation; the direct endpoint runs out of backends on a free tier |
+| `DATABASE_READ_ONLY` | leave unset | Refusing writes is the default, and a shared demo is exactly the case it exists for. Set `false` only when the deployment is meant to be mutated |
+| `DATABASE_MAX_CONNECTIONS` | leave unset | 10 suits a free tier |
+| `EMAIL_REDIRECT_TO` | your own address | Unrelated to the database, and the thing to get wrong once |
+
+Migrate and seed from a terminal against the **direct** host before the first
+deploy — `npm run db:migrate && npm run db:seed` — rather than from the running
+app, which has no path that applies a schema and should not have one.
+
+A read-only deployment reads Postgres and refuses every write with a sentence
+saying so, rather than a dead button: a disabled control is a claim the page
+makes and a direct POST ignores, so the refusal lives in the one layer every
+write passes through. Nothing is dispatched from the notification queue there
+either — claiming a message marks it sent, and a deployment that cannot write
+must not mark someone else's messages as sent.
+
+### Proving the two layers agree
+
+Everything in `src/data/postgres` is unit-tested against a recording client,
+which proves the statement text and nothing about whether Postgres accepts it.
+`src/data/postgres/integration.test.ts` closes that gap: it applies the
+migrations, loads the fixtures, and then asserts that every repository
+accessor, for every role, returns the same records as the in-memory layer
+reading the same fixtures — plus the write path, optimistic concurrency, and
+rollback.
+
+```bash
+TEST_DATABASE_URL=postgresql://you@localhost:5432/oppeco_test \
+  npx vitest run src/data/postgres/integration.test.ts
+```
+
+It skips without `TEST_DATABASE_URL`, so a checkout with no database still runs
+the whole suite green; CI runs it against a container on every change. **The
+database it names is truncated and reseeded** — never point it at one whose
+contents matter.
+
+Running the **whole e2e suite against Postgres** is the other half, and worth
+doing after any change to the data layer: point `DATABASE_URL` at a seeded
+local database, set `DATABASE_READ_ONLY=false`, and run `npm run test:e2e`.
+Every flow the demo has passes on either backend.
+
+The first run of that suite found six faults that no amount of TypeScript would
+have caught: a `citext` column whose extension was never created, two seeded
+foreign keys pointing at users that do not exist, two fixture pairs violating
+the app's own one-application-per-posting rule, a verification the schema
+refused because the acting user never reached the `UPDATE`, and a market scoped
+by `markets.market_id` — a column that table does not have. Parity found two
+more in the *other* direction: the in-memory layer let a signed-in student read
+every classmate's application and every classmate's student record, which the
+SQL layer had always refused.
+
+Driving the browser against Postgres found the two that only a running app
+shows. Every notification to an employer, a college or a board was addressed to
+an organization — most employers have no user account — and the outbox column
+referenced `users`, so the insert failed and took the state change beside it
+down. And `outbox.ts` drained the in-memory queue directly, so once that was
+fixed the rows landed in `notification_outbox` and were never sent: the audit
+log said the board was told, the outbox screen said nothing had been sent, and
+both were right. The queue is now a seam on the backend, and the dispatcher
+drains whichever one the data layer filled.
+
 ## Email
 
 Messages send through [Resend](https://resend.com) when configured, and are recorded either way.
@@ -244,6 +358,5 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
-- **Pairing a student with a mentor.** An employer can offer, and a student can see who is offering; the introduction itself runs through the college off-platform. A pairing record is what would let the mentor list show remaining capacity honestly rather than a declared number, and it needs a decision first about whether a student asks the mentor or the college — which is the difference between a request queue an employer has to work and an intermediary who already knows both people.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
+import { closeIntroduction } from "@/app/_actions/mentorship";
 import { actorForPortal } from "@/auth/session";
 import { reviewHours } from "@/services/timesheet";
 import { reviewHoursInput, validate } from "@/services/validation";
@@ -52,7 +53,7 @@ export async function reviewPlacementHours(
     };
   }
 
-  const result = await reviewHours(actor, input.data);
+  const result = await attemptWrite(() => reviewHours(actor, input.data));
   if (!result.ok) {
     logger.warn("hours.review_refused", { code: result.code });
     return { ok: false, error: result.error };
@@ -68,4 +69,20 @@ export async function reviewPlacementHours(
   revalidatePath("/student");
   revalidatePath("/board");
   return { ok: true };
+}
+
+
+/**
+ * Say whether an introduction happened.
+ *
+ * The employer's own record and nobody else's: they are the only party who
+ * knows whether the student turned up. Closing it gives the mentor's place
+ * back, which is what keeps declared capacity honest over a year.
+ */
+export async function businessCloseIntroduction(
+  pairingId: unknown,
+  to: unknown,
+  note: unknown,
+): Promise<ActionResult> {
+  return closeIntroduction("business", pairingId, to, note);
 }

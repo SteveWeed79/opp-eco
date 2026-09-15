@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { CLEARANCE_WINDOW_DAYS } from "@/domain/eligibility";
 import {
-  CLEARANCE_WINDOW_DAYS,
   cents,
   dateOnly,
   dollars,

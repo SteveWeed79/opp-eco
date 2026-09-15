@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Application, TimeEntry } from "./types";
 import {
   OPEN_WEEK_WINDOW,
+  byWeekAscending,
   byWeekDescending,
   claimedWeeks,
   openWeeksFor,
@@ -276,6 +277,37 @@ describe("which weeks are still open to log", () => {
 });
 
 describe("display order", () => {
+  it("breaks a tied week by id, not by the order the rows arrived in", () => {
+    // Two placements can claim the same week, and which of them sorts first
+    // must not depend on where the rows came from. It did: a stable sort left
+    // it to the fixture array on one data layer and to the database's own
+    // collation on the other — `en_US.UTF-8` ignores punctuation and puts
+    // `te-app-20-1` first, `C.UTF-8` puts `te-app-2-1` first. The same list,
+    // in two orders, depending on how a database was created.
+    const week = "2026-03-09";
+    const forward = [
+      entry({ id: "te-app-2-1", weekStarting: week }),
+      entry({ id: "te-app-20-1", weekStarting: week }),
+    ].sort(byWeekDescending);
+    const reversed = [
+      entry({ id: "te-app-20-1", weekStarting: week }),
+      entry({ id: "te-app-2-1", weekStarting: week }),
+    ].sort(byWeekDescending);
+
+    expect(forward.map((e) => e.id)).toEqual(["te-app-2-1", "te-app-20-1"]);
+    expect(reversed.map((e) => e.id)).toEqual(forward.map((e) => e.id));
+  });
+
+  it("puts the oldest week first in the review queue, ties included", () => {
+    const queue = [
+      entry({ id: "te-app-20-1", weekStarting: "2026-03-09" }),
+      entry({ id: "te-app-2-1", weekStarting: "2026-03-09" }),
+      entry({ id: "te-b", weekStarting: "2026-03-02" }),
+    ].sort(byWeekAscending);
+
+    expect(queue.map((e) => e.id)).toEqual(["te-b", "te-app-2-1", "te-app-20-1"]);
+  });
+
   it("puts the most recent week first", () => {
     const weeks = [
       entry({ id: "a", weekStarting: "2026-02-23" }),

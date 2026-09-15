@@ -4,16 +4,29 @@
 -- a name written here is a name that survives the next rename — which is
 -- exactly what happened to the last one.
 --
--- Written against the domain types in src/domain/types.ts. The app does not
--- connect to a database yet; this exists so the data model is settled and
--- reviewable, and so switching from fixtures to Postgres is an adapter swap
--- rather than a design exercise.
+-- Written against the domain types in src/domain/types.ts, which remain the
+-- source of truth: the app runs on in-memory fixtures with DATABASE_URL unset,
+-- and on this schema with it set.
 --
 -- The guiding rule: invariants the domain layer enforces in TypeScript are
 -- restated here as constraints. A rule enforced in only one of the two places
 -- is a rule that will eventually be violated by the other.
 
 BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Extensions.
+--
+-- `citext` backs the case-insensitive uniqueness of an email address, which is
+-- a real constraint rather than a preference: addresses are compared
+-- case-insensitively by every mail system, so a schema that lets
+-- Dana@apex.example and dana@apex.example both exist has two accounts for one
+-- person. Postgres ships the type but does not load it into a database until
+-- asked, on Neon as everywhere else, so the schema that depends on it is the
+-- schema that must create it.
+-- ---------------------------------------------------------------------------
+
+CREATE EXTENSION IF NOT EXISTS citext;
 
 -- ---------------------------------------------------------------------------
 -- Enumerations. These mirror the TypeScript unions exactly; adding a value in
@@ -573,16 +586,31 @@ CREATE TRIGGER audit_events_no_update
 -- commit is a placement that quietly dies.
 -- ---------------------------------------------------------------------------
 
+-- A recipient is a user **or** an organization, never both and never neither.
+--
+-- Most employers in a market are a name and an email long before anyone from
+-- that company has an account, and the platform still has to tell them their
+-- candidate cleared — `notification-policy.ts` addresses those messages to the
+-- organization and dispatch reads its published contact. A single
+-- `recipient_id REFERENCES users(id)` could not hold that, so every message to
+-- an employer, a college or a board failed on the foreign key and took its
+-- whole transaction — the application, the booking, the timesheet — down with
+-- it. Two nullable columns with exactly one filled says what is true instead.
 CREATE TABLE notification_outbox (
-  id           bigserial PRIMARY KEY,
-  market_id    text NOT NULL REFERENCES markets(id) ON DELETE RESTRICT,
-  recipient_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind         text NOT NULL,
-  payload      jsonb NOT NULL DEFAULT '{}',
-  created_at   timestamptz NOT NULL DEFAULT now(),
-  dispatched_at timestamptz,
-  attempts     integer NOT NULL DEFAULT 0,
-  last_error   text
+  id                        bigserial PRIMARY KEY,
+  market_id                 text NOT NULL REFERENCES markets(id) ON DELETE RESTRICT,
+  recipient_user_id         text REFERENCES users(id) ON DELETE CASCADE,
+  recipient_organization_id text REFERENCES organizations(id) ON DELETE CASCADE,
+  kind                      text NOT NULL,
+  payload                   jsonb NOT NULL DEFAULT '{}',
+  created_at                timestamptz NOT NULL DEFAULT now(),
+  dispatched_at             timestamptz,
+  attempts                  integer NOT NULL DEFAULT 0,
+  last_error                text,
+
+  CONSTRAINT one_recipient CHECK (
+    num_nonnulls(recipient_user_id, recipient_organization_id) = 1
+  )
 );
 
 CREATE INDEX notification_outbox_pending_idx ON notification_outbox (created_at)

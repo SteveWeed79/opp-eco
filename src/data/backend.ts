@@ -16,13 +16,17 @@
  */
 
 import { repositories as memoryRepositories } from "./memory";
-import { memoryStore } from "./memory-store";
+import { memoryNotificationQueue, memoryStore } from "./memory-store";
 import type { Repositories } from "./repositories";
-import type { Store } from "./store";
+import type { NotificationQueue, Store } from "./store";
 import { databaseConfig } from "./postgres/config";
 import { postgresRepositories } from "./postgres/repositories";
 import { postgresStore } from "./postgres/store";
-import { postgresClient } from "./postgres/neon";
+import {
+  postgresNotificationQueue,
+  readOnlyNotificationQueue,
+} from "./postgres/outbox";
+import { postgresClient } from "./postgres/pool";
 
 /**
  * Raised when a write is attempted against a read-only deployment.
@@ -61,6 +65,15 @@ export function readOnlyStore(): Store {
 export interface Backend {
   repositories: Repositories;
   store: Store;
+  /**
+   * Where committed transactions leave their notifications.
+   *
+   * Resolved here with everything else, because it belongs to the data layer:
+   * the fixtures queue in an array, Postgres in `notification_outbox`. The
+   * dispatcher used to import the array directly, which on a database
+   * deployment left every message written and none sent.
+   */
+  notifications: NotificationQueue;
   /** True when reads come from Postgres rather than the fixtures. */
   usesDatabase: boolean;
   /** True when writes are refused. */
@@ -74,6 +87,7 @@ function resolve(): Backend {
     return {
       repositories: memoryRepositories,
       store: memoryStore,
+      notifications: memoryNotificationQueue,
       usesDatabase: false,
       readOnly: false,
     };
@@ -83,6 +97,9 @@ function resolve(): Backend {
   return {
     repositories: postgresRepositories(client),
     store: config.readOnly ? readOnlyStore() : postgresStore(client),
+    notifications: config.readOnly
+      ? readOnlyNotificationQueue(client)
+      : postgresNotificationQueue(client),
     usesDatabase: true,
     readOnly: config.readOnly,
   };
@@ -120,4 +137,11 @@ export const repositories: Repositories = new Proxy({} as Repositories, {
 
 export const store: Store = {
   transaction: (work) => backend().store.transaction(work),
+};
+
+/** The queue the dispatcher drains, whichever data layer filled it. */
+export const notificationQueue: NotificationQueue = {
+  take: () => backend().notifications.take(),
+  requeue: (item, error) => backend().notifications.requeue(item, error),
+  pending: (marketId) => backend().notifications.pending(marketId),
 };

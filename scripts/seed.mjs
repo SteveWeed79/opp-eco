@@ -9,50 +9,26 @@
  * is what the alias hook alongside this file exists for.
  *
  * Idempotent: every table is truncated first, so running it twice leaves the
- * same database rather than a duplicated one. It writes through raw SQL and not
+ * same database rather than a duplicated one. The connection comes from
+ * `pool.mjs`, so it reaches whatever `DATABASE_URL` names — Neon, a container
+ * in CI, or a local cluster. It writes through raw SQL and not
  * through the Store, deliberately — the Store is the application's write path
  * and is read-only by default, while loading fixtures is an operator action.
  */
 
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { register } from "node:module";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+// Registers the TypeScript alias hook the fixture import below depends on, and
+// loads the env files, before this module's body runs.
+import { connect } from "./pool.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-register(pathToFileURL(join(ROOT, "scripts", "ts-alias-hook.mjs")));
-
-for (const file of [".env.local", ".env"]) {
-  const path = join(ROOT, file);
-  if (existsSync(path)) {
-    try {
-      process.loadEnvFile(path);
-    } catch {
-      // An explicit DATABASE_URL should still work past a malformed env file.
-    }
-  }
-}
 
 const seed = await import(pathToFileURL(join(ROOT, "src/data/seed.ts")).href);
 const session = await import(pathToFileURL(join(ROOT, "src/data/session.ts")).href);
 
 /** Dollars to cents, matching `rows.ts` on the read side. */
 const cents = (value) => (value === undefined || value === null ? null : Math.round(value * 100));
-
-function connect() {
-  const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) {
-    console.error(
-      "DATABASE_URL is not set. Put your Neon connection string in .env.local first.",
-    );
-    process.exit(1);
-  }
-  if (!neonConfig.webSocketConstructor) {
-    neonConfig.webSocketConstructor = globalThis.WebSocket;
-  }
-  return new Pool({ connectionString, max: 1 });
-}
 
 /**
  * Tables in dependency order, truncated in one statement.
@@ -70,6 +46,7 @@ export const TABLES = [
   "time_entries",
   "applications",
   "interview_slots",
+  "mentorship_pairings",
   "mentorship_offers",
   "postings",
   "students",
@@ -169,6 +146,8 @@ export async function seedInto(tx) {
     );
   }
 
+  const collegeUserId = session.contextFor("college").membership.userId;
+
   for (const student of seed.students) {
     await insert(
       `INSERT INTO students (id, market_id, user_id, college_id, program_of_study,
@@ -193,8 +172,10 @@ export async function seedInto(tx) {
         student.verifiedOn,
         // The schema requires an attributable verification. The domain's
         // `Student` does not carry who did it, so the seed attributes it to the
-        // college account that would have — see `saveStudent` in the store.
-        student.verifiedOn ? "u-college" : null,
+        // college account that would have — read from the same membership the
+        // app signs in as, because a literal id here was one that no `users`
+        // row had and every insert failed on the foreign key.
+        student.verifiedOn ? collegeUserId : null,
       ],
     );
   }
@@ -249,6 +230,28 @@ export async function seedInto(tx) {
         offer.capacity,
         offer.status,
         offer.createdOn,
+      ],
+    );
+  }
+
+  // After the offers they point at, and after the students and users they
+  // name — a pairing has a foreign key to all four.
+  for (const pairing of seed.mentorshipPairings) {
+    await insert(
+      `INSERT INTO mentorship_pairings (id, market_id, offer_id, business_id,
+         student_id, introduced_by, introduced_on, status, outcome_note, outcome_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        pairing.id,
+        pairing.marketId,
+        pairing.offerId,
+        pairing.businessId,
+        pairing.studentId,
+        pairing.introducedByUserId,
+        pairing.introducedOn,
+        pairing.status,
+        pairing.outcomeNote ?? null,
+        pairing.outcomeOn ?? null,
       ],
     );
   }
@@ -350,7 +353,7 @@ export async function seedInto(tx) {
         award.status,
         award.courseMapping,
         award.grantedOn,
-        award.grantedOn ? "u-college" : null,
+        award.grantedOn ? collegeUserId : null,
       ],
     );
 
@@ -394,7 +397,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 async function main() {
-const pool = connect();
+const pool = await connect();
 try {
   const client = await pool.connect();
   try {
@@ -421,6 +424,7 @@ try {
        (SELECT count(*) FROM applications)       AS applications,
        (SELECT count(*) FROM time_entries)       AS time_entries,
        (SELECT count(*) FROM mentorship_offers)  AS mentorship_offers,
+       (SELECT count(*) FROM mentorship_pairings) AS mentorship_pairings,
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM audit_events)       AS audit_events`,

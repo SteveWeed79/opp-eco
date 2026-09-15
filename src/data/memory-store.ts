@@ -15,6 +15,8 @@ import * as seed from "./seed";
 import {
   ConcurrencyError,
   type NotificationIntent,
+  type NotificationQueue,
+  type QueuedNotification,
   type Store,
   type UnitOfWork,
 } from "./store";
@@ -29,6 +31,28 @@ let auditSequence = 1000;
  * rollback has told someone about work that did not happen.
  */
 export const pendingNotifications: NotificationIntent[] = [];
+
+/**
+ * The array above, behind the queue contract.
+ *
+ * No ids: an in-memory queue has nothing to address a row by, and the
+ * dispatcher never needs one because `requeue` simply pushes the intent back.
+ */
+export const memoryNotificationQueue: NotificationQueue = {
+  async take() {
+    return pendingNotifications
+      .splice(0, pendingNotifications.length)
+      .map((intent) => ({ id: null, intent }));
+  },
+  async requeue(item: QueuedNotification) {
+    pendingNotifications.push(item.intent);
+  },
+  async pending(marketId: string | null) {
+    return marketId
+      ? pendingNotifications.filter((n) => n.marketId === marketId)
+      : [...pendingNotifications];
+  },
+};
 
 class MemoryUnitOfWork implements UnitOfWork {
   /** Staged so nothing is visible until the whole unit succeeds. */
@@ -65,11 +89,38 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
-  saveStudent(student: import("@/domain/types").Student) {
+  /**
+   * `verifiedBy` is accepted and dropped: the fixtures store a `Student`, which
+   * has no field for it. Taking the argument anyway keeps one contract for both
+   * stores, so the Postgres path cannot be the only one a call site remembers
+   * to satisfy.
+   */
+  saveStudent(
+    student: import("@/domain/types").Student,
+    verifiedBy: string | null,
+  ) {
+    void verifiedBy;
     const index = seed.students.findIndex((s) => s.id === student.id);
     if (index === -1) throw new Error(`Unknown student ${student.id}`);
     this.effects.push(() => {
       seed.students[index] = student;
+    });
+  }
+
+  createMentorshipPairing(pairing: import("@/domain/types").MentorshipPairing) {
+    if (seed.mentorshipPairings.some((p) => p.id === pairing.id)) {
+      throw new Error(`Mentorship pairing ${pairing.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.mentorshipPairings.push(pairing);
+    });
+  }
+
+  saveMentorshipPairing(pairing: import("@/domain/types").MentorshipPairing) {
+    const index = seed.mentorshipPairings.findIndex((p) => p.id === pairing.id);
+    if (index === -1) throw new Error(`Unknown mentorship pairing ${pairing.id}`);
+    this.effects.push(() => {
+      seed.mentorshipPairings[index] = pairing;
     });
   }
 

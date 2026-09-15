@@ -26,6 +26,20 @@ export function marketScope(actor: ActorContext, table: string): Sql {
 }
 
 /**
+ * Restrict the `markets` table to the actor's market.
+ *
+ * Separate from `marketScope` because a market has no `market_id`: its own id
+ * *is* the market. Composing the generic rule here produced
+ * `markets.market_id = $1`, which is not a column — so every market read by a
+ * college, a board, a business or a student failed outright against a real
+ * database while passing every test that only inspected the generated text.
+ */
+export function ownMarketScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "admin") return sql`TRUE`;
+  return sql`markets.id = ${actor.membership.marketId}`;
+}
+
+/**
  * Restrict postings to the ones a business owns.
  *
  * Colleges are absent on purpose: a college operates its market and must see
@@ -56,6 +70,34 @@ export function applicationScope(actor: ActorContext): Sql {
   if (actor.membership.role === "student") {
     parts.push(
       sql`applications.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
+/**
+ * Restrict introductions to the parties with a reason to read one.
+ *
+ * The employer's own, the student's own, the market's for a college or an
+ * administrator — and **nothing at all for the board**, which reimburses
+ * placements and has no workflow reason to know who was introduced to whom.
+ * `FALSE` rather than an omitted clause, so the refusal is in the statement
+ * where a reviewer can see it.
+ */
+export function mentorshipPairingScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "board") return sql`FALSE`;
+
+  const parts: Sql[] = [marketScope(actor, "mentorship_pairings")];
+  if (actor.membership.role === "business") {
+    parts.push(
+      sql`mentorship_pairings.business_id = ${actor.membership.organizationId}`,
+    );
+  }
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`mentorship_pairings.student_id IN (
         SELECT id FROM students WHERE user_id = ${actor.user.id}
       )`,
     );

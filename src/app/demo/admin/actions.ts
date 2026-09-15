@@ -1,6 +1,7 @@
 "use server";
 
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { overrideInput, validate } from "@/services/validation";
 
 /**
@@ -34,4 +35,30 @@ export async function adminOverride(
     },
     { label: "admin.override" },
   );
+}
+
+
+/**
+ * The administrator makes an introduction.
+ *
+ * Same act as the college's, and deliberately not an override: an
+ * administrator introducing a student is the market operator doing the
+ * operator's job, not bypassing a rule. Every check the college's path runs,
+ * this one runs — the only difference is that an administrator is not confined
+ * to one market.
+ */
+export async function adminIntroduceStudent(
+  offerId: unknown,
+  studentId: unknown,
+): Promise<ActionResult> {
+  return makeIntroduction("admin", offerId, studentId);
+}
+
+/** Close an introduction, for the same unstick-the-market reason. */
+export async function adminCloseIntroduction(
+  pairingId: unknown,
+  to: unknown,
+  note: unknown,
+): Promise<ActionResult> {
+  return closeIntroduction("admin", pairingId, to, note);
 }
