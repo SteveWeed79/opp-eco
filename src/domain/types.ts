@@ -731,6 +731,49 @@ export interface SignInCode {
   consumedAt: string | null;
 }
 
+/**
+ * Somebody's enrolled authenticator.
+ *
+ * The secret is held in a form the server can compute with, unlike every other
+ * credential here — TOTP is shared, so there is no hash that would still let
+ * the server produce the same six digits the phone does. See
+ * `0011_second_factor.sql` for what follows from that.
+ */
+export interface TotpEnrolment {
+  userId: string;
+  /** Base32, as the authenticator app was given it. */
+  secret: string;
+  createdAt: string;
+  /** Null until they have proved they can read a code from it. */
+  confirmedAt: string | null;
+  /** The last counter accepted, so a code cannot be replayed inside its window. */
+  lastCounter: number | null;
+}
+
+/** One way back in from a lost phone. Single use, stored as a hash. */
+export interface RecoveryCode {
+  id: string;
+  userId: string;
+  codeHash: string;
+  createdAt: string;
+  usedAt: string | null;
+}
+
+/**
+ * Somebody between the two factors.
+ *
+ * Deliberately not a session: nothing resolves to an actor until both factors
+ * are in, so there is no half-authenticated row for a missing predicate to turn
+ * into a working login.
+ */
+export interface MfaChallenge {
+  id: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+  attempts: number;
+}
+
 // ---------------------------------------------------------------------------
 // Consent
 // ---------------------------------------------------------------------------

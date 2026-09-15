@@ -117,3 +117,19 @@ export function demoSignOnEnabled(env: AuthEnv = process.env): boolean {
 export function anonymousFallbackAllowed(env: AuthEnv = process.env): boolean {
   return authConfig(env).mode === "demo";
 }
+
+
+/**
+ * Whether an administrator must have a second factor before they can sign in.
+ *
+ * Off by default, and that is not laziness. A deployment with the requirement
+ * on and nobody enrolled has locked out the only account that could enrol
+ * anybody — so the order is: stand the deployment up, enrol the administrators,
+ * then turn this on. `verifySignInCode` says exactly that when it refuses.
+ *
+ * Anybody who *has* enrolled is challenged regardless of this flag. Enrolling
+ * is the act of asking to be challenged.
+ */
+export function mfaRequired(env: AuthEnv = process.env): boolean {
+  return env.AUTH_REQUIRE_MFA === "true";
+}

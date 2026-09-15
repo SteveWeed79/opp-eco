@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { KeyRound, Mail } from "lucide-react";
 import { Button, TextField, useToast } from "@/components/ui";
-import { requestCode, submitCode } from "@/auth/actions";
+import { requestCode, submitCode, submitSecondFactor } from "@/auth/actions";
 
 /**
  * Two steps: an address, then the code that arrives at it.
@@ -21,6 +21,9 @@ export function SignInForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
+  /** The first factor passed and the second is owed. */
+  const [secondFactor, setSecondFactor] = useState(false);
+  const [factor, setFactor] = useState("");
   const [refusal, setRefusal] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
@@ -46,9 +49,62 @@ export function SignInForm() {
     if (code.trim().length === 0) return;
     startTransition(async () => {
       const result = await submitCode(email, code);
+      if (result?.secondFactor) {
+        // Not signed in yet: the first factor passed and there is no session
+        // until the second does too.
+        setSecondFactor(true);
+        return;
+      }
       // A success redirects, so reaching here at all means it failed.
       if (result && !result.ok) toast.show("error", result.error ?? "That code is not valid.");
     });
+  }
+
+  function verifySecondFactor() {
+    if (factor.trim().length === 0) return;
+    startTransition(async () => {
+      const result = await submitSecondFactor(factor);
+      if (result && !result.ok) {
+        toast.show("error", result.error ?? "That code is not valid.");
+      }
+    });
+  }
+
+  if (secondFactor) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-ink-700 leading-relaxed">
+          Open your authenticator app and enter the six-digit code. This account
+          holds cross-market data, so it asks for a second factor.
+        </p>
+        <TextField
+          label="Authenticator code"
+          value={factor}
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          maxLength={14}
+          onChange={(event) => setFactor(event.target.value)}
+          hint="Or one of your recovery codes, if the phone is not to hand."
+          onKeyDown={(event) => {
+            if (event.key === "Enter") verifySecondFactor();
+          }}
+        />
+        <Button
+          variant="primary"
+          onClick={verifySecondFactor}
+          disabled={pending || !factor.trim()}
+        >
+          {pending ? "Checking…" : "Sign in"}
+        </Button>
+        <p className="text-xs text-ink-500 flex items-start gap-2 pt-2">
+          <KeyRound className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            A recovery code works here too, and works once. Nothing is signed in
+            until this step passes.
+          </span>
+        </p>
+      </div>
+    );
   }
 
   return (

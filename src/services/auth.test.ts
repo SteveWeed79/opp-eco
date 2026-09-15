@@ -113,7 +113,7 @@ describe("presenting a code", () => {
   it("creates a session for the right person", async () => {
     const result = await signIn();
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    if (result.ok !== true) return;
     expect(result.actor.user.email).toBe(COLLEGE_EMAIL);
     expect(result.actor.membership.role).toBe("college");
     expect(result.token.length).toBeGreaterThan(20);
@@ -169,7 +169,7 @@ describe("presenting a code", () => {
     // cheapest place to make a stolen session on another machine stop working.
     const first = await signIn();
     expect(first.ok).toBe(true);
-    if (!first.ok) return;
+    if (first.ok !== true) return;
 
     const second = await signIn();
     expect(second.ok).toBe(true);
@@ -181,7 +181,7 @@ describe("presenting a code", () => {
 describe("resolving a session", () => {
   it("returns the actor every repository read is scoped by", async () => {
     const signedIn = await signIn();
-    if (!signedIn.ok) throw new Error("sign-in failed");
+    if (signedIn.ok !== true) throw new Error("sign-in failed");
 
     const actor = await resolveSessionToken(signedIn.token, deps);
     expect(actor?.membership.role).toBe("college");
@@ -194,7 +194,7 @@ describe("resolving a session", () => {
 
   it("stops working once the absolute lifetime is up", async () => {
     const signedIn = await signIn();
-    if (!signedIn.ok) throw new Error("sign-in failed");
+    if (signedIn.ok !== true) throw new Error("sign-in failed");
 
     advance(sessionLifetimeFor("college").absoluteMs + 1000);
     expect(await resolveSessionToken(signedIn.token, deps)).toBeNull();
@@ -202,7 +202,7 @@ describe("resolving a session", () => {
 
   it("stops working after an idle stretch, and does not come back", async () => {
     const signedIn = await signIn();
-    if (!signedIn.ok) throw new Error("sign-in failed");
+    if (signedIn.ok !== true) throw new Error("sign-in failed");
 
     advance(sessionLifetimeFor("college").idleMs + 1000);
     expect(await resolveSessionToken(signedIn.token, deps)).toBeNull();
@@ -215,7 +215,7 @@ describe("resolving a session", () => {
 
   it("keeps working while somebody is using it", async () => {
     const signedIn = await signIn();
-    if (!signedIn.ok) throw new Error("sign-in failed");
+    if (signedIn.ok !== true) throw new Error("sign-in failed");
 
     const { idleMs } = sessionLifetimeFor("college");
     for (let i = 0; i < 4; i++) {
@@ -226,7 +226,7 @@ describe("resolving a session", () => {
 
   it("stops working after signing out", async () => {
     const signedIn = await signIn();
-    if (!signedIn.ok) throw new Error("sign-in failed");
+    if (signedIn.ok !== true) throw new Error("sign-in failed");
 
     await endSession(signedIn.token, deps);
     expect(await resolveSessionToken(signedIn.token, deps)).toBeNull();

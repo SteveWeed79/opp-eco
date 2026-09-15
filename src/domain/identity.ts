@@ -100,6 +100,36 @@ export function isPrivileged(role: ActorRole): boolean {
 }
 
 /**
+ * Who a second factor is expected of.
+ *
+ * The administrator, and only the administrator. Not because the others do not
+ * matter, but because the trade is different for each: a learner's account
+ * reads their own record, and a one-time code to a mailbox is proportionate to
+ * that. An administrator's account reads every market, every learner and every
+ * figure, and authorises money — so the account whose compromise is worst is
+ * the one standing behind the weakest thing, and that is the asymmetry worth
+ * closing first.
+ *
+ * A workforce board officer is absent for a different reason: they cannot sign
+ * in here at all. Their organisation is federated, their agency owns their
+ * identity, and their second factor is their agency's business rather than
+ * something this platform should be inventing for a public employee.
+ */
+export function requiresSecondFactor(role: ActorRole): boolean {
+  return role === "admin";
+}
+
+/** How long somebody has between proving the first factor and the second. */
+export const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
+
+/** Wrong codes before the challenge dies and the whole sign-in starts again. */
+export const MFA_MAX_ATTEMPTS = 5;
+
+/** How many recovery codes are issued, and how long each one is. */
+export const RECOVERY_CODE_COUNT = 10;
+export const RECOVERY_CODE_LENGTH = 10;
+
+/**
  * Whether a session is still good, and if not, why.
  *
  * Both windows are checked here rather than at the call site, because "expired"

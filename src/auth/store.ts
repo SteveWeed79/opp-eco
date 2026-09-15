@@ -15,7 +15,15 @@
  * no access to anything else in the database.
  */
 
-import type { Membership, Session, SignInCode, User } from "@/domain/types";
+import type {
+  Membership,
+  MfaChallenge,
+  RecoveryCode,
+  Session,
+  SignInCode,
+  TotpEnrolment,
+  User,
+} from "@/domain/types";
 
 export interface AuthStore {
   /**
@@ -49,4 +57,25 @@ export interface AuthStore {
   revokeSession(id: string, at: string): Promise<void>;
   /** Sign out everywhere — used when a code is issued for an account. */
   revokeSessionsForUser(userId: string, at: string): Promise<void>;
+
+  // -- The second factor ----------------------------------------------------
+
+  /** Replaces any unconfirmed enrolment; a confirmed one is not overwritten. */
+  putTotpEnrolment(enrolment: TotpEnrolment): Promise<void>;
+  findTotpEnrolment(userId: string): Promise<TotpEnrolment | null>;
+  confirmTotpEnrolment(userId: string, at: string, counter: number): Promise<void>;
+  /** Records the counter just accepted, so the same code cannot come back. */
+  recordTotpCounter(userId: string, counter: number): Promise<void>;
+  removeTotpEnrolment(userId: string): Promise<void>;
+
+  /** Replaces the whole set — recovery codes are issued as a batch or not at all. */
+  putRecoveryCodes(codes: RecoveryCode[]): Promise<void>;
+  /** Unused codes only. A used one is kept for the audit trail, not for matching. */
+  unusedRecoveryCodes(userId: string): Promise<RecoveryCode[]>;
+  useRecoveryCode(id: string, at: string): Promise<void>;
+
+  createMfaChallenge(challenge: MfaChallenge): Promise<void>;
+  findMfaChallenge(id: string): Promise<MfaChallenge | null>;
+  recordMfaAttempt(id: string, attempts: number): Promise<void>;
+  deleteMfaChallenge(id: string): Promise<void>;
 }

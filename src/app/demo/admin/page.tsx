@@ -40,6 +40,13 @@ import {
 } from "@/components/TransitionActions";
 import { actorForPortal } from "@/auth/session";
 import { healthReport } from "@/services/health";
+import { mfaStatus } from "@/services/mfa";
+import { SecondFactor } from "./SecondFactor";
+import {
+  dropEnrolment,
+  finishEnrolment,
+  startEnrolment,
+} from "@/app/_actions/mfa";
 import {
   allMarketHealth,
   averagePauseDays,
@@ -108,6 +115,7 @@ export default async function AdminPage() {
   // configuration, and the two that touch the database are a `SELECT 1` and a
   // single-row lookup.
   const system = await healthReport();
+  const secondFactor = await mfaStatus(admin);
   const { organizationName, marketName } = await nameLookups(admin);
 
   // Mentorship, across every market — the view only this console has. An offer
@@ -910,6 +918,14 @@ export default async function AdminPage() {
           )}
         </Card>
       </PageSection>
+
+      <SecondFactor
+        enrolled={secondFactor.enrolled}
+        recoveryCodesLeft={secondFactor.recoveryCodesLeft}
+        start={startEnrolment}
+        finish={finishEnrolment}
+        drop={dropEnrolment}
+      />
 
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">

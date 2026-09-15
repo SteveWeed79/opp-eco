@@ -2,10 +2,12 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AUTH_COOKIE, SESSION_COOKIE, isActorRole } from "./session";
+import { AUTH_COOKIE, MFA_COOKIE, SESSION_COOKIE, isActorRole } from "./session";
 import { authConfig } from "./config";
-import { sessionLifetimeFor } from "@/domain/identity";
+import { MFA_CHALLENGE_TTL_MS, sessionLifetimeFor } from "@/domain/identity";
+import type { ActorRole } from "@/domain/types";
 import {
+  completeChallenge,
   endSession,
   requestSignInCode,
   verifySignInCode,
@@ -107,7 +109,7 @@ export async function requestCode(
 export async function submitCode(
   email: unknown,
   code: unknown,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; secondFactor?: boolean }> {
   if (typeof email !== "string" || typeof code !== "string") {
     return { ok: false, error: "Enter the code from your email." };
   }
@@ -125,17 +127,75 @@ export async function submitCode(
   }
 
   const result = await verifySignInCode(email, code);
-  if (!result.ok) return { ok: false, error: result.error };
+  if (result.ok === false) return { ok: false, error: result.error };
 
-  const { absoluteMs } = sessionLifetimeFor(result.actor.membership.role);
-  store.set(AUTH_COOKIE, result.token, {
+  if (result.ok === "challenge") {
+    // A cookie holding a challenge, not a session. It is deliberately a
+    // different name from `oe_session`: one name for two meanings is how a
+    // half-finished sign-in becomes a finished one.
+    store.set(MFA_COOKIE, result.challenge, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: Math.floor(MFA_CHALLENGE_TTL_MS / 1000),
+    });
+    return { ok: true, secondFactor: true };
+  }
+
+  setSessionCookie(store, result.token, result.actor.membership.role);
+  redirect(PORTAL_PATH[result.actor.membership.role]);
+}
+
+/** One place the session cookie is written, so its lifetime cannot drift. */
+function setSessionCookie(
+  store: Awaited<ReturnType<typeof cookies>>,
+  token: string,
+  role: ActorRole,
+): void {
+  const { absoluteMs } = sessionLifetimeFor(role);
+  store.set(AUTH_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: Math.floor(absoluteMs / 1000),
   });
+}
 
+/**
+ * Answer the second factor.
+ *
+ * The challenge cookie is cleared whatever happens: on success it has been
+ * spent, and on failure leaving it would let somebody keep guessing against a
+ * challenge whose attempt count they cannot see.
+ */
+export async function submitSecondFactor(
+  presented: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof presented !== "string") {
+    return { ok: false, error: "Enter the code from your authenticator." };
+  }
+
+  const store = await cookies();
+  const challenge = store.get(MFA_COOKIE)?.value;
+  if (!challenge) return { ok: false, error: "Start signing in again." };
+
+  const limit = checkRateLimit(callerKey("mfa", challenge), LIMITS.signIn);
+  if (!limit.ok) {
+    return {
+      ok: false,
+      error: `Too many attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
+  const result = await completeChallenge(challenge, presented);
+  if (result.ok !== true) {
+    return { ok: false, error: "error" in result ? result.error : "That code is not valid." };
+  }
+
+  store.delete(MFA_COOKIE);
+  setSessionCookie(store, result.token, result.actor.membership.role);
   redirect(PORTAL_PATH[result.actor.membership.role]);
 }
 
@@ -149,6 +209,7 @@ export async function signOut(): Promise<void> {
   if (token) await endSession(token);
 
   store.delete(AUTH_COOKIE);
+  store.delete(MFA_COOKIE);
   store.delete(SESSION_COOKIE);
   // Back to the prototype's index rather than the venture's front page.
   // Somebody signing out was walking through the demo, and dropping them onto

@@ -25,8 +25,15 @@
  */
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
-import type { ActorContext, Session, SignInCode } from "@/domain/types";
+import type {
+  ActorContext,
+  Membership,
+  Session,
+  SignInCode,
+  User,
+} from "@/domain/types";
 import {
+  requiresSecondFactor,
   CODE_ALPHABET,
   CODE_LENGTH,
   CODE_MAX_ATTEMPTS,
@@ -37,7 +44,7 @@ import {
   signInBlockReason,
 } from "@/domain/identity";
 import { authStore } from "@/auth/backend";
-import { authConfig } from "@/auth/config";
+import { authConfig, mfaRequired } from "@/auth/config";
 import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
 import { resendChannel } from "@/services/email/resend";
@@ -65,6 +72,14 @@ export type SignInRequestResult =
 
 export type SignInVerifyResult =
   | { ok: true; token: string; actor: ActorContext }
+  /**
+   * The first factor passed and the second is owed.
+   *
+   * A distinct case rather than a session with a flag on it: nothing resolves
+   * to an actor until both factors are in, so there is no half-authenticated
+   * row for a missing predicate to turn into a working login.
+   */
+  | { ok: "challenge"; challenge: string; expiresAt: string }
   | { ok: false; error: string };
 
 const sha256 = (value: string): string =>
@@ -232,6 +247,49 @@ export async function verifySignInCode(
   // stolen session on another machine stop working.
   await store.revokeSessionsForUser(user.id, now.toISOString());
 
+  // The second factor, where one is owed. Checked after the code is spent and
+  // the old sessions are gone, so an interrupted sign-in leaves somebody having
+  // to start again rather than leaving a spent code that still works.
+  const enrolment = await store.findTotpEnrolment(user.id);
+  if (enrolment?.confirmedAt) {
+    const { issueChallenge } = await import("@/services/mfa");
+    const challenge = await issueChallenge(user.id, { now: deps.now });
+    logger.info("auth.second_factor_required", {
+      userId: user.id,
+      role: membership.role,
+    });
+    return { ok: "challenge", challenge: challenge.token, expiresAt: challenge.expiresAt };
+  }
+
+  if (requiresSecondFactor(membership.role) && mfaRequired()) {
+    // A deployment that has turned the requirement on, and an administrator who
+    // has not enrolled. Refused rather than waved through, and said plainly:
+    // the flag exists to be switched on *after* enrolment, because switching it
+    // on first locks out the only account that could fix it.
+    logger.warn("auth.second_factor_missing", { userId: user.id });
+    return {
+      ok: false,
+      error:
+        "This account must enrol an authenticator before signing in. Ask another " +
+        "administrator to enrol you, or turn AUTH_REQUIRE_MFA off to enrol yourself.",
+    };
+  }
+
+  return issueSession(user, membership, now);
+}
+
+/**
+ * Mint the session, once nothing is owed.
+ *
+ * Shared by the single-factor path and the challenge path so the two cannot
+ * drift — a session created two ways is a session with two sets of rules about
+ * how long it lasts.
+ */
+async function issueSession(
+  user: User,
+  membership: Membership,
+  now: Date,
+): Promise<{ ok: true; token: string; actor: ActorContext }> {
   const token = randomBytes(32).toString("base64url");
   const { absoluteMs } = sessionLifetimeFor(membership.role);
   const session: Session = {
@@ -242,10 +300,33 @@ export async function verifySignInCode(
     lastSeenAt: now.toISOString(),
     revokedAt: null,
   };
-  await store.createSession(session);
+  await authStore().createSession(session);
 
   logger.info("auth.signed_in", { userId: user.id, role: membership.role });
   return { ok: true, token, actor: { user, membership } };
+}
+
+/**
+ * Finish a sign-in that was waiting on a second factor.
+ *
+ * The session is minted here and nowhere else in this path, so there is no way
+ * to reach one by answering a challenge that did not verify.
+ */
+export async function completeChallenge(
+  challengeToken: string,
+  presented: string,
+  deps: SignInDeps = defaultDeps,
+): Promise<SignInVerifyResult> {
+  const { answerChallenge } = await import("@/services/mfa");
+  const answered = await answerChallenge(challengeToken, presented, { now: deps.now });
+  if (!answered.ok) return { ok: false, error: answered.error };
+
+  const store = authStore();
+  const user = await store.findUserById(answered.userId);
+  const membership = await store.membershipForUser(answered.userId);
+  if (!user || !membership) return { ok: false, error: "Start signing in again." };
+
+  return issueSession(user, membership, deps.now());
 }
 
 /**

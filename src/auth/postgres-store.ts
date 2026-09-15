@@ -12,7 +12,15 @@
  * make the cheapest thing the app does the most expensive.
  */
 
-import type { Membership, Session, SignInCode, User } from "@/domain/types";
+import type {
+  Membership,
+  MfaChallenge,
+  RecoveryCode,
+  Session,
+  SignInCode,
+  TotpEnrolment,
+  User,
+} from "@/domain/types";
 import type { PostgresClient } from "@/data/postgres/neon";
 import { normaliseEmail } from "@/domain/identity";
 import type { AuthStore } from "./store";
@@ -44,6 +52,39 @@ function toSession(row: Row): Session {
     expiresAt: stamp(row.expires_at),
     lastSeenAt: stamp(row.last_seen_at),
     revokedAt: nullableStamp(row.revoked_at),
+  };
+}
+
+function toEnrolment(row: Row): TotpEnrolment {
+  return {
+    userId: text(row.user_id),
+    secret: text(row.secret),
+    createdAt: stamp(row.created_at),
+    confirmedAt: nullableStamp(row.confirmed_at),
+    lastCounter:
+      row.last_counter === null || row.last_counter === undefined
+        ? null
+        : Number(row.last_counter),
+  };
+}
+
+function toRecoveryCode(row: Row): RecoveryCode {
+  return {
+    id: text(row.id),
+    userId: text(row.user_id),
+    codeHash: text(row.code_hash),
+    createdAt: stamp(row.created_at),
+    usedAt: nullableStamp(row.used_at),
+  };
+}
+
+function toChallenge(row: Row): MfaChallenge {
+  return {
+    id: text(row.id),
+    userId: text(row.user_id),
+    createdAt: stamp(row.created_at),
+    expiresAt: stamp(row.expires_at),
+    attempts: Number(row.attempts ?? 0),
   };
 }
 
@@ -171,6 +212,122 @@ export function postgresAuthStore(client: PostgresClient): AuthStore {
         `UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL`,
         [userId, at],
       );
+    },
+
+    // -- The second factor --------------------------------------------------
+
+    async putTotpEnrolment(enrolment) {
+      // `WHERE confirmed_at IS NULL` on the update half is the guard: a fresh
+      // enrolment may replace one somebody started and abandoned, and may not
+      // replace one they are currently relying on. Re-enrolling removes the old
+      // one first, deliberately and visibly.
+      await client.query(
+        `INSERT INTO user_totp (user_id, secret, created_at, confirmed_at, last_counter)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id) DO UPDATE
+           SET secret = EXCLUDED.secret,
+               created_at = EXCLUDED.created_at,
+               confirmed_at = NULL,
+               last_counter = NULL
+           WHERE user_totp.confirmed_at IS NULL`,
+        [
+          enrolment.userId,
+          enrolment.secret,
+          enrolment.createdAt,
+          enrolment.confirmedAt,
+          enrolment.lastCounter,
+        ],
+      );
+    },
+
+    async findTotpEnrolment(userId) {
+      const row = await first(`SELECT * FROM user_totp WHERE user_id = $1`, [userId]);
+      return row ? toEnrolment(row) : null;
+    },
+
+    async confirmTotpEnrolment(userId, at, counter) {
+      await client.query(
+        `UPDATE user_totp SET confirmed_at = $2, last_counter = $3 WHERE user_id = $1`,
+        [userId, at, counter],
+      );
+    },
+
+    async recordTotpCounter(userId, counter) {
+      await client.query(`UPDATE user_totp SET last_counter = $2 WHERE user_id = $1`, [
+        userId,
+        counter,
+      ]);
+    },
+
+    async removeTotpEnrolment(userId) {
+      // The recovery codes go with it. A code that opens an account with no
+      // second factor left to recover is just a password nobody remembers
+      // issuing.
+      await client.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM user_totp WHERE user_id = $1`, [userId]);
+    },
+
+    async putRecoveryCodes(codes) {
+      const userId = codes[0]?.userId;
+      if (!userId) return;
+      // Replaced wholesale. A set half replaced is a set where some of the
+      // codes on somebody's printout no longer work and they cannot tell which.
+      await client.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);
+      for (const code of codes) {
+        await client.query(
+          `INSERT INTO user_recovery_codes (id, user_id, code_hash, created_at, used_at)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [code.id, code.userId, code.codeHash, code.createdAt, code.usedAt],
+        );
+      }
+    },
+
+    async unusedRecoveryCodes(userId) {
+      const rows = await client.query<Row>(
+        `SELECT * FROM user_recovery_codes WHERE user_id = $1 AND used_at IS NULL`,
+        [userId],
+      );
+      return rows.map(toRecoveryCode);
+    },
+
+    async useRecoveryCode(id, at) {
+      // `AND used_at IS NULL` makes the single-use property the database's
+      // rather than the caller's: two requests racing the same code cannot both
+      // find it unused.
+      await client.query(
+        `UPDATE user_recovery_codes SET used_at = $2 WHERE id = $1 AND used_at IS NULL`,
+        [id, at],
+      );
+    },
+
+    async createMfaChallenge(challenge) {
+      await client.query(
+        `INSERT INTO mfa_challenges (id, user_id, created_at, expires_at, attempts)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          challenge.id,
+          challenge.userId,
+          challenge.createdAt,
+          challenge.expiresAt,
+          challenge.attempts,
+        ],
+      );
+    },
+
+    async findMfaChallenge(id) {
+      const row = await first(`SELECT * FROM mfa_challenges WHERE id = $1`, [id]);
+      return row ? toChallenge(row) : null;
+    },
+
+    async recordMfaAttempt(id, attempts) {
+      await client.query(`UPDATE mfa_challenges SET attempts = $2 WHERE id = $1`, [
+        id,
+        attempts,
+      ]);
+    },
+
+    async deleteMfaChallenge(id) {
+      await client.query(`DELETE FROM mfa_challenges WHERE id = $1`, [id]);
     },
   };
 }

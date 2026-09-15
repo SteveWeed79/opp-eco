@@ -33,6 +33,17 @@ export const SESSION_COOKIE = "oe_demo_role";
 export const AUTH_COOKIE = "oe_session";
 
 /**
+ * Somebody between the two factors.
+ *
+ * A different name from the session cookie on purpose, and holding a value that
+ * resolves to nothing: `codeSessionProvider` looks up `oe_session` and knows
+ * nothing about this one, so a challenge token presented as a session is simply
+ * not a session. One name for two meanings is how a half-finished sign-in
+ * becomes a finished one.
+ */
+export const MFA_COOKIE = "oe_mfa";
+
+/**
  * What a real provider would implement. Auth.js, Clerk, and WorkOS all reduce
  * to this: turn an incoming request into an actor, or into nothing.
  */
