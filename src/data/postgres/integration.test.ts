@@ -232,6 +232,7 @@ withDatabase("parity with the in-memory layer", () => {
       openSlots: await repos.interviewSlots.open(actor),
       awaitingReview: await repos.timeEntries.awaitingReview(actor),
       creditAwards: await repos.creditAwards.list(actor),
+      outcomes: await repos.outcomes.list(actor),
       // Without their ids: the log's primary key is a bigserial the database
       // assigns, while the fixtures carry `evt-1`. Everything an audit entry
       // means — who, when, what moved, and whether it was an override — is
@@ -336,11 +337,25 @@ withDatabase("parity with the in-memory layer", () => {
       ).toEqual(
         byId(await memoryRepositories.mentorshipPairings.forStudent(actor, student.id)),
       );
+      expect(byId(await postgres.outcomes.forStudent(actor, student.id))).toEqual(
+        byId(await memoryRepositories.outcomes.forStudent(actor, student.id)),
+      );
     }
 
     for (const posting of await memoryRepositories.postings.list(actor)) {
       expect(byId(await postgres.applications.forPosting(actor, posting.id))).toEqual(
         byId(await memoryRepositories.applications.forPosting(actor, posting.id)),
+      );
+    }
+
+    // Outcomes hang off applications, and the board's view of one is redacted
+    // rather than withheld — which is exactly the shape of narrowing the two
+    // layers disagreed about the first time this suite ran.
+    for (const application of await memoryRepositories.applications.list(actor)) {
+      expect(
+        byId(await postgres.outcomes.forApplication(actor, application.id)),
+      ).toEqual(
+        byId(await memoryRepositories.outcomes.forApplication(actor, application.id)),
       );
     }
   });

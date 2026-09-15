@@ -41,6 +41,7 @@ const cents = (value) => (value === undefined || value === null ? null : Math.ro
 export const TABLES = [
   "notification_outbox",
   "audit_events",
+  "outcomes",
   "credit_award_applications",
   "credit_awards",
   "time_entries",
@@ -371,6 +372,29 @@ export async function seedInto(tx) {
     }
   }
 
+  // Last of the scoped tables: an outcome points at a market, a student, the
+  // user who recorded it, and — when the learner reached it through a
+  // placement — an application. All four are already in.
+  for (const outcome of seed.outcomes) {
+    await insert(
+      `INSERT INTO outcomes (id, market_id, student_id, application_id, kind,
+         observed_on, recorded_on, recorded_by, source, detail)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        outcome.id,
+        outcome.marketId,
+        outcome.studentId,
+        outcome.applicationId ?? null,
+        outcome.kind,
+        outcome.observedOn,
+        outcome.recordedOn,
+        outcome.recordedByUserId,
+        outcome.source,
+        outcome.detail ?? null,
+      ],
+    );
+  }
+
   for (const event of seed.auditEvents) {
     await insert(
       `INSERT INTO audit_events (market_id, occurred_at, actor_user_id, actor_role,
@@ -427,6 +451,7 @@ try {
        (SELECT count(*) FROM mentorship_pairings) AS mentorship_pairings,
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
+       (SELECT count(*) FROM outcomes)           AS outcomes,
        (SELECT count(*) FROM audit_events)       AS audit_events`,
   );
   console.log("seeded:");

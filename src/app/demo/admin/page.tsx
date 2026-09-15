@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Building2,
   ClipboardCheck,
+  Compass,
   HandHeart,
   MapPin,
   TrendingUp,
@@ -39,14 +40,25 @@ import {
   allMarketHealth,
   averagePauseDays,
   funnel,
+  outcomeReport,
   stalledApplications,
   subsidyDeployed,
 } from "@/lib/queries";
 import type { MarketStage, MentorshipPairing } from "@/domain/types";
 import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
+import { isRegionalEmployment, OUTCOME_KINDS } from "@/domain/outcome";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { adminIntroduceStudent } from "./actions";
 import { PORTAL_PATH } from "@/routes";
+
+/**
+ * The two kinds that mean the talent stayed, resolved from the domain rather
+ * than listed here — a second copy is the one that goes stale the day a kind
+ * is added.
+ */
+const REGIONAL_KINDS = new Set(
+  OUTCOME_KINDS.map((k) => k.value).filter(isRegionalEmployment),
+);
 
 const STAGE_ORDER: MarketStage[] = [
   "prospecting",
@@ -102,7 +114,7 @@ export default async function AdminPage() {
       }));
   // Independent of one another, so resolved together rather than in a queue
   // of six sequential round trips.
-  const [health, stalled, pendingOrgs, stages, deployed, pauseDays] =
+  const [health, stalled, pendingOrgs, stages, deployed, pauseDays, outcomes] =
     await Promise.all([
       allMarketHealth(admin),
       stalledApplications(admin),
@@ -110,6 +122,7 @@ export default async function AdminPage() {
       funnel(admin),
       subsidyDeployed(admin),
       averagePauseDays(admin),
+      outcomeReport(admin),
     ]);
   const liveMarkets = health.filter((h) => h.market.stage === "live");
   const totalBudget = liveMarkets.reduce((s, h) => s + h.market.subsidyBudget, 0);
@@ -441,6 +454,81 @@ export default async function AdminPage() {
             <Assumption>
               Boards hold a fixed annual allocation that placements draw down (Q20). If
               funding is uncapped, the budget rail on each market comes out.
+            </Assumption>
+          </div>
+        </Card>
+
+        {/* -------------------------------------------------------------- */}
+        {/* The stage after the funnel's last one.                          */}
+        {/*                                                                 */}
+        {/* Every number above this card measures whether placements work.  */}
+        {/* This is the only one that measures whether the venture does —   */}
+        {/* and it is read-only here on purpose: the administrator watches  */}
+        {/* five markets, and the college is the party that makes the call. */}
+        {/* What an operator needs from this screen is to see where the     */}
+        {/* follow-up is not happening.                                     */}
+        {/* -------------------------------------------------------------- */}
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<Compass className="w-5 h-5" />}
+            title="Where they went"
+            subtitle="The measure the lifecycle stops short of — employment in the region after the experience"
+          />
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex flex-wrap gap-6">
+              <Stat
+                label="Stayed in the region"
+                value={
+                  outcomes.regionalRate === null
+                    ? "—"
+                    : `${Math.round(outcomes.regionalRate * 100)}%`
+                }
+                hint={
+                  outcomes.regionalRate === null
+                    ? "Nothing measured yet"
+                    : `${outcomes.regional} of ${outcomes.measured} measured`
+                }
+              />
+              <Stat
+                label="Not yet asked"
+                value={String(outcomes.unmeasured)}
+                hint="Finished placements with no follow-up"
+                tone={outcomes.unmeasured > outcomes.measured ? "warn" : "neutral"}
+              />
+            </div>
+
+            {outcomes.measured === 0 ? (
+              <Empty>
+                No follow-ups recorded. The rate stays blank rather than reading
+                zero — an unworked queue is not a result.
+              </Empty>
+            ) : (
+              <div className="space-y-3">
+                {outcomes.byKind.map((kind) => (
+                  <div key={kind.kind}>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-sm text-ink-700">{kind.label}</span>
+                      <span className="text-sm font-bold text-ink-950 tabular">
+                        {kind.count}
+                      </span>
+                    </div>
+                    <ProgressBar
+                      value={kind.count}
+                      max={outcomes.measured || 1}
+                      label={`${kind.label} outcomes`}
+                      tone={REGIONAL_KINDS.has(kind.kind) ? "good" : "brand"}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Assumption>
+              One observation per learner, most recent first — a learner followed
+              up twice is one learner. The rate is over learners measured, not
+              over everyone who finished, so an unworked queue never reads as a
+              programme that fails to place people (Q23).
             </Assumption>
           </div>
         </Card>

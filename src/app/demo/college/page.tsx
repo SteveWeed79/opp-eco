@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { Award, FileEdit, HandHeart, PenLine, UserCheck } from "lucide-react";
+import {
+  Award,
+  Compass,
+  FileEdit,
+  HandHeart,
+  PenLine,
+  UserCheck,
+} from "lucide-react";
 import {
   Assumption,
   Badge,
@@ -17,13 +24,19 @@ import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
-import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
+import {
+  followUpQueue,
+  marketRemainingBudget,
+  studentCreditProgress,
+} from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { availableTransitions, isTerminal } from "@/domain/workflow";
 import { postingMachine, studentMachine } from "@/domain/lifecycle";
 import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
+import { OUTCOME_KINDS } from "@/domain/outcome";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { IntroductionOutcome } from "@/components/IntroductionOutcome";
+import { RecordOutcome } from "@/components/RecordOutcome";
 import {
   postingLifecycleAsCollege,
   studentLifecycle,
@@ -38,6 +51,7 @@ import { platformTheme } from "@/theme/theme";
 import {
   collegeCloseIntroduction,
   collegeIntroduceStudent,
+  collegeRecordOutcome,
   collegeTransition,
 } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
@@ -69,6 +83,16 @@ export default async function CollegePage() {
   const activePlacements = allApplications.filter(
     (a) => a.status === "placement_active",
   );
+
+  /**
+   * Finished experiences nobody has followed up on, longest wait first.
+   *
+   * A queue rather than a report, and it belongs in this zone for the same
+   * reason verification does: nobody else can clear it. The employer does not
+   * know where its intern went afterwards, the board's interest ended when it
+   * reimbursed the placement, and the administrator is watching five markets.
+   */
+  const followUps = await followUpQueue(actor);
 
   // The employers currently offering time. The college is told when one is
   // made and the message links here, so this is the page that has to show it.
@@ -543,6 +567,74 @@ export default async function CollegePage() {
             {hoursPerCredit} hours per credit is your institution&rsquo;s configurable
             policy (Q11), enforced when a posting is published rather than discovered
             after the work is done.
+          </Assumption>
+        </div>
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Follow-up — the only measure of whether the venture worked.         */}
+      {/*                                                                    */}
+      {/* Everything above this card measures whether a placement worked.     */}
+      {/* None of it answers the question a funder asks at the end of year    */}
+      {/* three, which is whether the learner ended up working in this region */}
+      {/* — and that answer takes a year of follow-ups, so the queue has to   */}
+      {/* be worked long before anybody reads the total.                      */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader
+          level={3}
+          icon={<Compass className="w-5 h-5" />}
+          title="Follow-up"
+          subtitle="Finished experiences nobody has asked about yet — longest wait first"
+        />
+        {followUps.length === 0 ? (
+          <Empty>Every finished placement has an outcome on record.</Empty>
+        ) : (
+          <ul className="row-list divide-y divide-line">
+            {followUps.map(({ application, student, posting, days }) => (
+              <li
+                key={application.id}
+                className="px-6 py-4 flex flex-wrap items-start justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-ink-950">
+                      {student.name}
+                    </span>
+                    <TrackBadge track={application.track} />
+                  </div>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {posting.title} · {organizationName(posting.businessId)}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <span className="text-xs text-ink-500 whitespace-nowrap">
+                    Finished {days} day{days === 1 ? "" : "s"} ago
+                  </span>
+                  <RecordOutcome
+                    studentId={student.id}
+                    applicationId={application.id}
+                    studentName={student.name}
+                    placementTitle={posting.title}
+                    choices={OUTCOME_KINDS.map((kind) => ({
+                      value: kind.value,
+                      label: kind.label,
+                      meta: kind.meta,
+                      description: kind.description,
+                    }))}
+                    action={collegeRecordOutcome}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="px-6 pb-5">
+          <Assumption>
+            The college records these because follow-up is local-operator work.
+            The learner and the employer both know things the college does not —
+            an employer is the only party that knows it made a hire — and giving
+            each of them a say is still open (Q23).
           </Assumption>
         </div>
       </Card>

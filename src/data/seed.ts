@@ -21,6 +21,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  Outcome,
   Posting,
   Student,
   TimeEntry,
@@ -1556,6 +1557,90 @@ export const creditAwards: CreditAward[] = [
     status: "granted",
     courseMapping: "MET 480 — Industrial Internship",
     grantedOn: daysAgo(31),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Outcomes
+// ---------------------------------------------------------------------------
+
+/**
+ * Five follow-ups over eight finished experiences, which is the point.
+ *
+ * The queue ships with work still in it, on the same argument that kept the
+ * seeded college's colliding green and gold: a fixture set where every
+ * placement has already been measured would demonstrate a follow-up process
+ * nobody has ever had to run. What a college actually opens is a list of
+ * learners it has not got round to.
+ *
+ * The results are mixed on purpose too. Jordan took a job in Kansas City, which
+ * is the outcome this venture exists to reduce and exactly the one a demo would
+ * be tempted to leave out — a measure that only ever reports good news is not a
+ * measure. He also carries two observations three weeks apart, so the reporting
+ * rule that counts a learner once and takes the most recent has something to
+ * be right about.
+ */
+export const outcomes: Outcome[] = [
+  {
+    id: "out-1",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-derek",
+    applicationId: "app-26",
+    kind: "employed_by_host",
+    observedOn: daysAgo(21),
+    recordedOn: daysAgo(20),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Apex Controls kept him on as a junior controls technician.",
+  },
+  {
+    id: "out-2",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-priya",
+    applicationId: "app-20",
+    kind: "employed_in_region",
+    observedOn: daysAgo(16),
+    recordedOn: daysAgo(15),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Application analyst at a hospital in Crawford County.",
+  },
+  {
+    // The first of two about Jordan. Recorded when the honest answer was that
+    // he had not landed anywhere — which is a result, not a blank row.
+    id: "out-3",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-jordan",
+    applicationId: "app-19",
+    kind: "still_seeking",
+    observedOn: daysAgo(24),
+    recordedOn: daysAgo(24),
+    recordedByUserId: "u-ellen",
+    source: "college",
+  },
+  {
+    id: "out-4",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-jordan",
+    applicationId: "app-19",
+    kind: "employed_elsewhere",
+    observedOn: daysAgo(4),
+    recordedOn: daysAgo(3),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Moved to Kansas City for an agency role.",
+  },
+  {
+    id: "out-5",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-hana",
+    applicationId: "app-17",
+    kind: "continued_education",
+    observedOn: daysAgo(9),
+    recordedOn: daysAgo(8),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Enrolled in the bachelor's completion programme.",
   },
 ];
 

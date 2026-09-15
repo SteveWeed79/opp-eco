@@ -14,6 +14,7 @@
 import type {
   Application,
   Market,
+  Outcome,
   Posting,
   Student,
 } from "@/domain/types";
@@ -28,6 +29,14 @@ import type { ActorContext } from "@/domain/types";
 import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
+import {
+  awaitsFollowUp,
+  canReadOutcomes,
+  daysSinceExit,
+  hasExited,
+  summarizeOutcomes,
+  type OutcomeSummary,
+} from "@/domain/outcome";
 
 export interface StalledItem {
   application: Application;
@@ -294,4 +303,113 @@ export async function subsidyDeployed(actor: ActorContext): Promise<number> {
   return (await repositories.applications.list(actor))
     .filter((a) => !isTerminal(a.status))
     .reduce((sum, a) => sum + fundingCommitment(a), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Follow-up
+// ---------------------------------------------------------------------------
+
+export interface FollowUpItem {
+  application: Application;
+  student: Student;
+  posting: Posting;
+  /** How long the learner has been waiting to be asked. */
+  days: number;
+}
+
+/**
+ * Finished experiences nobody has followed up on, longest wait first.
+ *
+ * The college's queue, and the same exception-first shape as
+ * `stalledApplications` — a list of every placement ever completed is a report,
+ * and what an operator needs is the work still outstanding.
+ *
+ * Per experience rather than per learner: the whole reason the record hangs off
+ * an application is being able to say which one produced which result, so a
+ * learner who finished two placements is asked about each. `awaitsFollowUp`
+ * holds that rule; this function only reads it.
+ */
+export async function followUpQueue(
+  actor: ActorContext,
+): Promise<FollowUpItem[]> {
+  // Refused outright rather than answered from an empty list. An employer reads
+  // the applications against its own postings and reads no outcomes at all, so
+  // subtracting one from the other would report every placement it hosted as
+  // never followed up — work already done, shown as outstanding.
+  if (!canReadOutcomes(actor.membership.role)) return [];
+
+  const [applications, outcomes] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.outcomes.list(actor),
+  ]);
+
+  const candidates = applications.filter((a) => awaitsFollowUp(a, outcomes));
+
+  // Resolved together rather than one after another, for the reason
+  // `stalledApplications` does it: against Postgres this loop would otherwise
+  // be two sequential round trips per row.
+  const resolved = await Promise.all(
+    candidates.map(async (application) => {
+      const [student, posting] = await Promise.all([
+        repositories.students.find(actor, application.studentId),
+        repositories.postings.find(actor, application.postingId),
+      ]);
+      if (!student || !posting) return null;
+      return {
+        application,
+        student,
+        posting,
+        days: daysSinceExit(application, DEMO_NOW),
+      };
+    }),
+  );
+
+  return resolved
+    .filter((item): item is FollowUpItem => item !== null)
+    .sort((a, b) => b.days - a.days);
+}
+
+/**
+ * What the follow-ups add up to, and how much of the queue is unworked.
+ *
+ * Both numbers, always. A regional employment rate on its own is a figure a
+ * reader has no way to weigh — over two learners it means nothing, and over
+ * forty it is the venture's central claim — so the count it was computed from
+ * travels with it, and so does the count it was *not* computed from.
+ */
+export async function outcomeReport(
+  actor: ActorContext,
+): Promise<OutcomeSummary> {
+  // Same refusal as the queue, and for the same reason: a zeroed report and a
+  // report the caller may not have are different answers.
+  if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0);
+
+  const [applications, outcomes] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.outcomes.list(actor),
+  ]);
+
+  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes)).length;
+  return summarizeOutcomes(outcomes, unmeasured);
+}
+
+/** Every finished experience, measured or not. The denominator behind the rate. */
+export async function exitedPlacements(
+  actor: ActorContext,
+): Promise<Application[]> {
+  return (await repositories.applications.list(actor)).filter(hasExited);
+}
+
+/**
+ * A learner's own follow-up history, newest first.
+ *
+ * Plural because it is a history rather than a current value: the college that
+ * recorded "still looking" in March and "working in Pittsburg" in May holds the
+ * only evidence this platform will ever have that something changed in between.
+ */
+export async function studentOutcomes(
+  actor: ActorContext,
+  studentId: string,
+): Promise<Outcome[]> {
+  return repositories.outcomes.forStudent(actor, studentId);
 }
