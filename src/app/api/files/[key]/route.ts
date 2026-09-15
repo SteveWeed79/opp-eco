@@ -58,7 +58,7 @@ export async function GET(
       : notFound();
   }
 
-  const stored = await fileStore.get(key);
+  const stored = await fileStore().get(key);
   if (!stored) return notFound();
 
   const decision = await canRetrieve(actor, stored.meta);

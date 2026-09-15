@@ -39,6 +39,7 @@ const cents = (value) => (value === undefined || value === null ? null : Math.ro
  * make the next `db:migrate` try to rebuild tables that already exist.
  */
 export const TABLES = [
+  "uploaded_files",
   "sessions",
   "sign_in_codes",
   "notification_outbox",

@@ -167,7 +167,7 @@ Because of KORA, and because it makes reporting cheaper. Aggregates should be de
 
 ### Already in place
 
-Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex` · no participant PII in any outbound message · consent recorded against the source institution and enforced on disclosure · a retention schedule with a purge that anonymises rather than deletes · **passwordless sign-on with server-side sessions, and government identity refused rather than replicated**
+Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex` · uploads scanned by a real scanner or refused · no participant PII in any outbound message · consent recorded against the source institution and enforced on disclosure · a retention schedule with a purge that anonymises rather than deletes · **passwordless sign-on with server-side sessions, and government identity refused rather than replicated**
 
 | Control | Where | Note |
 |---|---|---|
@@ -178,6 +178,9 @@ Authorization enforced at the repository layer with tests · one guarded write p
 | `npm audit` at high, Dependabot weekly | CI, `.github/dependabot.yml` | Actions are grouped and updated too — a supply-chain path that is easy to forget because it is not in package.json |
 | Vulnerability reporting path | `SECURITY.md` | Names cross-tenant access and audit tampering as the findings we most want |
 | Upload validation, quarantine, signed retrieval | `src/services/uploads/` | See below |
+| Real malware scanning | `src/services/uploads/clamav.ts` | clamd over a socket, spoken directly — no client library in the one place that handles bytes from the internet. Unreachable, timed out or an unrecognised reply all raise and leave the file quarantined; `INSTREAM size limit exceeded. ERROR` is explicitly not a verdict. The EICAR stub is **refused** where a database is configured and writable, because a scanner that passes everything is not a weak scanner |
+| Files that survive a restart | `src/services/uploads/postgres-store.ts` | The store follows `DATABASE_URL` like the repositories. A record saying a transcript was accepted, and no transcript, is worse than refusing the upload |
+| A purge that reaches the documents | `src/services/retention.ts`, `uploads/access.ts` | Durability created the obligation: a resume outlives the record it was attached to unless something removes it. The sweep runs after the record commits; `canRetrieve` refusing every file of a purged learner is the control, because it does not depend on the sweep having succeeded |
 | No participant PII in email | `src/services/notification-privacy.ts`, `templates.ts` | Templates name a **record reference**, never a learner. A denylist strips participant keys at `enqueueNotification` — the `UnitOfWork`, not the renderer, because the Postgres queue persists the payload to a table. `notification-privacy.test.ts` renders every template against every seeded learner and fails on any leak |
 | FERPA redisclosure notice | `templates.ts` | On every employer-facing message. The platform is what makes the sharing easy, so it carries the notice |
 | Consent, enforced on disclosure | `src/domain/consent.ts` | Attached to the institution whose records it covers. An employer's step up from abbreviated name to contact details requires **both** the placement stage and education-record consent on file; the check runs in both data layers |
@@ -205,8 +208,8 @@ The known limitation, stated rather than hidden: a `.docx` signature only proves
 
 | Control | Why it matters here |
 |---|---|
-| Real malware scanning | The stub detects only the EICAR test string. ClamAV or a hosted API is one class |
-| Durable file storage | `createMemoryFileStore()` loses every file on restart. An S3 or Blob adapter satisfies the same interface |
+| Object storage for files | Bytes live in Postgres `bytea` today, which is right at the pilot's size and has a ceiling. `FileStore` is the seam an S3 or Blob adapter plugs into |
+| An upload surface | The pipeline is complete and nothing calls it. What is missing is the product decision — which documents a placement requires, from whom, at which step |
 | Automatic retention sweep | The schedule and the purge exist; running it unattended does not. Deliberate — anonymisation is irreversible and the first unattended run would hit every record at once |
 | Directory-information designation per college | Each institution designates its own, and the platform currently gates the same fields for all of them. Needs a per-college setting and a registrar to fill it in |
 | Shared-store rate limiting | The current limiter is per instance; a distributed one needs Redis or Vercel KV |

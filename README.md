@@ -110,7 +110,9 @@ src/data/        Repository contracts, two implementations behind them — the
                  for writes. One environment variable picks which.
 src/services/    Write paths (executeTransition for existing records,
                  creation for new ones), input validation, notification
-                 dispatch and the outbox that records it.
+                 dispatch and the outbox that records it, and the upload
+                 pipeline — validation, quarantine, scanning, signed
+                 retrieval — whose store follows DATABASE_URL like the rest.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
 src/components/  Component library, rendered at /demo/design.
@@ -572,6 +574,76 @@ as the system context to answer a question nobody authenticated asked, and puts 
 named institution in the masthead of a response to an anonymous request.
 `anonymousFallbackAllowed` gates both.
 
+## Uploads
+
+The only place this application accepts arbitrary bytes from the internet, so
+it is the one subsystem written as though every field were hostile. The
+declared MIME type is attacker-controlled, the extension is
+attacker-controlled, the filename is attacker-controlled. Only the bytes are
+evidence, and only for formats that have a signature.
+
+```
+scanner present? → rate limit → size → filename → extension → magic bytes
+→ store quarantined → scan → clean
+```
+
+One entry point, `receiveUpload`, so no caller can skip a step, and the order
+is load-bearing: cheap rejections come first, and the file is unreachable
+between being stored and being cleared.
+
+**Files survive a restart.** The store was an in-process `Map`, which is fine
+for a demonstration and indefensible the moment a learner attaches a real
+transcript — the record would say the file was accepted and the file would be
+gone. `FileStore` now has two implementations behind it, picked from
+`DATABASE_URL` exactly like the repositories and the auth store, because a
+resume in Postgres and an application in a fixture array is a pairing that can
+only produce orphans.
+
+The bytes live in Postgres, in `bytea`, and that is a choice with a ceiling
+stated rather than discovered. What it buys: one backup covers records and
+documents together, there is no second set of credentials to rotate, a file
+cannot be orphaned by a failed write on the other side, and the rules that
+already scope every read are the rules protecting the bytes. What it costs: a
+read loads the whole file into memory and the database carries the bulk. At the
+pilot's size — resumes capped at 5MB, deliverables at 20MB, a few hundred
+learners — that is worth it. Past a few thousand files, `FileStore` is the seam
+an S3 or Blob adapter plugs into and the table becomes metadata.
+
+They cross the wire as base64 text rather than as a `Buffer`, deliberately.
+Passing a buffer works on node-postgres and does not work uniformly: Neon's
+HTTP path serialises parameters as JSON, where a `Buffer` becomes
+`{"type":"Buffer","data":[…]}`, and a `bytea` result can come back as a hex
+string. `decode($n, 'base64')` in and `encode(content, 'base64')` out makes
+every value a plain string that every driver agrees about, for a third more on
+the wire and one fewer class of bug that appears only in production against the
+one driver the tests do not run.
+
+**Scanning is real if you point it somewhere.** `CLAMAV_HOST` switches the
+scanner from the EICAR stub to clamd, spoken directly over a socket — a
+command, length-prefixed chunks, a terminator, one line back. No client library,
+because four screenfuls of framing is not worth a supply-chain surface in the
+one place that handles bytes from the internet.
+
+It throws rather than guessing. Unreachable, timed out, or an unrecognised
+reply all raise, and the file stays quarantined. `INSTREAM size limit exceeded.
+ERROR` is not a verdict — reading it as "clean" is exactly how an unscanned file
+becomes a downloadable one, and the failure people actually ship is a scanner
+that has been down for a month while uploads kept succeeding.
+
+The stub is refused where the records are real. A deployment with a database and
+writes enabled but no `CLAMAV_HOST` accepts no files at all and says why, because
+a scanner that detects one test string and passes everything else is not a weak
+scanner — it is no scanner with a reassuring name. The refusal is at the upload
+rather than at boot: a deployment that will not start gets the guard removed
+rather than the scanner installed.
+
+**A purge takes the files with it.** Durability created that obligation —
+while files died with the process, the retention schedule never had to think
+about them. `purgeLearnerIdentity` now sweeps the learner's files after the
+record commits, and `canRetrieve` refuses any file whose learner has been
+purged. The second one is the control, because it does not depend on the first
+having succeeded; the sweep is cleanup.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
@@ -750,7 +822,7 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
 - **Interview slot publishing.** The board's "Publish slots" button. Slots already have a repository and optimistic concurrency; what is missing is the form and a rule about how far ahead a board may publish.
 - **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
-- **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
+- **Uploads on a real surface.** The pipeline is complete and tested — durable storage, real scanning, signed URLs, access control, and a purge that reaches the files — but nothing calls `receiveUpload`. The question it is waiting on is a product one, not a wiring one: which documents a placement actually requires, from whom, and at which step. Until that is answered there is no honest place to put the control.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
 - **Program-year rollover.** A fund carries a `programYear` and nothing rolls it
   over. What happens to an unspent allocation at year end, whether a live

@@ -247,4 +247,81 @@ describe("purging a learner's identity", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/not due until|still taking part/i);
   });
+
+  it("takes the learner's files with their identity", async () => {
+    // New, and new because storage became durable. A resume used to die with
+    // the process; now it outlives the record it was attached to unless the
+    // purge reaches it, and a document with a learner's name on the front is
+    // exactly what anonymising the record was for.
+    //
+    // Driven with an injected clock because nothing in the seed is due yet —
+    // which is the honest reason the success path had no test until now.
+    const { purgeLearnerIdentity } = await import("./retention");
+    const { createMemoryFileStore } = await import("@/services/uploads/storage");
+    const { store } = await import("@/data/backend");
+
+    const { isTerminal } = await import("@/domain/workflow");
+    // A learner with nothing open. `purgeBlockReason` refuses anyone still
+    // taking part whatever the clock says, and rightly — the schedule runs from
+    // last participation, which has not happened yet for an active placement.
+    const learner = seed.students.find(
+      (s) =>
+        !s.purgedOn &&
+        seed.applications
+          .filter((a) => a.studentId === s.id)
+          .every((a) => isTerminal(a.status)),
+    )!;
+    const before = { ...learner };
+
+    const files = createMemoryFileStore();
+    const mine = await files.put(
+      {
+        purpose: "resume",
+        filename: "resume.pdf",
+        contentType: "application/pdf",
+        bytes: 3,
+        uploadedBy: learner.userId,
+        studentId: learner.id,
+        scan: "clean",
+      },
+      new Uint8Array([1, 2, 3]),
+    );
+    const someoneElse = await files.put(
+      {
+        purpose: "resume",
+        filename: "resume.pdf",
+        contentType: "application/pdf",
+        bytes: 3,
+        uploadedBy: "u-alex",
+        studentId: "stu-alex",
+        scan: "clean",
+      },
+      new Uint8Array([1, 2, 3]),
+    );
+
+    // Far enough past every retention clock in the schedule that nothing is
+    // holding this record open.
+    const farFuture = new Date("2040-01-01T00:00:00.000Z");
+
+    try {
+      const result = await purgeLearnerIdentity(
+        admin(),
+        learner.id,
+        "Retention schedule.",
+        { store, now: () => farFuture, files: () => files },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(await files.metadata(mine.key)).toBeNull();
+      // Scoped, not a sweep: another learner's file is untouched.
+      expect(await files.metadata(someoneElse.key)).not.toBeNull();
+    } finally {
+      const i = seed.students.findIndex((s) => s.id === before.id);
+      if (i !== -1) seed.students[i] = before;
+      const at = seed.auditEvents.findIndex(
+        (e) => e.entityId === before.id && e.to === "purged",
+      );
+      if (at !== -1) seed.auditEvents.splice(at, 1);
+    }
+  });
 });

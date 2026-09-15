@@ -42,6 +42,8 @@ import { nodePostgresPool } from "./node-pg";
 import { postgresNotificationQueue, readOnlyNotificationQueue } from "./outbox";
 import { postgresRepositories } from "./repositories";
 import { postgresStore } from "./store";
+import { createMemoryFileStore, type FileStore } from "@/services/uploads/storage";
+import { postgresFileStore } from "@/services/uploads/postgres-store";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- plain JS operator script, which cannot import TypeScript
 import { seedInto, TABLES } from "../../../scripts/seed.mjs";
@@ -661,5 +663,123 @@ withDatabase("the write path", () => {
         { readOnly: true },
       ),
     ).rejects.toThrow(/read-only/i);
+  });
+});
+
+withDatabase("uploaded files", () => {
+  /**
+   * The bytes survive the round trip, exactly.
+   *
+   * This is the assertion the change exists for. Files used to live in a `Map`
+   * where a round trip is the identity function, so nothing could be wrong with
+   * it; through Postgres they are base64 on the way in, `bytea` at rest, and
+   * base64 on the way out, and any one of those steps can quietly mangle a byte
+   * that no unit test with a recording client would notice.
+   */
+  const payload = () => {
+    // Every byte value, so a truncation at 0x00 or a latin1 round trip through
+    // something that should have stayed binary shows up as a mismatch rather
+    // than as a shorter file that still looks plausible.
+    const bytes = new Uint8Array(1024);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
+    return bytes;
+  };
+
+  const file = (studentId: string) => ({
+    purpose: "resume" as const,
+    filename: "resume.pdf",
+    contentType: "application/pdf",
+    bytes: 1024,
+    uploadedBy: "u-alex",
+    studentId,
+    scan: "pending" as const,
+  });
+
+  /** A learner who exists in the seed, since the table has a foreign key. */
+  const LEARNER = "stu-alex";
+
+  async function freshStore(): Promise<FileStore> {
+    await client.query("DELETE FROM uploaded_files");
+    return postgresFileStore(client);
+  }
+
+  it("returns the same bytes it was given", async () => {
+    const store = await freshStore();
+    const data = payload();
+    const stored = await store.put(file(LEARNER), data);
+
+    const read = await store.get(stored.key);
+    expect(read).not.toBeNull();
+    expect(Buffer.from(read!.data).equals(Buffer.from(data))).toBe(true);
+  });
+
+  it("agrees with the in-memory store about the metadata it keeps", async () => {
+    // Parity, the same way every repository accessor is checked: two layers
+    // behind one contract only count as one contract if they answer alike.
+    const pg = await freshStore();
+    const memory = createMemoryFileStore();
+    const data = payload();
+
+    const a = await pg.put(file(LEARNER), data);
+    const b = await memory.put(file(LEARNER), data);
+
+    const shape = (f: typeof a) => ({ ...f, key: "<generated>", uploadedAt: "<then>" });
+    expect(shape(a)).toEqual(shape(b));
+    // The key is generated, not derived — so it must not be the filename, a
+    // hash of the content, or anything else two stores would agree on.
+    expect(a.key).not.toBe(b.key);
+    expect(a.key).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("holds a file quarantined until a scan clears it", async () => {
+    const store = await freshStore();
+    const stored = await store.put(file(LEARNER), payload());
+    expect((await store.metadata(stored.key))!.scan).toBe("pending");
+
+    await store.markScanned(stored.key, "clean");
+    expect((await store.metadata(stored.key))!.scan).toBe("clean");
+  });
+
+  it("refuses a scan status the application does not have", async () => {
+    // The constraint is in the schema rather than only in the type, because a
+    // migration, a script, or a future write path can all reach this table
+    // without going through TypeScript.
+    const store = await freshStore();
+    const stored = await store.put(file(LEARNER), payload());
+    await expect(
+      client.query("UPDATE uploaded_files SET scan = 'probably-fine' WHERE key = $1", [
+        stored.key,
+      ]),
+    ).rejects.toThrow();
+  });
+
+  it("removes a file outright", async () => {
+    const store = await freshStore();
+    const stored = await store.put(file(LEARNER), payload());
+    await store.remove(stored.key);
+    expect(await store.get(stored.key)).toBeNull();
+    expect(await store.metadata(stored.key)).toBeNull();
+  });
+
+  it("takes every file about one learner, and says which", async () => {
+    // What the retention purge calls. It has to be exhaustive and it has to be
+    // scoped: a purge that missed a file would leave a named document behind,
+    // and one that took too many would delete somebody else's.
+    const store = await freshStore();
+    const mine = await store.put(file(LEARNER), payload());
+    const alsoMine = await store.put(file(LEARNER), payload());
+    const theirs = await store.put(file("stu-jordan"), payload());
+
+    const removed = await store.removeForStudent(LEARNER);
+    expect(removed.sort()).toEqual([mine.key, alsoMine.key].sort());
+    expect(await store.get(mine.key)).toBeNull();
+    expect(await store.get(theirs.key)).not.toBeNull();
+  });
+
+  it("refuses a file for a learner who does not exist", async () => {
+    // The foreign key, doing the job the application would otherwise have to
+    // remember to do on every write path that ever touches this table.
+    const store = await freshStore();
+    await expect(store.put(file("s-nobody"), payload())).rejects.toThrow();
   });
 });

@@ -116,9 +116,16 @@ describe("coverage", () => {
       // Produced by the running application, not by fixtures. The outbox fills
       // as transactions commit; sessions and codes only exist once somebody
       // signs in, and a seeded session would be a working credential shipped in
-      // the repository.
+      // the repository. Uploaded files arrive from a person choosing one, and
+      // a fixture file would be a blob in the repository that every checkout
+      // carries and nobody chose.
       (t: string) =>
-        !["notification_outbox", "sessions", "sign_in_codes"].includes(t),
+        ![
+          "notification_outbox",
+          "sessions",
+          "sign_in_codes",
+          "uploaded_files",
+        ].includes(t),
     );
     expect([...expected].filter((t) => !written.has(t))).toEqual([]);
   });
@@ -145,6 +152,14 @@ describe("coverage", () => {
     )!;
     expect(marketInsert.text).not.toContain("subsidy_budget_cents");
     expect(marketInsert.text).not.toContain("subsidy_rate_cents");
+  });
+
+  it("seeds no uploaded file", () => {
+    // The truncation clears the table, so it has to be listed; seeding it would
+    // put somebody's document in the repository.
+    expect(
+      statements.filter((s) => s.text.startsWith("INSERT INTO uploaded_files")),
+    ).toEqual([]);
   });
 
   it("seeds no session and no sign-in code", () => {

@@ -17,6 +17,9 @@ import type { ActorContext, Student } from "@/domain/types";
 import { purgeBlockReason, purgeStudent } from "@/domain/retention";
 import { repositories, store } from "@/data/backend";
 import type { Store } from "@/data/store";
+import { fileStore } from "@/services/uploads/backend";
+import type { FileStore } from "@/services/uploads/storage";
+import { logger } from "@/services/logging";
 
 export type RetentionResult =
   | { ok: true; updated: Student }
@@ -25,9 +28,11 @@ export type RetentionResult =
 export interface RetentionDeps {
   store: Store;
   now: () => Date;
+  /** Resolved lazily so a process with no database never builds a client. */
+  files: () => FileStore;
 }
 
-const defaultDeps: RetentionDeps = { store, now: () => new Date() };
+const defaultDeps: RetentionDeps = { store, now: () => new Date(), files: fileStore };
 
 /**
  * Remove a learner's direct identifiers.
@@ -89,6 +94,34 @@ export async function purgeLearnerIdentity(
       viaOverride: false,
     });
   });
+
+  // After the commit, not inside it and not before it.
+  //
+  // This is new because storage became durable. While files lived in a `Map`
+  // they died with the process and a purge never had to think about them; now
+  // a learner's resume — their name on the front of it, their address inside —
+  // outlives the record it was attached to unless something removes it.
+  //
+  // The ordering is the least-bad of three. Deleting first would destroy files
+  // for a purge that then rolled back. Deleting inside the transaction is not
+  // available: the unit of work is synchronous and the store is not part of it,
+  // and pretending otherwise would mean a half-written purge on a failed
+  // delete. Deleting after means a crash in between can leave bytes behind —
+  // so `canRetrieve` refuses any file whose learner has been purged, and that
+  // refusal is what actually closes the hole. This is the cleanup, not the
+  // control.
+  try {
+    const removed = await deps.files().removeForStudent(student.id);
+    logger.info("retention.files_purged", { studentId: student.id, files: removed.length });
+  } catch (error) {
+    // Loud, and not fatal. The record is already anonymised and the files are
+    // already unreadable; what is left is bytes to sweep, and turning that
+    // into a failed purge would leave the learner identified.
+    logger.warn("retention.files_purge_failed", {
+      studentId: student.id,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+  }
 
   return { ok: true, updated: purged };
 }
