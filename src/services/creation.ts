@@ -155,7 +155,9 @@ export async function submitApplication(
       recipientOrganizationId: posting.businessId,
       kind: "application.submitted",
       payload: {
-        studentName: student.name,
+        // The reference, not the applicant. An employer reviewing candidates
+        // sees the name on the page the button in this message opens.
+        applicationId: application.id,
         postingTitle: posting.title,
         score: application.matchScore.score,
       },

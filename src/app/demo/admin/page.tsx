@@ -7,6 +7,7 @@ import {
   Compass,
   HandCoins,
   HandHeart,
+  ShieldCheck,
   MapPin,
   TrendingUp,
 } from "lucide-react";
@@ -43,15 +44,18 @@ import {
   averagePauseDays,
   funnel,
   outcomeReport,
+  retentionHorizon,
   stalledApplications,
   subsidyDeployed,
 } from "@/lib/queries";
 import type { MarketStage, MentorshipPairing } from "@/domain/types";
 import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
 import { balancesFor, fundPurposeLabel } from "@/domain/funding";
+import { RETENTION_SCHEDULE } from "@/domain/retention";
+import { PurgeLearner } from "@/components/PurgeLearner";
 import { AwardFunds, type FundableLearner } from "@/components/AwardFunds";
 import { AdjustAllocation } from "@/app/demo/board/AdjustAllocation";
-import { adminAdjustAllocation, adminAwardFunds } from "./actions";
+import { adminAdjustAllocation, adminAwardFunds, adminPurgeLearner } from "./actions";
 import type { ApplicationStatus } from "@/domain/types";
 import { isRegionalEmployment, OUTCOME_KINDS } from "@/domain/outcome";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
@@ -180,6 +184,23 @@ export default async function AdminPage() {
     });
     fundableByMarket.set(application.marketId, list);
   }
+
+  /**
+   * The retention clock, across every market.
+   *
+   * Computed from real activity dates rather than announced as a policy, which
+   * is the difference between a schedule and a paragraph. Nothing in a
+   * pre-pilot seed is three years past its last participation, so the due list
+   * is empty — and the section renders anyway, because a retention screen that
+   * only appears once the schedule is already being breached is one nobody
+   * checks until it is too late.
+   */
+  const horizon = await retentionHorizon(admin);
+  const dueNow = horizon.filter((item) => item.status.due && !item.active);
+  const nextDue = horizon.filter((item) => !item.status.due).slice(0, 3);
+  const purgedCount = (await repositories.students.list(admin)).filter(
+    (s) => s.purgedOn !== null,
+  ).length;
 
   const liveMarkets = health.filter((h) => h.market.stage === "live");
   const totalBudget = liveMarkets.reduce((s, h) => s + h.allocated, 0);
@@ -707,6 +728,111 @@ export default async function AdminPage() {
             </Assumption>
           </div>
         </Card>
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Data protection.                                                    */}
+      {/*                                                                     */}
+      {/* Kansas requires deleting a learner's personal information once it is */}
+      {/* no longer required for the purpose collected, and with dual-credit   */}
+      {/* high schoolers in scope that binds directly. The practical form of   */}
+      {/* that is a schedule decided before there is real data — a record with */}
+      {/* no deletion date is one kept forever by default.                     */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Data protection"
+        description="What this platform holds, for how long, and what has come due. Purging removes identifiers and keeps the placement record, so reported figures still reconcile."
+      >
+        <div className="grid gap-6 lg:grid-cols-2 items-start">
+          <Card>
+            <CardHeader
+              level={3}
+              icon={<ShieldCheck className="w-5 h-5" />}
+              title="Retention schedule"
+              subtitle="Decided before there is real data, because a record with no deletion date is kept forever"
+            />
+            <div className="px-6 py-5 space-y-4">
+              {RETENTION_SCHEDULE.map((rule) => (
+                <div key={rule.record}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-semibold text-ink-950">
+                      {rule.label}
+                    </span>
+                    <span className="text-sm font-bold text-ink-950 tabular whitespace-nowrap">
+                      {Math.round(rule.days / 365)} yr
+                    </span>
+                  </div>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    From {rule.anchor}. {rule.rationale}
+                  </p>
+                </div>
+              ))}
+              <Assumption>
+                These figures are a starting position rather than a legal
+                conclusion. They are concrete anyway — a schedule expressed as
+                &ldquo;to be determined&rdquo; is the same as no schedule, and
+                the useful thing to hand a district&rsquo;s counsel is a number
+                to argue with.
+              </Assumption>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              level={3}
+              icon={<ShieldCheck className="w-5 h-5" />}
+              title="Identities due for removal"
+              subtitle={`${purgedCount} already purged · ${horizon.length} learners still identified`}
+            />
+            {dueNow.length === 0 ? (
+              <Empty>
+                Nothing has come due. The clock runs from a learner&rsquo;s last
+                participation, not from when their record was made.
+              </Empty>
+            ) : (
+              <ul className="row-list divide-y divide-line">
+                {dueNow.map(({ student, status }) => (
+                  <li
+                    key={student.id}
+                    className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-sm text-ink-950">
+                        {student.name}
+                      </span>
+                      <p className="text-xs text-crit-700 mt-0.5">
+                        Due {Math.abs(status.daysRemaining)} days ago ·{" "}
+                        {marketName(student.marketId)}
+                      </p>
+                    </div>
+                    <PurgeLearner
+                      studentId={student.id}
+                      learnerLabel={student.name}
+                      action={adminPurgeLearner}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {nextDue.length > 0 && (
+              <div className="px-6 pb-5 pt-1">
+                <p className="text-xs font-bold text-ink-600 uppercase tracking-wider mb-2">
+                  Coming up
+                </p>
+                <ul className="space-y-1">
+                  {nextDue.map(({ student, status }) => (
+                    <li key={student.id} className="text-xs text-ink-500 flex justify-between gap-3">
+                      <span className="truncate">{student.name}</span>
+                      <span className="tabular whitespace-nowrap">
+                        {Math.round(status.daysRemaining / 365)} yr
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+        </div>
       </PageSection>
 
       {/* ------------------------------------------------------------------ */}

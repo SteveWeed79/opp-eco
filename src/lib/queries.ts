@@ -29,6 +29,11 @@ import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
 import {
+  retentionStatusFor,
+  stillParticipating,
+  type RetentionStatus,
+} from "@/domain/retention";
+import {
   balancesFor,
   wageSubsidySource,
   type FundingBalance,
@@ -511,4 +516,74 @@ export async function studentOutcomes(
   studentId: string,
 ): Promise<Outcome[]> {
   return repositories.outcomes.forStudent(actor, studentId);
+}
+
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+export interface RetentionItem {
+  student: Student;
+  status: RetentionStatus;
+  /** Still taking part, so the clock has not started however old the record is. */
+  active: boolean;
+}
+
+/**
+ * Learners whose identity is due to be removed, longest overdue first.
+ *
+ * Exception-first, like every other operational list here: a roll of every
+ * learner and their deletion date is a report, and what an operator needs is
+ * the ones that have come due. Active learners are excluded outright — the rule
+ * is "no longer required for the purpose collected", and a live application is
+ * that purpose.
+ *
+ * Returns nothing for anyone but an administrator. A college has no purge
+ * button and showing it a list of its own students due for anonymisation would
+ * be an invitation to chase something it cannot do.
+ */
+export async function retentionHorizon(
+  actor: ActorContext,
+): Promise<RetentionItem[]> {
+  if (actor.membership.role !== "admin") return [];
+
+  const [students, applications] = await Promise.all([
+    repositories.students.list(actor),
+    repositories.applications.list(actor),
+  ]);
+
+  const items: RetentionItem[] = [];
+  for (const student of students) {
+    if (student.purgedOn) continue;
+    const mine = applications.filter((a) => a.studentId === student.id);
+    const status = retentionStatusFor(student, applications, DEMO_NOW);
+    // Undateable records are skipped rather than listed: one the platform
+    // cannot date is something to investigate by hand, not something to offer
+    // an irreversible button against.
+    if (!status) continue;
+    items.push({ student, status, active: stillParticipating(mine) });
+  }
+
+  return items.sort((a, b) => a.status.daysRemaining - b.status.daysRemaining);
+}
+
+/**
+ * The subset that has actually come due.
+ *
+ * Nothing in a pre-pilot seed is three years old, so this is empty today and
+ * the console says so rather than hiding the section. A retention schedule
+ * whose screen only appears once it is already being breached is a schedule
+ * nobody checks until it is too late.
+ */
+export async function retentionDue(
+  actor: ActorContext,
+): Promise<RetentionItem[]> {
+  return (await retentionHorizon(actor)).filter((item) => item.status.due && !item.active);
+}
+
+/** Every learner whose identity has already been removed. */
+export async function purgedLearners(
+  actor: ActorContext,
+): Promise<Student[]> {
+  return (await repositories.students.list(actor)).filter((s) => s.purgedOn !== null);
 }

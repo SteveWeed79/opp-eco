@@ -111,6 +111,28 @@ export const introductionOutcomeInput = z.object({
 });
 
 /**
+ * Recording a consent.
+ *
+ * `sourceOrgId` is accepted from the caller and then checked against them,
+ * rather than being taken from the acting membership: an administrator can
+ * record on a college's behalf, and the record has to name the college either
+ * way. `grantedBy` is likewise accepted rather than derived — whose signature
+ * was required is a question for a registrar, not a schema.
+ */
+export const recordConsentInput = z.object({
+  studentId: id,
+  sourceOrgId: id,
+  scope: z.enum(["education_record", "workforce_data", "program_participation"]),
+  grantedBy: z.enum(["learner", "parent_guardian"]),
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+export const withdrawConsentInput = z.object({ id, reason });
+
+/** Purging a learner's identity. Irreversible, so the reason is required. */
+export const purgeLearnerInput = z.object({ id, reason });
+
+/**
  * Changing what a fund holds.
  *
  * The reason is required rather than optional, unlike most reasons here. An

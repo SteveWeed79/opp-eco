@@ -39,6 +39,7 @@ function student(overrides: Partial<Student> = {}): Student {
     id: "stu-1",
     marketId: MARKET,
     userId: "u-1",
+    purgedOn: null,
     collegeId: "org-college",
     name: "Test Student",
     email: "s@example.test",

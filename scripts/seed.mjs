@@ -42,6 +42,7 @@ export const TABLES = [
   "notification_outbox",
   "audit_events",
   "outcomes",
+  "consents",
   "funding_commitments",
   "funding_sources",
   "credit_award_applications",
@@ -372,6 +373,30 @@ export async function seedInto(tx) {
     }
   }
 
+  // Consents need their learner, the institution whose records they cover, and
+  // the user who recorded them — all of which are in by now.
+  for (const consent of seed.consents) {
+    await insert(
+      `INSERT INTO consents (id, market_id, student_id, source_org_id, scope,
+         granted_by, granted_on, expires_on, status, recorded_by, note, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        consent.id,
+        consent.marketId,
+        consent.studentId,
+        consent.sourceOrgId,
+        consent.scope,
+        consent.grantedBy,
+        consent.grantedOn,
+        consent.expiresOn ?? null,
+        consent.status,
+        consent.recordedByUserId,
+        consent.note ?? null,
+        consent.version,
+      ],
+    );
+  }
+
   // Funds first, then the draws against them. A source needs its market and its
   // sponsoring organization; a commitment needs the source, the student, the
   // user who authorized it, and — where the draw is against a placement — the
@@ -502,6 +527,7 @@ try {
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
+       (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
        (SELECT count(*) FROM funding_commitments) AS funding_commitments,
        (SELECT count(*) FROM audit_events)       AS audit_events`,

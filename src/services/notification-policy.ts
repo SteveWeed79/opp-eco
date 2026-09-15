@@ -208,7 +208,6 @@ export function notificationsFor(
   const entries = POLICY[status] ?? [];
 
   const payload = {
-    studentName: context.student.name,
     postingTitle: context.posting.title,
     employerName: context.employer?.name ?? "the employer",
     collegeName: context.college?.name ?? "your college",
@@ -244,6 +243,22 @@ export function partiesNotifiedOn(status: ApplicationStatus): Party[] {
  * with no template renders nothing and lands in the outbox as undeliverable —
  * a silent hole in exactly the lifecycle this table exists to cover.
  */
+/**
+ * Which party each message kind is addressed to.
+ *
+ * Exported so a test can assert that every employer-facing message carries the
+ * FERPA redisclosure notice, rather than that assertion depending on a naming
+ * convention in the kind string.
+ */
+export function partyForKind(kind: string): Party | null {
+  for (const entries of Object.values(POLICY)) {
+    for (const entry of entries ?? []) {
+      if (entry.kind === kind) return entry.party;
+    }
+  }
+  return null;
+}
+
 export function policyKinds(): string[] {
   return Object.values(POLICY)
     .flat()

@@ -233,6 +233,7 @@ withDatabase("parity with the in-memory layer", () => {
       awaitingReview: await repos.timeEntries.awaitingReview(actor),
       creditAwards: await repos.creditAwards.list(actor),
       outcomes: await repos.outcomes.list(actor),
+      consents: await repos.consents.list(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
       // Without their ids: the log's primary key is a bigserial the database
@@ -341,6 +342,9 @@ withDatabase("parity with the in-memory layer", () => {
       );
       expect(byId(await postgres.outcomes.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.outcomes.forStudent(actor, student.id)),
+      );
+      expect(byId(await postgres.consents.forStudent(actor, student.id))).toEqual(
+        byId(await memoryRepositories.consents.forStudent(actor, student.id)),
       );
       expect(
         byId(await postgres.fundingCommitments.forStudent(actor, student.id)),

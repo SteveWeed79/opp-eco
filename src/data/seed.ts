@@ -15,6 +15,7 @@ import type {
   Application,
   ApplicationStatus,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
   FundingCommitment,
   FundingSource,
@@ -672,6 +673,8 @@ function userIdForStudent(studentId: string): string {
 export const students: Student[] = studentSeeds.map((s) => ({
   id: s.id,
   marketId: "mkt-pittsburg",
+  // Nothing in the seed is old enough for the retention clock to have run out.
+  purgedOn: null,
   userId: userIdForStudent(s.id),
   collegeId: "org-verdigris",
   name: s.name,
@@ -1696,6 +1699,58 @@ export const creditAwards: CreditAward[] = [
     grantedOn: daysAgo(31),
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Consent
+// ---------------------------------------------------------------------------
+
+/**
+ * Every learner but one, and that omission is the point.
+ *
+ * `stu-jordan` has no education-record consent on file, so an employer looking
+ * at their completed placement sees an abbreviated name and no way to contact
+ * them — the gate working, on data the demo actually ships with. A fixture set
+ * where every consent is present would demonstrate a control nobody has ever
+ * seen refuse anything, which is the same argument that kept the seeded
+ * college's colliding brand colours and left the follow-up queue half-worked.
+ *
+ * All of them are granted by the learner rather than a parent. That is correct
+ * for this seed — every student here is enrolled at the college, and FERPA
+ * rights transfer on postsecondary enrolment at any age — and it is exactly the
+ * assumption that stops holding when a dual-credit high schooler arrives with
+ * records their school holds. The grantor is a recorded field for that reason.
+ */
+export const consents: ConsentRecord[] = students
+  .filter((student) => student.id !== "stu-jordan")
+  .flatMap((student, index) => {
+    const base = {
+      marketId: student.marketId,
+      studentId: student.id,
+      // The college the learner attends: the institution whose records these
+      // are, which is what a consent is attached to.
+      sourceOrgId: student.collegeId,
+      grantedBy: "learner" as const,
+      grantedOn: daysAgo(200 - index),
+      expiresOn: null,
+      status: "granted" as const,
+      recordedByUserId: "u-ellen",
+      version: 1,
+    };
+    return [
+      {
+        ...base,
+        id: `consent-e${index + 1}`,
+        scope: "education_record" as const,
+        note: "Standard release signed at programme intake.",
+      },
+      {
+        ...base,
+        id: `consent-w${index + 1}`,
+        scope: "workforce_data" as const,
+        note: "Agreed to a workforce board eligibility determination.",
+      },
+    ];
+  });
 
 // ---------------------------------------------------------------------------
 // Outcomes

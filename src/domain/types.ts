@@ -305,6 +305,15 @@ export interface Student {
   eligibilityDeterminedOn: string | null;
   eligibilityExpiresOn: string | null;
   verifiedOn: string | null;
+  /**
+   * When this learner's direct identifiers were removed under the retention
+   * schedule, or null while they are still held.
+   *
+   * On the record rather than inferred from a sentinel name, because "is this
+   * purged" is a question reporting asks and a name comparison is the kind of
+   * check that silently starts matching a real person called the same thing.
+   */
+  purgedOn: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -644,6 +653,87 @@ export interface CreditAward {
 }
 
 // ---------------------------------------------------------------------------
+// Consent
+// ---------------------------------------------------------------------------
+
+/**
+ * What a consent covers.
+ *
+ * Separate scopes rather than one blanket agreement, because they are granted
+ * to different parties for different purposes and a learner can reasonably say
+ * yes to one and no to another. Someone happy for a college to verify their
+ * enrolment to an employer may not want their details going to a government
+ * agency for an eligibility determination, and a model with one flag cannot
+ * represent that refusal.
+ */
+export type ConsentScope =
+  /** FERPA: the institution disclosing an education record to an employer. */
+  | "education_record"
+  /** Sharing participant details with a workforce board for a determination. */
+  | "workforce_data"
+  /** Taking part in the programme at all. */
+  | "program_participation";
+
+/**
+ * Who gave it.
+ *
+ * **Recorded, not computed**, and that is the load-bearing decision. FERPA
+ * rights transfer to the learner at 18 *or* on enrolment at a postsecondary
+ * institution at any age — so for records a college holds about a dual-enrolled
+ * sixteen-year-old's college coursework, that learner consents for themselves,
+ * while records their high school holds stay the parent's until they turn 18.
+ * One placement can generate both.
+ *
+ * Deriving the right answer would need the school a learner *attends*, which
+ * this model does not have yet. It would also need a district's counsel and the
+ * partner college's registrar, who will have a settled local answer that
+ * overrides any general reasoning. So the platform records which it obtained
+ * and does not guess.
+ */
+export type ConsentGrantor = "learner" | "parent_guardian";
+
+/**
+ * `withdrawn` is a status rather than a deletion.
+ *
+ * A learner withdrawing consent is an event with a date that the institution
+ * which relied on it may have to account for. Deleting the row would leave the
+ * platform unable to say what was permitted when.
+ */
+export type ConsentStatus = "granted" | "withdrawn" | "expired";
+
+/**
+ * One consent, attached to the institution whose records it covers.
+ *
+ * `sourceOrgId` is the whole design. Consent is a property of the record's
+ * source institution, not of the learner and not of the platform — a college's
+ * consent does not authorise a high school's records, and a second institution
+ * joining a learner's story means a second consent rather than a wider one.
+ */
+export interface ConsentRecord {
+  id: string;
+  marketId: string;
+  studentId: string;
+  /** The institution whose records this covers. */
+  sourceOrgId: string;
+  scope: ConsentScope;
+  grantedBy: ConsentGrantor;
+  grantedOn: string;
+  /**
+   * When it lapses, or null for open-ended.
+   *
+   * Null is common and correct — most institutional consent forms run until
+   * withdrawn — but the column exists because a district that issues
+   * per-academic-year consent has no way to express that otherwise.
+   */
+  expiresOn: string | null;
+  status: ConsentStatus;
+  recordedByUserId: string;
+  /** What was signed, in the institution's own words. */
+  note?: string;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Outcomes
 // ---------------------------------------------------------------------------
 
@@ -752,7 +842,8 @@ export interface AuditEvent {
     | "mentorship_pairing"
     | "outcome"
     | "funding_source"
-    | "funding_commitment";
+    | "funding_commitment"
+    | "consent";
   entityId: string;
   from: string | null;
   to: string;

@@ -1,6 +1,7 @@
 "use server";
 
 import { awardFunds, changeAllocation } from "@/app/_actions/funding";
+import { purgeLearner } from "@/app/_actions/privacy";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { overrideInput, validate } from "@/services/validation";
@@ -92,4 +93,19 @@ export async function adminAdjustAllocation(
   reason: string,
 ): Promise<ActionResult> {
   return changeAllocation("admin", sourceId, allocated, ratePerHour, reason);
+}
+
+/**
+ * Remove a learner's identifiers under the retention schedule.
+ *
+ * The administrator alone, which is the opposite of who records consent and
+ * deliberately so. Consent is an institution's own paperwork about its own
+ * records; a purge is the platform discharging a statutory obligation across
+ * every institution in a market, and it cannot be undone.
+ */
+export async function adminPurgeLearner(
+  studentId: unknown,
+  reason: unknown,
+): Promise<ActionResult> {
+  return purgeLearner("admin", studentId, reason);
 }

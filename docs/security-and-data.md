@@ -165,7 +165,7 @@ Because of KORA, and because it makes reporting cheaper. Aggregates should be de
 
 ### Already in place
 
-Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex`
+Authorization enforced at the repository layer with tests · one guarded write path · field-level PII disclosure at the data layer · append-only audit enforced by a database trigger · parameterised SQL with an injection test · input validation at every trust boundary · `httpOnly` / `SameSite` session cookie · no analytics, no third-party scripts, no tracking · `noindex` · **no participant PII in any outbound message** · **consent recorded against the source institution and enforced on disclosure** · **a retention schedule with a purge that anonymises rather than deletes**
 
 | Control | Where | Note |
 |---|---|---|
@@ -176,6 +176,10 @@ Authorization enforced at the repository layer with tests · one guarded write p
 | `npm audit` at high, Dependabot weekly | CI, `.github/dependabot.yml` | Actions are grouped and updated too — a supply-chain path that is easy to forget because it is not in package.json |
 | Vulnerability reporting path | `SECURITY.md` | Names cross-tenant access and audit tampering as the findings we most want |
 | Upload validation, quarantine, signed retrieval | `src/services/uploads/` | See below |
+| No participant PII in email | `src/services/notification-privacy.ts`, `templates.ts` | Templates name a **record reference**, never a learner. A denylist strips participant keys at `enqueueNotification` — the `UnitOfWork`, not the renderer, because the Postgres queue persists the payload to a table. `notification-privacy.test.ts` renders every template against every seeded learner and fails on any leak |
+| FERPA redisclosure notice | `templates.ts` | On every employer-facing message. The platform is what makes the sharing easy, so it carries the notice |
+| Consent, enforced on disclosure | `src/domain/consent.ts` | Attached to the institution whose records it covers. An employer's step up from abbreviated name to contact details requires **both** the placement stage and education-record consent on file; the check runs in both data layers |
+| Retention schedule | `src/domain/retention.ts` | Four record types with figures and rationales. Purging **anonymises rather than deletes** — the placement survives so reported figures still reconcile — and runs per learner from a computed due list, not as an unattended sweep |
 
 ### Uploads
 
@@ -196,12 +200,15 @@ The known limitation, stated rather than hidden: a `.docx` signature only proves
 | Control | Why it matters here |
 |---|---|
 | Real malware scanning | The stub detects only the EICAR test string. ClamAV or a hosted API is one class |
+| Durable file storage | `createMemoryFileStore()` loses every file on restart. An S3 or Blob adapter satisfies the same interface |
+| Automatic retention sweep | The schedule and the purge exist; running it unattended does not. Deliberate — anonymisation is irreversible and the first unattended run would hit every record at once |
+| Directory-information designation per college | Each institution designates its own, and the platform currently gates the same fields for all of them. Needs a per-college setting and a registrar to fill it in |
 | Shared-store rate limiting | The current limiter is per instance; a distributed one needs Redis or Vercel KV |
 | Branch protection requiring CI | CI reports today but does not block; a red PR is still mergeable |
 
 ### Policy and procurement, not code
 
-Real authentication with **MFA for admin and board roles specifically** — they see cross-market data and make funding decisions · **encryption at rest** (a statutory safe harbour under Kansas breach law) · **Postgres row-level security** as defence in depth, so an application bug is not automatically a breach · retention and deletion schedules · **incident response with a one-hour clock** if WIOA funds are involved · DPAs with Vercel and the database host · periodic admin access review · penetration test before a government contract
+Real authentication with **MFA for admin and board roles specifically** — still the largest single gap, and the one everything above assumes — they see cross-market data and make funding decisions · **encryption at rest** (a statutory safe harbour under Kansas breach law) · **Postgres row-level security** as defence in depth, so an application bug is not automatically a breach · retention and deletion schedules · **incident response with a one-hour clock** if WIOA funds are involved · DPAs with Vercel and the database host · periodic admin access review · penetration test before a government contract
 
 ---
 

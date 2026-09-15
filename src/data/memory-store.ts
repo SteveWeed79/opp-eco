@@ -11,6 +11,7 @@
  */
 
 import type { AuditEvent } from "@/domain/types";
+import { withoutParticipantPII } from "@/services/notification-privacy";
 import * as seed from "./seed";
 import {
   ConcurrencyError,
@@ -247,6 +248,49 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  purgeLearner(student: import("@/domain/types").Student, at: string) {
+    const index = seed.students.findIndex((s) => s.id === student.id);
+    if (index === -1) throw new Error(`Unknown student ${student.id}`);
+    const userIndex = seed.users.findIndex((u) => u.id === student.userId);
+    this.effects.push(() => {
+      seed.students[index] = { ...student, purgedOn: at };
+      // The identity lives on the user record, so the purge has to reach it.
+      // Both writes land in the same staged unit: a learner whose student row
+      // says purged while their user row still carries an email is the exact
+      // state this is meant to make impossible.
+      if (userIndex !== -1) {
+        seed.users[userIndex] = {
+          ...seed.users[userIndex],
+          name: student.name,
+          email: student.email,
+        };
+      }
+    });
+  }
+
+  createConsent(consent: import("@/domain/types").ConsentRecord) {
+    if (seed.consents.some((c) => c.id === consent.id)) {
+      throw new Error(`Consent ${consent.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.consents.push(consent);
+    });
+  }
+
+  saveConsent(
+    consent: import("@/domain/types").ConsentRecord,
+    expectedVersion: number,
+  ) {
+    const index = seed.consents.findIndex((c) => c.id === consent.id);
+    if (index === -1) throw new Error(`Unknown consent ${consent.id}`);
+    if (seed.consents[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Consent", consent.id);
+    }
+    this.effects.push(() => {
+      seed.consents[index] = { ...consent, version: expectedVersion + 1 };
+    });
+  }
+
   createOutcome(outcome: import("@/domain/types").Outcome) {
     if (seed.outcomes.some((o) => o.id === outcome.id)) {
       throw new Error(`Outcome ${outcome.id} already exists`);
@@ -262,9 +306,19 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  /**
+   * Queued with participant PII stripped.
+   *
+   * The templates name a record rather than a person, so in practice there is
+   * nothing to strip. This is the backstop, and it sits here — at the
+   * `UnitOfWork`, which every write passes through — rather than at the
+   * renderer, because the Postgres queue persists the payload to a table. A
+   * guard at render time would leave the PII sitting in `notification_outbox`.
+   */
   enqueueNotification(intent: NotificationIntent) {
+    const safe = withoutParticipantPII(intent);
     this.effects.push(() => {
-      pendingNotifications.push(intent);
+      pendingNotifications.push(safe);
     });
   }
 

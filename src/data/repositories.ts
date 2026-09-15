@@ -15,6 +15,7 @@
 import type {
   ActorContext,
   Application,
+  ConsentRecord,
   AuditEvent,
   CreditAward,
   FundingCommitment,
@@ -187,6 +188,22 @@ export interface FundingCommitmentRepository {
   forStudent(actor: ActorContext, studentId: string): Promise<FundingCommitment[]>;
 }
 
+/**
+ * Consents, narrowed to the parties with standing.
+ *
+ * A learner sees their own, which is not a courtesy: a record asserting that
+ * someone agreed to something is the record they are most entitled to check.
+ * The institution that recorded it sees it because it is the one that will have
+ * to produce the form. **An employer sees none** — it is the beneficiary of the
+ * disclosure, not a party to the agreement, and what it gets from consent is a
+ * wider view of the learner rather than sight of the paperwork.
+ */
+export interface ConsentRepository {
+  list(actor: ActorContext): Promise<ConsentRecord[]>;
+  find(actor: ActorContext, id: string): Promise<ConsentRecord | null>;
+  forStudent(actor: ActorContext, studentId: string): Promise<ConsentRecord[]>;
+}
+
 export interface OutcomeRepository {
   list(actor: ActorContext): Promise<Outcome[]>;
   forStudent(actor: ActorContext, studentId: string): Promise<Outcome[]>;
@@ -214,6 +231,7 @@ export interface Repositories {
   creditAwards: CreditAwardRepository;
   fundingSources: FundingSourceRepository;
   fundingCommitments: FundingCommitmentRepository;
+  consents: ConsentRepository;
   outcomes: OutcomeRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;

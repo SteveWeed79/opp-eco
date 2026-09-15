@@ -29,6 +29,7 @@ import { clearanceExpiry } from "@/domain/eligibility";
 import type {
   Application,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
   InterviewSlot,
   MarketStage,
@@ -227,6 +228,7 @@ export function toStudent(row: Row): Student {
       nullableTimestamp(row.eligibility_determined_on),
     ),
     verifiedOn: nullableTimestamp(row.verified_on),
+    purgedOn: nullableTimestamp(row.purged_on),
   };
 }
 
@@ -290,6 +292,25 @@ export function toMentorshipPairing(row: Row): MentorshipPairing {
     status: text(row.status) as MentorshipPairing["status"],
     outcomeNote: optionalText(row.outcome_note),
     outcomeOn: optionalTimestamp(row.outcome_on),
+  };
+}
+
+export function toConsentRecord(row: Row): ConsentRecord {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    studentId: text(row.student_id),
+    sourceOrgId: text(row.source_org_id),
+    scope: text(row.scope) as ConsentRecord["scope"],
+    grantedBy: text(row.granted_by) as ConsentRecord["grantedBy"],
+    grantedOn: timestamp(row.granted_on),
+    // Nullable rather than optional: open-ended is what most institutional
+    // consent forms are, and it must not read as a field somebody forgot.
+    expiresOn: nullableTimestamp(row.expires_on),
+    status: text(row.status) as ConsentRecord["status"],
+    recordedByUserId: text(row.recorded_by),
+    note: optionalText(row.note),
+    version: number(row.version),
   };
 }
 

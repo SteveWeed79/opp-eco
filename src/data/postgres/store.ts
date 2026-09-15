@@ -21,6 +21,7 @@
 import type {
   Application,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
   FundingCommitment,
   FundingSource,
@@ -39,6 +40,7 @@ import {
   type Store,
   type UnitOfWork,
 } from "../store";
+import { withoutParticipantPII } from "@/services/notification-privacy";
 import { sql, type Sql } from "./client";
 import type { PostgresClient } from "./neon";
 import { cents } from "./rows";
@@ -181,6 +183,7 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       UPDATE students SET
         program_of_study = ${student.programOfStudy},
+        purged_on = ${student.purgedOn},
         class_standing = ${student.classStanding},
         expected_graduation = ${student.expectedGraduation},
         skills = ${student.skills},
@@ -371,6 +374,63 @@ class PostgresUnitOfWork implements UnitOfWork {
 
   // -- Audit and notification ----------------------------------------------
 
+  /**
+   * Two statements, one transaction.
+   *
+   * The `students` row records that it happened; the `users` row is where the
+   * name and the email actually are. Splitting them across two units of work
+   * would allow a learner marked purged who still has contact details on file,
+   * which is the only outcome worth preventing here.
+   */
+  purgeLearner(student: Student, at: string) {
+    this.add(sql`
+      UPDATE students SET purged_on = ${at}, skills = '{}', interests = '{}',
+        expected_graduation = NULL, class_standing = ${student.classStanding},
+        updated_at = now()
+      WHERE id = ${student.id}`);
+    this.add(sql`
+      UPDATE users SET name = ${student.name}, email = ${student.email}
+      WHERE id = ${student.userId}`);
+  }
+
+  // -- Consent --------------------------------------------------------------
+
+  createConsent(consent: ConsentRecord) {
+    this.add(sql`
+      INSERT INTO consents (
+        id, market_id, student_id, source_org_id, scope, granted_by,
+        granted_on, expires_on, status, recorded_by, note, version
+      ) VALUES (
+        ${consent.id}, ${consent.marketId}, ${consent.studentId},
+        ${consent.sourceOrgId}, ${consent.scope}, ${consent.grantedBy},
+        ${consent.grantedOn}, ${consent.expiresOn}, ${consent.status},
+        ${consent.recordedByUserId}, ${consent.note ?? null}, ${consent.version}
+      )`);
+  }
+
+  /**
+   * Status, expiry and note only.
+   *
+   * The scope, the institution and the grantor are absent from the SET list on
+   * purpose: those describe what was actually signed, and a consent edited into
+   * covering something it never did is worse than no record at all. Correcting
+   * one means withdrawing it and recording the real thing.
+   */
+  saveConsent(consent: ConsentRecord, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE consents SET
+          status = ${consent.status},
+          expires_on = ${consent.expiresOn},
+          note = ${consent.note ?? null},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${consent.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Consent", id: consent.id },
+    );
+  }
+
   // -- Funding --------------------------------------------------------------
 
   createFundingSource(source: FundingSource) {
@@ -492,17 +552,26 @@ class PostgresUnitOfWork implements UnitOfWork {
    * a column that references `users` is what made every employer, college and
    * board notification fail, taking the state change beside it down too.
    */
+  /**
+   * Queued with participant PII stripped, matching the in-memory store.
+   *
+   * It matters more here than there. This payload is written to
+   * `notification_outbox` as jsonb and sits in the database — and in every
+   * backup of it — until the row is drained. A guard applied at render time
+   * would clean the email and leave the participant's name in a table.
+   */
   enqueueNotification(intent: NotificationIntent) {
-    const organizationId = intent.recipientOrganizationId ?? null;
+    const safe = withoutParticipantPII(intent);
+    const organizationId = safe.recipientOrganizationId ?? null;
     this.add(sql`
       INSERT INTO notification_outbox (
         market_id, recipient_user_id, recipient_organization_id, kind, payload
       ) VALUES (
-        ${intent.marketId},
-        ${organizationId ? null : intent.recipientUserId},
+        ${safe.marketId},
+        ${organizationId ? null : safe.recipientUserId},
         ${organizationId},
-        ${intent.kind},
-        ${JSON.stringify(intent.payload)}::jsonb
+        ${safe.kind},
+        ${JSON.stringify(safe.payload)}::jsonb
       )`);
   }
 }

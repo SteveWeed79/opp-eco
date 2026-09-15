@@ -171,6 +171,31 @@ export function fundingCommitmentScope(actor: ActorContext): Sql {
   return joinSql(parts, " AND ");
 }
 
+/**
+ * Restrict consents to the parties with standing.
+ *
+ * A learner sees their own, the recording institution sees the ones it holds,
+ * an administrator sees the market's. **`FALSE` for an employer**, which is the
+ * asymmetry worth naming: consent is what widens what an employer may see about
+ * a learner, and it is still not a record the employer is party to.
+ */
+export function consentScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "business") return sql`FALSE`;
+
+  const parts: Sql[] = [marketScope(actor, "consents")];
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`consents.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  if (actor.membership.role === "college") {
+    parts.push(sql`consents.source_org_id = ${actor.membership.organizationId}`);
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function studentScope(actor: ActorContext): Sql {
   const parts: Sql[] = [marketScope(actor, "students")];
   if (actor.membership.role === "student") {

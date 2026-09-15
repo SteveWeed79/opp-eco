@@ -44,6 +44,7 @@ import type { Repositories } from "../repositories";
 import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
+  consentScope,
   fundingCommitmentScope,
   marketScope,
   outcomeScope,
@@ -59,6 +60,7 @@ import {
   toInterviewSlot,
   toMarket,
   toMentorshipOffer,
+  toConsentRecord,
   toFundingCommitment,
   toFundingSource,
   toMentorshipPairing,
@@ -198,6 +200,12 @@ export function postgresRepositories(db: SqlClient): Repositories {
    * declared in the same order the domain lists it, which is what makes the two
    * agree without a CASE expression here.
    */
+  function consentsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([consentScope(actor), extra], " AND ");
+    return sql`SELECT * FROM consents WHERE ${where}
+               ORDER BY consents.granted_on DESC, consents.id COLLATE "C"`;
+  }
+
   function fundsWhere(actor: ActorContext, extra: Sql): Sql {
     const where = joinSql([marketScope(actor, "funding_sources"), extra], " AND ");
     return sql`SELECT * FROM funding_sources WHERE ${where}
@@ -321,7 +329,23 @@ export function postgresRepositories(db: SqlClient): Repositories {
         // Only a business is held at arm's length. The college owns the student
         // relationship and the board needs identity to determine eligibility.
         if (actor.membership.role !== "business") return student;
-        return redactStudent(student, disclosureFor(application));
+
+        // The consent check runs as the employer, who may read no consents at
+        // all — so it deliberately does NOT go through `consentsWhere`. It asks
+        // the narrow question "is one in force", which is not the same as
+        // handing an employer the row.
+        const inForce = await one<{ ok: boolean }>(
+          sql`SELECT TRUE AS ok FROM consents
+               WHERE consents.student_id = ${student.id}
+                 AND consents.source_org_id = ${student.collegeId}
+                 AND consents.scope = 'education_record'
+                 AND consents.status = 'granted'
+                 AND (consents.expires_on IS NULL OR consents.expires_on > now())
+               LIMIT 1`,
+          (row) => ({ ok: row.ok === true }),
+        );
+        const level = inForce ? disclosureFor(application) : "summary";
+        return redactStudent(student, level);
       },
     },
 
@@ -506,6 +530,14 @@ export function postgresRepositories(db: SqlClient): Repositories {
               ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id COLLATE "C"`,
           toCreditAward,
         ),
+    },
+
+    consents: {
+      list: (actor) => all(consentsWhere(actor, sql`TRUE`), toConsentRecord),
+      find: (actor, id) =>
+        one(consentsWhere(actor, sql`consents.id = ${id}`), toConsentRecord),
+      forStudent: (actor, studentId) =>
+        all(consentsWhere(actor, sql`consents.student_id = ${studentId}`), toConsentRecord),
     },
 
     fundingSources: {

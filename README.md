@@ -384,6 +384,96 @@ presented as outstanding, with no way to discover otherwise. `canReadOutcomes`
 exists so a derived view can tell "no outcome exists" from "you may not see one",
 and `outcomeScope` is tested against it so the two cannot drift.
 
+## What leaves the building
+
+Every other privacy control here decides what a *signed-in* caller may read. A
+notification is different in kind: it leaves the system entirely, over a channel
+nobody controls, into an inbox that will be forwarded, searched, backed up, and
+eventually breached by somebody else.
+
+DOL's TEGL 39-11 — which reaches anyone handling participant PII in a
+WIOA-funded program, and the $20/hour reimbursement almost certainly is WIOA
+Title I money — says never to email unencrypted sensitive PII to anyone. So:
+
+**No message names the learner it is about.** Subject lines carry a record
+reference (`APP-12`) instead. That reverses a rule this codebase used to hold
+deliberately — *"a subject line without a name is unsortable"* — and the
+replacement sorts just as well while identifying nobody. A subject line is the
+least protected part of an email: logged by every relay, shown on a lock screen,
+quoted whole in every reply.
+
+The templates were rewritten, and a denylist strips participant keys at
+`enqueueNotification` as a backstop — at the `UnitOfWork` rather than the
+renderer, because the Postgres queue persists the payload to a table and a guard
+at render time would clean the email while leaving the name in a database.
+`notification-privacy.test.ts` renders every template against every seeded
+learner and fails on any leak.
+
+**Every employer-facing message carries the FERPA redisclosure notice.** An
+employer forwarding a candidate to a colleague at another company has created a
+problem that traces back to this product, so the product carries the warning.
+
+Names of people acting professionally stay — a board officer on an interview
+slot, a mentor, an employer contact. Those are role-functional identities, and a
+student booking a call should know who they are meeting.
+
+## Consent
+
+Once a college hands this platform a roster, a verification or a credit award,
+those are education records. **Consent is a property of the record's source
+institution** — not of the learner, and not of the platform. A college's consent
+does not authorise a high school's records about the same person, and a
+dual-credit placement can generate both.
+
+So a consent names the institution it covers, and it has a visible consequence
+rather than being paperwork: an employer's step up from an abbreviated name to
+contact details requires **both** the placement stage and education-record
+consent on file. Withdraw it and the employer's view narrows on the next read.
+
+**Who signed is recorded, not computed.** FERPA rights transfer to the learner
+at 18 *or* on postsecondary enrolment at any age — so a dual-enrolled
+sixteen-year-old consents for themselves on the college's records while their
+parent still holds the school's. Deriving that needs the school a learner
+*attends*, which the model does not have, and a registrar's settled local answer,
+which no column can supply.
+
+The seed ships one verified learner with no consent on file, so the gate is
+visible on the data the demo runs on.
+
+## Retention
+
+Kansas requires deleting a learner's personal information once it is no longer
+required for the purpose collected, and with dual-credit high schoolers in scope
+that binds directly. **A record with no deletion date is a record kept forever**,
+so the schedule is decided before there is real data:
+
+| Record | Kept | From |
+|---|---|---|
+| Uploaded files | 1 year | the placement ending |
+| Learner identity | 3 years | last participation |
+| Applications and placements | 5 years | reaching a terminal status |
+| Audit log | 7 years | the entry being written |
+
+Two decisions worth arguing with:
+
+**Purging anonymises rather than deletes.** The rows stay; the identifiers go. A
+programme has accountability obligations that outlive any individual's privacy
+interest, and deleting a learner would silently restate every historical figure a
+board was already reported. What survives is what aggregates are *by* — which is
+also why this is anonymisation for the purpose of not holding contact details and
+not a claim of k-anonymity: in a market the size of Beloit, one programme in one
+year may be one person.
+
+**The clock runs from last participation, not from record creation**, and an
+active learner is never purged however old their record is — the rule is "no
+longer required for the purpose collected", and a live application is that
+purpose.
+
+There is no unattended sweep, deliberately. Anonymisation is irreversible and the
+first automatic run would hit every record at once; a person pressing a button
+against a computed list is how you find out the schedule is wrong while that is
+still cheap.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
