@@ -198,6 +198,55 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createFundingSource(source: import("@/domain/types").FundingSource) {
+    if (seed.fundingSources.some((f) => f.id === source.id)) {
+      throw new Error(`Funding source ${source.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.fundingSources.push(source);
+    });
+  }
+
+  saveFundingSource(
+    source: import("@/domain/types").FundingSource,
+    expectedVersion: number,
+  ) {
+    const index = seed.fundingSources.findIndex((f) => f.id === source.id);
+    if (index === -1) throw new Error(`Unknown funding source ${source.id}`);
+    if (seed.fundingSources[index].version !== expectedVersion) {
+      // A board officer and an administrator adjusting one allocation is the
+      // likeliest conflict here, and the loser must not overwrite a
+      // supplemental award with a stale figure.
+      throw new ConcurrencyError("Funding source", source.id);
+    }
+    this.effects.push(() => {
+      seed.fundingSources[index] = { ...source, version: expectedVersion + 1 };
+    });
+  }
+
+  createFundingCommitment(commitment: import("@/domain/types").FundingCommitment) {
+    if (seed.fundingCommitments.some((c) => c.id === commitment.id)) {
+      throw new Error(`Funding commitment ${commitment.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.fundingCommitments.push(commitment);
+    });
+  }
+
+  saveFundingCommitment(
+    commitment: import("@/domain/types").FundingCommitment,
+    expectedVersion: number,
+  ) {
+    const index = seed.fundingCommitments.findIndex((c) => c.id === commitment.id);
+    if (index === -1) throw new Error(`Unknown funding commitment ${commitment.id}`);
+    if (seed.fundingCommitments[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Funding commitment", commitment.id);
+    }
+    this.effects.push(() => {
+      seed.fundingCommitments[index] = { ...commitment, version: expectedVersion + 1 };
+    });
+  }
+
   createOutcome(outcome: import("@/domain/types").Outcome) {
     if (seed.outcomes.some((o) => o.id === outcome.id)) {
       throw new Error(`Outcome ${outcome.id} already exists`);

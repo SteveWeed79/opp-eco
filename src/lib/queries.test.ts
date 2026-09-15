@@ -3,6 +3,7 @@ import {
   exitedPlacements,
   followUpQueue,
   funnel,
+  marketFunding,
   marketRemainingBudget,
   outcomeReport,
   stalledApplications,
@@ -69,16 +70,64 @@ describe("query scoping", () => {
 });
 
 describe("budget", () => {
-  it("never reports more committed than the allocation", async () => {
+  it("never reports more remaining than the fund holds", async () => {
     for (const market of await repositories.markets.list(admin)) {
+      const funding = await marketFunding(admin, market.id);
       const remaining = await marketRemainingBudget(admin, market);
-      expect(remaining).toBeLessThanOrEqual(market.subsidyBudget);
+      expect(remaining).toBeLessThanOrEqual(funding.wage?.source.allocated ?? 0);
     }
   });
 
   it("leaves the live market with allocation still uncommitted", async () => {
     const live = (await repositories.markets.list(admin)).find((m) => m.stage === "live")!;
     expect(await marketRemainingBudget(admin, live)).toBeGreaterThan(0);
+  });
+
+  it("reports zero rather than throwing for a market with no fund yet", async () => {
+    // Beloit's board is still in conversation, so nobody sponsors a wage fund.
+    // A market being unfunded is a stage, not an error, and every screen that
+    // divides by an allocation has to survive it.
+    const unfunded = (await repositories.markets.list(admin)).find(
+      (m) => m.stage === "board_engaged",
+    )!;
+    const funding = await marketFunding(admin, unfunded.id);
+    expect(funding.wage).toBeNull();
+    expect(await marketRemainingBudget(admin, unfunded)).toBe(0);
+  });
+
+  it("derives the balance from the ledger rather than from the applications", async () => {
+    // The old definition summed authorized hours × rate over non-terminal
+    // applications. It is deliberately no longer the same number: a placement
+    // that ran and finished has *spent* its commitment, where that test counted
+    // it as freed. This pins the new one against the commitments themselves.
+    const live = (await repositories.markets.list(admin)).find((m) => m.stage === "live")!;
+    const funding = await marketFunding(admin, live.id);
+    const commitments = await repositories.fundingCommitments.list(admin);
+
+    const fromLedger = commitments
+      .filter((c) => c.fundingSourceId === funding.wage!.source.id && c.status !== "released")
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    expect(funding.wage!.committed).toBe(fromLedger);
+    expect(funding.wage!.remaining).toBe(funding.wage!.source.allocated - fromLedger);
+  });
+
+  it("counts every fund in the market, not only the board's", async () => {
+    const live = (await repositories.markets.list(admin)).find((m) => m.stage === "live")!;
+    const funding = await marketFunding(admin, live.id);
+
+    // The whole point of the change: money that is not the board's exists.
+    expect(funding.balances.length).toBeGreaterThan(1);
+    expect(funding.totalAllocated).toBeGreaterThan(funding.wage!.source.allocated);
+    expect(
+      funding.balances.some((b) => b.source.purpose === "credit_cost"),
+    ).toBe(true);
+  });
+
+  it("puts the wage fund first, so the board's own money leads its list", async () => {
+    const live = (await repositories.markets.list(admin)).find((m) => m.stage === "live")!;
+    const funding = await marketFunding(admin, live.id);
+    expect(funding.balances[0].source.purpose).toBe("wage_subsidy");
   });
 });
 

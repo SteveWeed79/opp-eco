@@ -46,7 +46,7 @@ import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet"
 import { ApproveHours } from "./ApproveHours";
 import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours, type MentorshipPairing } from "@/domain/types";
-import { marketRemainingBudget } from "@/lib/queries";
+import { marketFunding } from "@/lib/queries";
 import { businessCloseIntroduction, businessTransition } from "./actions";
 import { NewPosting } from "./NewPosting";
 import { IntroductionOutcome } from "@/components/IntroductionOutcome";
@@ -76,7 +76,11 @@ export default async function BusinessPage() {
   // Part of the transition context every row needs. No employer transition is
   // budget-guarded today, but the state machine asks for it, and computing it
   // once here keeps it out of the row loop.
-  const remainingBudget = await marketRemainingBudget(actor, market);
+  // The fund, not the market: a market carries no money of its own now, and an
+  // employer's page quotes the rate the board is actually paying.
+  const funding = await marketFunding(actor, market.id);
+  const remainingBudget = funding.wage?.remaining ?? 0;
+  const ratePerHour = funding.wage?.source.ratePerHour ?? 0;
 
   // Skills already in use across this market's postings, offered as the
   // vocabulary for a new one. Free-text tags sprawl into "JS", "Javascript",
@@ -213,7 +217,7 @@ export default async function BusinessPage() {
             </span>
             <div>
               <h2 className="text-lg font-black text-ink-950">
-                {boardName} reimburses you ${market.subsidyRatePerHour}/hour
+                {boardName} reimburses you ${ratePerHour}/hour
               </h2>
               <p className="text-sm text-ink-600 mt-1 max-w-xl">
                 For every standard internship hour your intern works after board

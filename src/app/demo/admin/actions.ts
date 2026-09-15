@@ -1,5 +1,6 @@
 "use server";
 
+import { awardFunds, changeAllocation } from "@/app/_actions/funding";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { overrideInput, validate } from "@/services/validation";
@@ -61,4 +62,34 @@ export async function adminCloseIntroduction(
   note: unknown,
 ): Promise<ActionResult> {
   return closeIntroduction("admin", pairingId, to, note);
+}
+
+/**
+ * Commit money from a fund, as the administrator.
+ *
+ * The administrator can spend any fund in any market — which is not an override
+ * in the state-machine sense, and worth saying plainly. `canSpendFrom` grants
+ * it because the operator runs the foundation whose fund it usually is, and
+ * because a market whose sponsor has not acted is exactly what an operator
+ * exists to unstick. Every other caller is narrowed to funds their own
+ * organization sponsors.
+ */
+export async function adminAwardFunds(
+  sourceId: string,
+  studentId: string,
+  applicationId: string | null,
+  amount: number,
+  note: string,
+): Promise<ActionResult> {
+  return awardFunds("admin", sourceId, studentId, applicationId, amount, note);
+}
+
+/** Change what any fund holds. Same ownership rule, same audit trail. */
+export async function adminAdjustAllocation(
+  sourceId: string,
+  allocated: unknown,
+  ratePerHour: unknown,
+  reason: string,
+): Promise<ActionResult> {
+  return changeAllocation("admin", sourceId, allocated, ratePerHour, reason);
 }

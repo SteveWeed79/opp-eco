@@ -5,6 +5,7 @@ import {
   Building2,
   ClipboardCheck,
   Compass,
+  HandCoins,
   HandHeart,
   MapPin,
   TrendingUp,
@@ -21,6 +22,7 @@ import {
   PageSection,
   ProgressBar,
   Stat,
+  STATUS_META,
   StatusBadge,
   Td,
   Th,
@@ -46,6 +48,11 @@ import {
 } from "@/lib/queries";
 import type { MarketStage, MentorshipPairing } from "@/domain/types";
 import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
+import { balancesFor, fundPurposeLabel } from "@/domain/funding";
+import { AwardFunds, type FundableLearner } from "@/components/AwardFunds";
+import { AdjustAllocation } from "@/app/demo/board/AdjustAllocation";
+import { adminAdjustAllocation, adminAwardFunds } from "./actions";
+import type { ApplicationStatus } from "@/domain/types";
 import { isRegionalEmployment, OUTCOME_KINDS } from "@/domain/outcome";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { adminIntroduceStudent } from "./actions";
@@ -56,6 +63,14 @@ import { PORTAL_PATH } from "@/routes";
  * than listed here — a second copy is the one that goes stale the day a kind
  * is added.
  */
+/** Placements far enough along that a cost has actually been incurred. */
+const FUNDABLE_STATUSES = new Set<ApplicationStatus>([
+  "placement_active",
+  "placement_completed",
+  "credit_pending",
+  "credit_granted",
+]);
+
 const REGIONAL_KINDS = new Set(
   OUTCOME_KINDS.map((k) => k.value).filter(isRegionalEmployment),
 );
@@ -124,8 +139,50 @@ export default async function AdminPage() {
       averagePauseDays(admin),
       outcomeReport(admin),
     ]);
+  /**
+   * Every fund across every market, and who could be awarded from one.
+   *
+   * The administrator is the only actor who sees funding whole — a board sees
+   * its own market, a college its own institution's — and seeing it whole is
+   * what "funding coordination" means when it is a product rather than a
+   * sentence on a website.
+   */
+  const [allFunds, allCommitments, allStudentsForFunding, allApplications] =
+    await Promise.all([
+      repositories.fundingSources.list(admin),
+      repositories.fundingCommitments.list(admin),
+      repositories.students.list(admin),
+      repositories.applications.list(admin),
+    ]);
+  const fundBalances = balancesFor(allFunds, allCommitments);
+  const studentNameById = new Map(allStudentsForFunding.map((s) => [s.id, s.name]));
+
+  /**
+   * Learners a fund could be awarded to: one whose placement has started.
+   *
+   * Narrowed to started placements because every purpose this seeds — credit
+   * cost, transport — is a cost the learner incurs by taking the placement, and
+   * committing against an application that may still be declined would hold
+   * money against something that never happens. A learner-level grant with no
+   * placement is supported by the model and is not offered here.
+   */
+  const fundableByMarket = new Map<string, FundableLearner[]>();
+  for (const application of allApplications) {
+    if (!FUNDABLE_STATUSES.has(application.status)) continue;
+    const name = studentNameById.get(application.studentId);
+    if (!name) continue;
+    const list = fundableByMarket.get(application.marketId) ?? [];
+    list.push({
+      value: `${application.studentId}:${application.id}`,
+      label: name,
+      meta: application.track === "micro" ? "Micro" : "Standard",
+      description: `${STATUS_META[application.status]?.label ?? application.status} · ${marketName(application.marketId)}`,
+    });
+    fundableByMarket.set(application.marketId, list);
+  }
+
   const liveMarkets = health.filter((h) => h.market.stage === "live");
-  const totalBudget = liveMarkets.reduce((s, h) => s + h.market.subsidyBudget, 0);
+  const totalBudget = liveMarkets.reduce((s, h) => s + h.allocated, 0);
   const inPause = stalled.filter((s) => s.inPause).length;
 
   return (
@@ -315,20 +372,30 @@ export default async function AdminPage() {
                           </span>
                           <span className="text-xs text-ink-500">
                             <Money value={h.committed} /> of{" "}
-                            <Money value={h.market.subsidyBudget} />
+                            <Money value={h.allocated} />
                           </span>
                         </div>
                         <ProgressBar
                           value={h.committed}
-                          max={h.market.subsidyBudget}
+                          max={h.allocated}
                       label={`${h.market.name} subsidy committed`}
                           tone={
-                            h.committed / h.market.subsidyBudget > 0.8 ? "crit" : "brand"
+                            h.overcommitted || (h.allocated > 0 && h.committed / h.allocated > 0.8)
+                              ? "crit"
+                              : "brand"
                           }
                         />
                         <p className="text-xs text-ink-500 mt-1.5">
-                          <Money value={h.remaining} /> uncommitted at $
-                          {h.market.subsidyRatePerHour}/hr
+                          {h.overcommitted ? (
+                            <span className="text-crit-700 font-semibold">
+                              <Money value={-h.remaining} /> overcommitted
+                            </span>
+                          ) : (
+                            <>
+                              <Money value={h.remaining} /> uncommitted
+                            </>
+                          )}{" "}
+                          at ${h.ratePerHour}/hr
                         </p>
                       </div>
                     </>
@@ -533,6 +600,113 @@ export default async function AdminPage() {
           </div>
         </Card>
       </div>
+      </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Funding — the thing the venture actually sells.                     */}
+      {/*                                                                     */}
+      {/* Every figure here used to be one number on one market: a board's     */}
+      {/* allocation at a board's rate. The service being sold is coordinating */}
+      {/* several sources onto one placement, and until these rows existed the */}
+      {/* product could describe that on its marketing pages and not depict it */}
+      {/* anywhere. An allocation is also expected to move — a supplemental    */}
+      {/* award, a rescission — so adjusting one is a write with a reason      */}
+      {/* rather than a fixture edit.                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Funding"
+        description="Every fund in the network, what it has left, and who it has reached. Allocations change during a program year; changing one here records why."
+      >
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<HandCoins className="w-5 h-5" />}
+            title="Funds and commitments"
+            subtitle="Wage subsidy leads each market; everything under it is money the board is not paying"
+          />
+          {fundBalances.length === 0 ? (
+            <Empty>No funds have been opened yet.</Empty>
+          ) : (
+            <ul className="row-list divide-y divide-line">
+              {fundBalances.map((balance) => (
+                <li key={balance.source.id} className="px-6 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-ink-950">
+                          {balance.source.name}
+                        </span>
+                        <Badge
+                          tone={
+                            balance.source.purpose === "wage_subsidy" ? "brand" : "neutral"
+                          }
+                        >
+                          {fundPurposeLabel(balance.source.purpose)}
+                        </Badge>
+                        {balance.overcommitted && <Badge tone="crit">Overcommitted</Badge>}
+                      </div>
+                      <p className="text-xs text-ink-500 mt-0.5">
+                        {marketName(balance.source.marketId)} ·{" "}
+                        {organizationName(balance.source.sponsorOrgId)} ·{" "}
+                        {balance.liveCommitments} learner
+                        {balance.liveCommitments === 1 ? "" : "s"}
+                        {balance.source.ratePerHour
+                          ? ` · $${balance.source.ratePerHour}/hr`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p
+                          className={`text-sm font-bold tabular ${
+                            balance.remaining < 0 ? "text-crit-700" : "text-ink-950"
+                          }`}
+                        >
+                          <Money value={balance.remaining} />
+                        </p>
+                        <p className="text-xs text-ink-500">
+                          of <Money value={balance.source.allocated} />
+                        </p>
+                      </div>
+                      {balance.source.purpose !== "wage_subsidy" && (
+                        <AwardFunds
+                          sourceId={balance.source.id}
+                          fundName={balance.source.name}
+                          remaining={balance.remaining}
+                          learners={fundableByMarket.get(balance.source.marketId) ?? []}
+                          action={adminAwardFunds}
+                        />
+                      )}
+                      <AdjustAllocation
+                        sourceId={balance.source.id}
+                        fundName={balance.source.name}
+                        allocated={balance.source.allocated}
+                        ratePerHour={balance.source.ratePerHour}
+                        committed={balance.committed}
+                        action={adminAdjustAllocation}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <ProgressBar
+                      value={Math.min(balance.committed, balance.source.allocated)}
+                      max={balance.source.allocated || 1}
+                      label={`${balance.source.name} committed`}
+                      tone={balance.overcommitted ? "crit" : "brand"}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="px-6 pb-5">
+            <Assumption>
+              Wage subsidy is reported separately from everything else rather
+              than summed with it. A total mixing public and philanthropic
+              dollars is the one number neither funder would accept.
+            </Assumption>
+          </div>
+        </Card>
       </PageSection>
 
       {/* ------------------------------------------------------------------ */}

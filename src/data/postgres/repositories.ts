@@ -44,6 +44,7 @@ import type { Repositories } from "../repositories";
 import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
+  fundingCommitmentScope,
   marketScope,
   outcomeScope,
   mentorshipPairingScope,
@@ -58,6 +59,8 @@ import {
   toInterviewSlot,
   toMarket,
   toMentorshipOffer,
+  toFundingCommitment,
+  toFundingSource,
   toMentorshipPairing,
   toOutcome,
   toOrganization,
@@ -189,6 +192,27 @@ export function postgresRepositories(db: SqlClient): Repositories {
    * read its market's outcomes and may not read the free text, which is a
    * projection rather than a filter. Same shape as `narrowTimeEntry`.
    */
+  /**
+   * Purpose order, then newest fund first — matching `byFundOrder` on the other
+   * layer. Postgres sorts an enum in declaration order, and `fund_purpose` is
+   * declared in the same order the domain lists it, which is what makes the two
+   * agree without a CASE expression here.
+   */
+  function fundsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([marketScope(actor, "funding_sources"), extra], " AND ");
+    return sql`SELECT * FROM funding_sources WHERE ${where}
+               ORDER BY funding_sources.purpose,
+                        funding_sources.opened_on DESC,
+                        funding_sources.id COLLATE "C"`;
+  }
+
+  function commitmentsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([fundingCommitmentScope(actor), extra], " AND ");
+    return sql`SELECT * FROM funding_commitments WHERE ${where}
+               ORDER BY funding_commitments.authorized_on DESC,
+                        funding_commitments.id COLLATE "C"`;
+  }
+
   async function outcomesWhere(actor: ActorContext, extra: Sql): Promise<Outcome[]> {
     const where = joinSql([outcomeScope(actor), extra], " AND ");
     const rows = await all(
@@ -481,6 +505,35 @@ export function postgresRepositories(db: SqlClient): Repositories {
                 AND credit_awards.student_id = ${studentId}
               ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id COLLATE "C"`,
           toCreditAward,
+        ),
+    },
+
+    fundingSources: {
+      list: (actor) => all(fundsWhere(actor, sql`TRUE`), toFundingSource),
+      find: (actor, id) =>
+        one(fundsWhere(actor, sql`funding_sources.id = ${id}`), toFundingSource),
+      forMarket: (actor, marketId) =>
+        all(fundsWhere(actor, sql`funding_sources.market_id = ${marketId}`), toFundingSource),
+    },
+
+    fundingCommitments: {
+      list: (actor) => all(commitmentsWhere(actor, sql`TRUE`), toFundingCommitment),
+      find: (actor, id) =>
+        one(commitmentsWhere(actor, sql`funding_commitments.id = ${id}`), toFundingCommitment),
+      forSource: (actor, sourceId) =>
+        all(
+          commitmentsWhere(actor, sql`funding_commitments.funding_source_id = ${sourceId}`),
+          toFundingCommitment,
+        ),
+      forApplication: (actor, applicationId) =>
+        all(
+          commitmentsWhere(actor, sql`funding_commitments.application_id = ${applicationId}`),
+          toFundingCommitment,
+        ),
+      forStudent: (actor, studentId) =>
+        all(
+          commitmentsWhere(actor, sql`funding_commitments.student_id = ${studentId}`),
+          toFundingCommitment,
         ),
     },
 

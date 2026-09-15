@@ -134,6 +134,43 @@ export function outcomeScope(actor: ActorContext): Sql {
   return joinSql(parts, " AND ");
 }
 
+/**
+ * Restrict draws against a fund to the parties with a reason to read one.
+ *
+ * An employer sees the commitments against placements it hosts — it is the
+ * party being reimbursed, and a payment it cannot see is one it cannot
+ * reconcile. A student sees their own, because a grant covering their tuition
+ * is a fact about their own finances before it is a line in a board's report.
+ *
+ * There is no matching `fundingSourceScope`, and that absence is deliberate:
+ * every actor in a market reads every fund in it. A student working out whether
+ * they can afford the credit and an employer working out whether hosting is
+ * viable are asking the same question, and a funding model visible only to its
+ * sponsor would reproduce the gap this venture exists to close. Spending is
+ * what is narrowed, by `canSpendFrom`, and the write paths check it again.
+ */
+export function fundingCommitmentScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "funding_commitments")];
+
+  if (actor.membership.role === "business") {
+    parts.push(
+      sql`funding_commitments.application_id IN (
+        SELECT a.id FROM applications a
+          JOIN postings p ON p.id = a.posting_id
+         WHERE p.business_id = ${actor.membership.organizationId}
+      )`,
+    );
+  }
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`funding_commitments.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function studentScope(actor: ActorContext): Sql {
   const parts: Sql[] = [marketScope(actor, "students")];
   if (actor.membership.role === "student") {

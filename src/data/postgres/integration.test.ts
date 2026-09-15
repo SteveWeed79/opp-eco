@@ -233,6 +233,8 @@ withDatabase("parity with the in-memory layer", () => {
       awaitingReview: await repos.timeEntries.awaitingReview(actor),
       creditAwards: await repos.creditAwards.list(actor),
       outcomes: await repos.outcomes.list(actor),
+      fundingSources: await repos.fundingSources.list(actor),
+      fundingCommitments: await repos.fundingCommitments.list(actor),
       // Without their ids: the log's primary key is a bigserial the database
       // assigns, while the fixtures carry `evt-1`. Everything an audit entry
       // means — who, when, what moved, and whether it was an override — is
@@ -340,6 +342,11 @@ withDatabase("parity with the in-memory layer", () => {
       expect(byId(await postgres.outcomes.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.outcomes.forStudent(actor, student.id)),
       );
+      expect(
+        byId(await postgres.fundingCommitments.forStudent(actor, student.id)),
+      ).toEqual(
+        byId(await memoryRepositories.fundingCommitments.forStudent(actor, student.id)),
+      );
     }
 
     for (const posting of await memoryRepositories.postings.list(actor)) {
@@ -357,6 +364,27 @@ withDatabase("parity with the in-memory layer", () => {
       ).toEqual(
         byId(await memoryRepositories.outcomes.forApplication(actor, application.id)),
       );
+      expect(
+        byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
+      ).toEqual(
+        byId(
+          await memoryRepositories.fundingCommitments.forApplication(actor, application.id),
+        ),
+      );
+    }
+
+    // Money is stored in cents and read back in dollars, so a parity failure
+    // here is a factor-of-100 bug rather than a scoping one — which is exactly
+    // the kind that survives a unit test against a recording client.
+    for (const market of await memoryRepositories.markets.list(actor)) {
+      const fromPg = await postgres.fundingSources.forMarket(actor, market.id);
+      const fromMemory = await memoryRepositories.fundingSources.forMarket(actor, market.id);
+      expect(fromPg).toEqual(fromMemory);
+      for (const source of fromMemory) {
+        expect(byId(await postgres.fundingCommitments.forSource(actor, source.id))).toEqual(
+          byId(await memoryRepositories.fundingCommitments.forSource(actor, source.id)),
+        );
+      }
     }
   });
 

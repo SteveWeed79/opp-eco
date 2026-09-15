@@ -26,7 +26,7 @@ import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import {
   followUpQueue,
-  marketRemainingBudget,
+  marketFunding,
   studentCreditProgress,
 } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
@@ -70,7 +70,7 @@ export default async function CollegePage() {
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
-  const remainingBudget = await marketRemainingBudget(actor, market);
+  const remainingBudget = (await marketFunding(actor, market.id)).wage?.remaining ?? 0;
 
   const pendingVerification = await repositories.students.pendingVerification(actor);
   const needsDrafting = await repositories.postings.awaitingCollegeHelp(actor);

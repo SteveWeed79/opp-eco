@@ -15,6 +15,8 @@ import type {
   Application,
   AuditEvent,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
@@ -149,6 +151,26 @@ export interface UnitOfWork {
    * followed up again six months later gets a second row, because the history
    * is the evidence and an update would destroy it.
    */
+  /**
+   * Open a fund, and change one.
+   *
+   * `saveFundingSource` is versioned, unlike vetting or a posting: an
+   * allocation has more than one desk. A board officer adjusting an award and
+   * an administrator correcting a figure is exactly the concurrent write the
+   * version check exists for, and the loser overwriting a supplemental award
+   * with a stale number is a funder-facing error.
+   */
+  createFundingSource(source: FundingSource): void;
+  saveFundingSource(source: FundingSource, expectedVersion: number): void;
+  /**
+   * Draw against a fund, and give it back.
+   *
+   * Versioned for the same reason, and create-only-then-save rather than an
+   * upsert: releasing a commitment must find one, and committing must not
+   * silently overwrite an existing draw.
+   */
+  createFundingCommitment(commitment: FundingCommitment): void;
+  saveFundingCommitment(commitment: FundingCommitment, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;

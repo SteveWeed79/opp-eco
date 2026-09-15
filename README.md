@@ -71,7 +71,9 @@ bookable application. Restart the server to reseed.
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
 | Seeded markets | The four-community proving ground | Pittsburg, Emporia, and Hays — three university towns — plus Beloit, deliberately a tenth their size. Three university markets can prove the model works next to a university; they cannot show whether it travels |
-| Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
+| Funding | Many sources, one placement | A board's wage subsidy, a foundation's grant against the cost of internship credit, a college's fee waiver, an employer's contribution. A market carries no money of its own — every figure is the balance of a fund |
+| Allocations | Expected to change | A supplemental award or a rescission is ordinary program administration, so adjusting one is an audited write with a reason, not a fixture edit |
+| Payments | Out of scope | The platform tracks funding obligations but moves no money |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 
 ## Architecture
@@ -81,9 +83,9 @@ The five portals are five views onto **one workflow state machine**, not five in
 ```
 src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  profiles per track, credit accumulation, match scoring,
-                 PII disclosure, and the follow-up outcome — the one record
-                 here that is an observation rather than a state machine.
-                 No UI, no database.
+                 PII disclosure, funding sources and the ledger against them,
+                 and the follow-up outcome — the one record here that is an
+                 observation rather than a state machine. No UI, no database.
 src/auth/        Session resolution behind a provider interface. Replacing
                  simulated sign-on touches this and nothing else.
 src/data/        Repository contracts, two implementations behind them — the
@@ -178,6 +180,109 @@ So an introduction is a record. A live one spends one of the mentor's declared p
 Who may do what follows from that. The employer normally closes an introduction, being the only party who knows whether the student turned up; the college and the administrator can too, because one nobody ever closes holds a mentor's place open forever. Only verified students can be introduced. The board sees none of it — it reimburses placements, and a mentorship carries no wage, no credit and no public money, so who was introduced to whom is not its business.
 
 `paused` exists so that a busy quarter is not a resignation. An offer whose only exit was `withdrawn` would take an employer off the mentor list permanently the first time they were short-handed, and a paused offer disappears from the student's list in the same request it is paused — an employer still listed after saying they could not take anyone is fielding introductions they just declined.
+
+## Funding
+
+**A market carries no money of its own.** It used to: `subsidyBudget` and
+`subsidyRatePerHour` sat on the market record, and that was the entire funding
+model — one workforce board, one allocation, one hourly rate. That is the
+mechanic the Southeast Kansas pilot runs on, and it is not the thing the venture
+sells. What it sells is **funding coordination**, and the second, third and
+fourth source were not expressible.
+
+The concrete cost of that: the 177-student survey's top barrier is the tuition a
+student pays to *receive credit* for work the board is already subsidising. The
+nonprofit arm exists partly to pay it. There was nowhere to record either the
+cost or the grant that covered it.
+
+So a figure now lives on a `FundingSource` and nowhere else:
+
+| Sponsor | Purpose | Seeded example |
+|---|---|---|
+| Workforce board | Wage subsidy | $240,000 at $20/hour |
+| Foundation | Cost of internship credit | $18,000 |
+| College | Cost of internship credit | $9,000 fee waiver |
+| Foundation | Transportation | $6,000 |
+
+Kind and purpose are separate axes on purpose. A foundation can pay a wage or a
+bus fare and a college can waive a fee or fund a stipend; collapsing them would
+mean a new kind of sponsor every time a new cost appeared.
+
+### The numbers are expected to move
+
+This is the part that shaped the design. An allocation is not a constant that
+happens to be stored — a supplemental award arrives, a rescission takes some
+back, a board revises its rate between cohorts. While the figure was a fixture
+on the market it could only change by a redeploy, which meant in practice it
+never changed and every screen quoted a number nobody had revisited.
+
+Adjusting one is now a write with a **required reason**, landing in the audit log
+beside the old and new figures. "The number in the database is different now" is
+not an explanation, and an allocation that moved is the one figure a funder will
+certainly ask about.
+
+**Reducing an allocation below what is already committed is allowed.** That is
+the decision worth arguing. A rescission is a real thing that happens to public
+money, and a board that has committed $180,000 and just had its award cut to
+$150,000 is overcommitted in fact — refusing the edit would leave the software
+showing a figure the board knows is wrong. It is the same argument as approved
+hours exceeding an authorized cap: naming it is the only honest option, and the
+console leads with it.
+
+A *new commitment* that would not fit is refused, and the asymmetry is
+deliberate. An allocation moving is news arriving from outside and the
+platform's job is to show it; a commitment is the platform's own act, and
+knowingly promising money a fund does not hold is how a student is told they
+have a grant that will not arrive.
+
+### The ledger
+
+A `FundingCommitment` is one draw against one fund, and **every balance
+anywhere is derived from sources and commitments**. Nothing caches a total: a
+stored total is a number that can disagree with the ledger, and a funder asking
+where their money went is the worst possible audience for two answers.
+
+Commitments carry their own rate, copied at authorization rather than read
+through the fund. A board moving next year's cohort from $20 to $18 must not
+retroactively rewrite what it already promised at $20.
+
+Three statuses, and the distinction the old model could not make:
+
+- **authorized** — promised, not yet paid.
+- **disbursed** — the placement ran and finished, so the money was *spent*.
+- **released** — it ended before anyone started, so the money returns.
+
+Settlement happens inside the same transaction as the state change that caused
+it (`settlementFor`), because five portals can move an application into a
+terminal status and a rule living in one of them is a rule the other four break.
+A released row is kept rather than deleted — "what did we commit and not spend"
+is a question a board asks at the end of a program year, and a missing row
+cannot answer it.
+
+Before this, `marketRemainingBudget` simply stopped counting any terminal
+application, which silently treated a completed, fully reimbursed placement and
+an application withdrawn on day one as the same event. For a board reconciling a
+program year they are opposites.
+
+### Who may move money, and who may see it
+
+Spending is decided by **ownership, not role**: the organization that sponsors a
+fund, plus the administrator. "The board may commit" stops being true the moment
+a market has two boards, and "the college may commit" would let one college draw
+on another institution's scholarship.
+
+Reading is deliberately wide. Every actor in a market sees every fund in it — a
+student working out whether they can afford the credit and an employer working
+out whether hosting is viable are asking the same question, and a funding model
+visible only to its sponsor would reproduce the gap this venture exists to close.
+What is narrowed is the *commitments*: an employer sees draws against placements
+it hosts, a student sees their own.
+
+The one new organization kind, `nonprofit`, exists because a fund needs a
+sponsor. The wider network the vision names — K-12 districts, training
+providers, economic development offices — is still absent: each needs its own
+answer to what vetting means for it, and adding kinds nothing uses would be a
+migration that buys a longer enum.
 
 ## Hours
 
@@ -433,6 +538,11 @@ The outbox states plainly whether "delivered" means an email left the building o
 - **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
 - **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
+- **Program-year rollover.** A fund carries a `programYear` and nothing rolls it
+  over. What happens to an unspent allocation at year end, whether a live
+  commitment crosses the boundary with it, and whether the next year's fund is a
+  new row or the same one re-allocated are all policy questions a board answers
+  differently from a foundation (Q24).
 - **A fixed follow-up interval.** Workforce reporting measures employment at set
   quarters after exit — the second and the fourth — and an outcome here is
   recorded whenever somebody asks. The record already separates the date an

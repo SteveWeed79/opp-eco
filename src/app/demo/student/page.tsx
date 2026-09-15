@@ -31,7 +31,7 @@ import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
 import { DEMO_NOW, studentForUser } from "@/data/seed";
 import { LogHours } from "./LogHours";
-import { marketRemainingBudget, studentCreditProgress } from "@/lib/queries";
+import { marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { mentorshipFormatLabel } from "@/domain/mentorship";
@@ -58,10 +58,12 @@ export default async function StudentPage() {
     await repositories.postings.published(actor),
   ]);
   const applications = ownApplications.filter((a) => !isTerminal(a.status));
-  const [progress, remainingBudget] = await Promise.all([
+  const [progress, funding] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
-    marketRemainingBudget(actor, market!),
+    marketFunding(actor, market!.id),
   ]);
+  const remainingBudget = funding.wage?.remaining ?? 0;
+  const ratePerHour = funding.wage?.source.ratePerHour ?? 0;
   const boardName = organizationName(market!.boardId);
 
   // Timesheets for placements currently running. Only the standard track has
@@ -217,7 +219,7 @@ export default async function StudentPage() {
                       applicationId={application.id}
                       slots={openSlots}
                       boardName={boardName}
-                      ratePerHour={market!.subsidyRatePerHour}
+                      ratePerHour={ratePerHour}
                     />
                   )}
 

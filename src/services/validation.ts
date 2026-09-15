@@ -111,6 +111,42 @@ export const introductionOutcomeInput = z.object({
 });
 
 /**
+ * Changing what a fund holds.
+ *
+ * The reason is required rather than optional, unlike most reasons here. An
+ * allocation that moved with nothing recorded about why is the one figure a
+ * funder will certainly ask about, and the moment to capture it is the moment
+ * it changes.
+ *
+ * Both figures are bounded: a whole positive number with a ceiling, so a
+ * fat-fingered extra zero is refused before it becomes a budget somebody plans
+ * against.
+ */
+export const adjustFundingInput = z.object({
+  sourceId: id,
+  allocated: z.number().int().min(0).max(100_000_000).optional(),
+  ratePerHour: z.number().int().positive().max(500).optional(),
+  reason,
+});
+
+/** Drawing on a fund. The rate and the market are derived server-side. */
+export const commitFundsInput = z.object({
+  sourceId: id,
+  studentId: id,
+  // Nullable rather than optional, matching the domain: a grant reaching a
+  // learner with no placement is a real case, and an absent key and an explicit
+  // null must not mean different things at the trust boundary.
+  applicationId: id.nullable(),
+  amount: z.number().int().positive().max(1_000_000),
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+export const releaseCommitmentInput = z.object({
+  id,
+  reason,
+});
+
+/**
  * A follow-up observation.
  *
  * `applicationId` is nullable rather than optional, matching the domain: a

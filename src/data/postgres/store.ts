@@ -22,6 +22,8 @@ import type {
   Application,
   AuditEvent,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
@@ -368,6 +370,83 @@ class PostgresUnitOfWork implements UnitOfWork {
   }
 
   // -- Audit and notification ----------------------------------------------
+
+  // -- Funding --------------------------------------------------------------
+
+  createFundingSource(source: FundingSource) {
+    this.add(sql`
+      INSERT INTO funding_sources (
+        id, market_id, sponsor_org_id, kind, purpose, program_year, name,
+        allocated_cents, rate_cents, status, opened_on, version
+      ) VALUES (
+        ${source.id}, ${source.marketId}, ${source.sponsorOrgId}, ${source.kind},
+        ${source.purpose}, ${source.programYear}, ${source.name},
+        ${cents(source.allocated)}, ${optionalCents(source.ratePerHour)},
+        ${source.status}, ${source.openedOn}, ${source.version}
+      )`);
+  }
+
+  /**
+   * The write that lets the numbers move.
+   *
+   * Versioned, and the `RETURNING id` is what turns a stale write into a told
+   * failure rather than a silent one: a supplemental award overwritten by an
+   * administrator's stale figure is an error a funder eventually finds.
+   */
+  saveFundingSource(source: FundingSource, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE funding_sources SET
+          name = ${source.name},
+          allocated_cents = ${cents(source.allocated)},
+          rate_cents = ${optionalCents(source.ratePerHour)},
+          status = ${source.status},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${source.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Funding source", id: source.id },
+    );
+  }
+
+  createFundingCommitment(commitment: FundingCommitment) {
+    this.add(sql`
+      INSERT INTO funding_commitments (
+        id, market_id, funding_source_id, student_id, application_id,
+        amount_cents, hours, rate_cents, status, authorized_on, authorized_by,
+        note, version
+      ) VALUES (
+        ${commitment.id}, ${commitment.marketId}, ${commitment.fundingSourceId},
+        ${commitment.studentId}, ${commitment.applicationId},
+        ${cents(commitment.amount)}, ${commitment.hours ?? null},
+        ${optionalCents(commitment.ratePerHour)}, ${commitment.status},
+        ${commitment.authorizedOn}, ${commitment.authorizedByUserId},
+        ${commitment.note ?? null}, ${commitment.version}
+      )`);
+  }
+
+  /**
+   * Status and note only.
+   *
+   * The amount, the hours and the rate are deliberately absent from the SET
+   * list: a commitment is what was promised at the moment it was made, and
+   * editing the figure afterwards would let a released draw be rewritten into a
+   * smaller one that was never actually released. Correcting a commitment means
+   * releasing it and making another.
+   */
+  saveFundingCommitment(commitment: FundingCommitment, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE funding_commitments SET
+          status = ${commitment.status},
+          note = ${commitment.note ?? null},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${commitment.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Funding commitment", id: commitment.id },
+    );
+  }
 
   createOutcome(outcome: Outcome) {
     this.add(sql`

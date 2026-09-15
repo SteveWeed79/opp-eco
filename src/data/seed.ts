@@ -16,6 +16,8 @@ import type {
   ApplicationStatus,
   AuditEvent,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   Market,
   MentorshipOffer,
@@ -29,6 +31,8 @@ import type {
   User,
 } from "@/domain/types";
 import { clearanceExpiry } from "@/domain/eligibility";
+import { hasExited } from "@/domain/outcome";
+import { isTerminal } from "@/domain/workflow";
 import { scoreMatch } from "@/domain/matching";
 import { brandAddress } from "@/brand";
 
@@ -64,8 +68,6 @@ export const markets: Market[] = [
     boardId: "org-sekwp",
     collegeIds: ["org-verdigris"],
     launchedOn: daysAgo(214),
-    subsidyBudget: 240_000,
-    subsidyRatePerHour: 20,
     programYear: "PY2026",
   },
   {
@@ -77,8 +79,6 @@ export const markets: Market[] = [
     boardId: "org-fhwp",
     collegeIds: ["org-cottonwood"],
     launchedOn: null,
-    subsidyBudget: 120_000,
-    subsidyRatePerHour: 20,
     programYear: "PY2026",
   },
   {
@@ -93,8 +93,6 @@ export const markets: Market[] = [
     boardId: "org-shwp",
     collegeIds: [],
     launchedOn: null,
-    subsidyBudget: 110_000,
-    subsidyRatePerHour: 20,
     programYear: "PY2026",
   },
   {
@@ -121,8 +119,6 @@ export const markets: Market[] = [
     boardId: null,
     collegeIds: [],
     launchedOn: null,
-    subsidyBudget: 0,
-    subsidyRatePerHour: 20,
     programYear: "PY2026",
   },
 ];
@@ -132,6 +128,29 @@ export const markets: Market[] = [
 // ---------------------------------------------------------------------------
 
 export const organizations: Organization[] = [
+  /**
+   * The foundation, and the only `nonprofit` in the fixtures.
+   *
+   * It exists because a fund needs a sponsor and the venture's own structure is
+   * a for-profit paired with a nonprofit arm — the arm that pays the barriers no
+   * public formula covers. Invented, like every organization here, and placed in
+   * the live market because that is where it has something to spend on.
+   *
+   * It is not vetted and does not need to be: `canTransact` gates posting and
+   * mentorship, and sponsoring a fund is neither.
+   */
+  {
+    id: "org-ccln",
+    marketId: "mkt-pittsburg",
+    kind: "nonprofit",
+    name: "Career Connected Learning Foundation",
+    county: "Crawford",
+    status: "active",
+    contactName: "Rosalind Pace",
+    contactEmail: "rpace@ccln-foundation.example.org",
+    appliedOn: daysAgo(250),
+  },
+
   // --- Southeast Kansas, live ---
   {
     id: "org-sekwp",
@@ -313,6 +332,124 @@ export const organizations: Organization[] = [
     contactEmail: "oradcliffe@chalkbluff.example.edu",
     appliedOn: daysAgo(12),
     hoursPerCredit: 45,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Funding
+// ---------------------------------------------------------------------------
+
+/**
+ * Four funds in the live market, one each in the two markets standing up, and
+ * none in Beloit.
+ *
+ * The board's wage subsidy is the old `subsidyBudget` — the same $240,000 at
+ * the same $20, now a row rather than a field on the market. What is new is
+ * everything beside it: a foundation grant against the cost of internship
+ * credit, a college fee waiver aimed at the same cost from the other side, and
+ * a small transport fund. That layering is the venture's actual service, and
+ * until these rows existed the product could not depict it.
+ *
+ * Beloit has no fund at all, and that is the case worth seeding. Its board is
+ * still in conversation, so `boardId` is null and there is nobody to sponsor a
+ * wage subsidy — which means every balance on every screen has to cope with a
+ * market that has no money yet, rather than dividing by zero.
+ */
+export const fundingSources: FundingSource[] = [
+  {
+    id: "fund-sek-wage",
+    marketId: "mkt-pittsburg",
+    sponsorOrgId: "org-sekwp",
+    kind: "workforce",
+    purpose: "wage_subsidy",
+    programYear: "PY2026",
+    name: "PY2026 WIOA wage reimbursement",
+    allocated: 240_000,
+    ratePerHour: 20,
+    status: "active",
+    openedOn: daysAgo(214),
+    version: 1,
+  },
+  {
+    /**
+     * The one that motivated the whole change.
+     *
+     * The student survey's top barrier is the tuition a student pays to receive
+     * credit for work the board is already subsidising. This is the fund that
+     * pays it, and before this row there was nowhere to record either the cost
+     * or the grant covering it.
+     */
+    id: "fund-ccln-credit",
+    marketId: "mkt-pittsburg",
+    sponsorOrgId: "org-ccln",
+    kind: "philanthropic",
+    purpose: "credit_cost",
+    programYear: "PY2026",
+    name: "Internship credit assistance",
+    allocated: 18_000,
+    status: "active",
+    openedOn: daysAgo(150),
+    version: 1,
+  },
+  {
+    // The same barrier from the institution's side. Two funds rather than one
+    // because a college waiving its own fee and a foundation paying it are
+    // different money with different reporting, and a model that merged them
+    // would have to un-merge them the first time either was audited.
+    id: "fund-verdigris-waiver",
+    marketId: "mkt-pittsburg",
+    sponsorOrgId: "org-verdigris",
+    kind: "institutional",
+    purpose: "credit_cost",
+    programYear: "PY2026",
+    name: "Work-based learning fee waiver",
+    allocated: 9_000,
+    status: "active",
+    openedOn: daysAgo(180),
+    version: 1,
+  },
+  {
+    // Small, and the most likely thing to run out. In a four-county market
+    // getting to the placement is frequently the whole obstacle.
+    id: "fund-ccln-transport",
+    marketId: "mkt-pittsburg",
+    sponsorOrgId: "org-ccln",
+    kind: "philanthropic",
+    purpose: "transportation",
+    programYear: "PY2026",
+    name: "Rural transportation assistance",
+    allocated: 6_000,
+    status: "active",
+    openedOn: daysAgo(150),
+    version: 1,
+  },
+  {
+    id: "fund-fh-wage",
+    marketId: "mkt-emporia",
+    sponsorOrgId: "org-fhwp",
+    kind: "workforce",
+    purpose: "wage_subsidy",
+    programYear: "PY2026",
+    name: "PY2026 WIOA wage reimbursement",
+    allocated: 120_000,
+    ratePerHour: 20,
+    status: "active",
+    openedOn: daysAgo(90),
+    version: 1,
+  },
+  {
+    id: "fund-sh-wage",
+    marketId: "mkt-hays",
+    sponsorOrgId: "org-shwp",
+    kind: "workforce",
+    purpose: "wage_subsidy",
+    programYear: "PY2026",
+    name: "PY2026 WIOA wage reimbursement",
+    allocated: 110_000,
+    ratePerHour: 20,
+    status: "active",
+    openedOn: daysAgo(60),
+    version: 1,
   },
 ];
 
@@ -1642,6 +1779,113 @@ export const outcomes: Outcome[] = [
     source: "college",
     detail: "Enrolled in the bachelor's completion programme.",
   },
+];
+
+// ---------------------------------------------------------------------------
+// Commitments — the ledger against those funds
+// ---------------------------------------------------------------------------
+
+/**
+ * Derived from the applications rather than written out beside them.
+ *
+ * Every funded placement in the fixtures already carries
+ * `fundingAuthorizedHours` and `fundingAuthorizedRate`, and those two numbers
+ * ARE the commitment. Hand-writing a second list of the same figures would
+ * create exactly the drift this change exists to remove — a ledger that
+ * disagrees with the placements it is supposed to describe — and the first
+ * fixture edited would break the invariant silently.
+ *
+ * The status each one lands in is the honest reading of what happened to the
+ * money, and it is not the same as the old "is the application terminal" test:
+ *
+ *   disbursed   the placement ran and finished, so the money was spent
+ *   released    it ended before anyone started, so the money goes back
+ *   authorized  it is live, and the money is promised but not yet paid
+ *
+ * That third case is why a released row is kept rather than deleted. "What did
+ * we commit and not spend" is a question a board asks at the end of a program
+ * year, and a missing row cannot answer it.
+ */
+function commitmentStatusFor(application: Application): FundingCommitment["status"] {
+  if (hasExited(application)) return "disbursed";
+  if (isTerminal(application.status)) return "released";
+  return "authorized";
+}
+
+const wageCommitments: FundingCommitment[] = applications
+  .filter((a) => (a.fundingAuthorizedHours ?? 0) > 0 && (a.fundingAuthorizedRate ?? 0) > 0)
+  .map((application, index) => ({
+    id: `commit-w${index + 1}`,
+    marketId: application.marketId,
+    // Every funded placement in the fixtures is in the live market, and the
+    // unique index on the schema guarantees that market has exactly one open
+    // wage fund — so there is no ambiguity about which one to draw on.
+    fundingSourceId: "fund-sek-wage",
+    studentId: application.studentId,
+    applicationId: application.id,
+    amount: (application.fundingAuthorizedHours ?? 0) * (application.fundingAuthorizedRate ?? 0),
+    hours: application.fundingAuthorizedHours,
+    ratePerHour: application.fundingAuthorizedRate,
+    status: commitmentStatusFor(application),
+    authorizedOn: application.submittedOn,
+    authorizedByUserId: "u-marcia",
+    version: 1,
+  }));
+
+/**
+ * And the draws that are not wage subsidy, which are the point of the change.
+ *
+ * Three learners whose credit cost or transport is being covered by somebody
+ * other than the board. Deliberately a small number against a small fund: the
+ * transport pot is $6,000 and two grants have already taken a fifth of it,
+ * because a funding screen that never shows a fund under pressure has not been
+ * tested against the situation an operator actually manages.
+ */
+const assistanceCommitments: FundingCommitment[] = [
+  {
+    id: "commit-a1",
+    marketId: "mkt-pittsburg",
+    fundingSourceId: "fund-ccln-credit",
+    studentId: "stu-omar",
+    applicationId: "app-27",
+    amount: 1_050,
+    status: "authorized",
+    authorizedOn: daysAgo(24),
+    authorizedByUserId: "u-admin",
+    note: "Three credit hours at the in-state rate; he could not take the placement otherwise.",
+    version: 1,
+  },
+  {
+    id: "commit-a2",
+    marketId: "mkt-pittsburg",
+    fundingSourceId: "fund-verdigris-waiver",
+    studentId: "stu-hana",
+    applicationId: "app-17",
+    amount: 700,
+    status: "disbursed",
+    authorizedOn: daysAgo(60),
+    authorizedByUserId: "u-ellen",
+    note: "Departmental waiver against the micro-internship credit.",
+    version: 1,
+  },
+  {
+    id: "commit-a3",
+    marketId: "mkt-pittsburg",
+    fundingSourceId: "fund-ccln-transport",
+    studentId: "stu-luis",
+    applicationId: "app-21",
+    amount: 1_200,
+    status: "disbursed",
+    authorizedOn: daysAgo(120),
+    authorizedByUserId: "u-admin",
+    note: "Fuel for a 38-mile commute across the county line, one semester.",
+    version: 1,
+  },
+];
+
+export const fundingCommitments: FundingCommitment[] = [
+  ...wageCommitments,
+  ...assistanceCommitments,
 ];
 
 // ---------------------------------------------------------------------------

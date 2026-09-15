@@ -64,13 +64,160 @@ export interface Market {
   boardId: string | null;
   collegeIds: string[];
   launchedOn: string | null;
-  /** Board allocation for the program year, in whole dollars. */
-  subsidyBudget: number;
-  subsidyRatePerHour: number;
   programYear: string;
 }
 
-export type OrganizationKind = "business" | "college" | "board";
+/**
+ * Money, and where it came from.
+ *
+ * `Market` used to carry `subsidyBudget` and `subsidyRatePerHour` directly, and
+ * that was the whole funding model: one workforce board, one allocation, one
+ * hourly rate. It was also a number written in one place and read in five,
+ * which is the shape this codebase distrusts everywhere else — and it could not
+ * express the thing the venture actually sells, which is funding
+ * *coordination*: a board's wage subsidy, a foundation's grant toward the cost
+ * of internship credit, a college's fee waiver, and an employer's own
+ * contribution, layered on one placement.
+ *
+ * So the figure now lives on a `FundingSource` row and nowhere else. Every
+ * balance on every screen is derived from sources and the commitments against
+ * them, and changing an allocation is an audited write rather than an edit to
+ * a fixture.
+ */
+export type FundKind =
+  /** WIOA and equivalent. Eligibility-gated, and the only one that pays hourly today. */
+  | "workforce"
+  /** The CCLN foundation and other grantmakers. */
+  | "philanthropic"
+  /** A college's own scholarship or fee waiver. */
+  | "institutional"
+  /** The employer's own wage or project fee. */
+  | "employer";
+
+/**
+ * What a fund may be spent on.
+ *
+ * Deliberately separate from `FundKind`: a foundation can pay a wage or a
+ * transport cost, and a college can waive a fee or fund a stipend. Collapsing
+ * the two would mean a new kind of sponsor every time a new cost appears.
+ *
+ * `credit_cost` is the one that motivated this. The 177-student survey's top
+ * barrier to taking a placement is the tuition a student pays to receive credit
+ * for work a board is already subsidising, and the platform could not record
+ * the cost or the grant that covered it.
+ */
+export type FundPurpose =
+  | "wage_subsidy"
+  | "credit_cost"
+  | "transportation"
+  | "stipend"
+  | "employer_support";
+
+/**
+ * `exhausted` is derived state made explicit: a source with nothing left is not
+ * closed, because a release can put money back into it. `closed` is the sponsor
+ * saying the fund is finished, which no release reopens.
+ */
+export type FundingSourceStatus = "active" | "exhausted" | "closed";
+
+export interface FundingSource {
+  id: string;
+  marketId: string;
+  /** The board, the foundation, the college — whoever the money belongs to. */
+  sponsorOrgId: string;
+  kind: FundKind;
+  purpose: FundPurpose;
+  programYear: string;
+  /** What a board officer would call it on their own paperwork. */
+  name: string;
+  /**
+   * Whole dollars, and **expected to change**.
+   *
+   * A supplemental award arrives, a rescission takes some back, a foundation
+   * adds to the pot mid-year. That is ordinary program administration rather
+   * than a correction, so it runs through `adjustFundingSource` with a reason
+   * and lands in the audit log — the number moving is the normal case, and the
+   * record of why it moved is what makes it trustworthy.
+   */
+  allocated: number;
+  /**
+   * Set only where the fund pays by the hour, as a board's wage subsidy does.
+   *
+   * Also adjustable, and the reason commitments store their own rate: a board
+   * moving next year's cohort from $20 to $18 must not retroactively rewrite
+   * what it already committed at $20.
+   */
+  ratePerHour?: number;
+  status: FundingSourceStatus;
+  openedOn: string;
+  /**
+   * Optimistic concurrency. Two administrators adjusting one allocation is the
+   * likeliest write conflict here, and the loser must be told to reload rather
+   * than silently overwriting the winner's figure with a stale one.
+   */
+  version: number;
+}
+
+/**
+ * `released` returns the money and is not a deletion.
+ *
+ * A placement that never starts has its commitment released, and the row stays:
+ * a board asking "what did we commit and not spend" is asking a question a
+ * deleted row cannot answer.
+ */
+export type CommitmentStatus = "authorized" | "disbursed" | "released";
+
+/**
+ * One draw against one source.
+ *
+ * The ledger, and the only thing that counts as committed. The application's
+ * `fundingAuthorizedHours` and `fundingAuthorizedRate` remain beside it as a
+ * cache the transition guards read, for exactly the reason `hoursApproved` is a
+ * cache over time entries: a guard takes an `Application` and no repository.
+ * `funding.test.ts` pins the two against each other.
+ */
+export interface FundingCommitment {
+  id: string;
+  marketId: string;
+  fundingSourceId: string;
+  studentId: string;
+  /**
+   * The placement this pays for, when there is one.
+   *
+   * Null is a real case rather than missing data: a transport grant or a fee
+   * waiver can reach a learner who has not been placed yet, and refusing to
+   * record it until they are is how the barrier stays invisible.
+   */
+  applicationId: string | null;
+  /** Whole dollars, fixed at authorization. */
+  amount: number;
+  /** Hours this covers, where the fund pays hourly. */
+  hours?: number;
+  /**
+   * The rate this was committed at, copied from the source rather than read
+   * through it. A source's rate can change; what was already promised cannot.
+   */
+  ratePerHour?: number;
+  status: CommitmentStatus;
+  authorizedOn: string;
+  authorizedByUserId: string;
+  /** Why this was committed, or on release, why it was given back. */
+  note?: string;
+  version: number;
+}
+
+/**
+ * `nonprofit` is one value out of the several the vision names, added because
+ * there is now something concrete that needs it: a foundation sponsoring a fund.
+ *
+ * The rest of the wider network the venture describes — K-12 districts, training
+ * providers, economic development offices, chambers — are deliberately still
+ * absent. Each needs its own answer to what vetting means for it, since
+ * `canTransact` gates posting and mentorship on a check written for employers,
+ * and adding kinds nothing uses would be a migration that buys a longer enum.
+ * A foundation earns its value here by being the sponsor on a `FundingSource`.
+ */
+export type OrganizationKind = "business" | "college" | "board" | "nonprofit";
 
 export type OrganizationStatus =
   | "applied"
@@ -603,7 +750,9 @@ export interface AuditEvent {
     | "time_entry"
     | "mentorship_offer"
     | "mentorship_pairing"
-    | "outcome";
+    | "outcome"
+    | "funding_source"
+    | "funding_commitment";
   entityId: string;
   from: string | null;
   to: string;

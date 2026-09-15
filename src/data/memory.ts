@@ -10,6 +10,7 @@
 import type {
   ActorContext,
   Application,
+  FundingCommitment,
   MentorshipOffer,
   MentorshipPairing,
   Organization,
@@ -27,6 +28,7 @@ import {
 import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { byObservedDescending } from "@/domain/outcome";
+import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 
@@ -96,6 +98,39 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
     return self ? rows.filter((p) => p.studentId === self.id) : [];
   }
   if (role === "board") return [];
+  return rows;
+}
+
+/**
+ * Draws against a fund, narrowed by whose money and whose learner it is.
+ *
+ * An employer sees the commitments against placements it hosts, because it is
+ * the party being reimbursed and a payment it cannot see is one it cannot
+ * reconcile. A student sees their own — a grant covering their tuition is a
+ * fact about their own finances before it is a line in a board's report.
+ * Everyone else sees the market's.
+ *
+ * The funds themselves are deliberately NOT narrowed like this: everyone in a
+ * market reads every source. A student deciding whether they can afford the
+ * credit and an employer deciding whether hosting is viable are asking the same
+ * question, and a funding model visible only to its sponsor would reproduce the
+ * gap this venture exists to close.
+ */
+function visibleCommitments(actor: ActorContext): FundingCommitment[] {
+  const rows = inScope(actor, seed.fundingCommitments);
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") {
+    const own = postingIdsOwnedBy(organizationId);
+    const hosted = new Set(
+      seed.applications.filter((a) => own.has(a.postingId)).map((a) => a.id),
+    );
+    return rows.filter((c) => c.applicationId && hosted.has(c.applicationId));
+  }
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((c) => c.studentId === self.id) : [];
+  }
   return rows;
 }
 
@@ -313,6 +348,33 @@ export const repositories: Repositories = {
     list: async (actor) => inScope(actor, seed.creditAwards),
     forStudent: async (actor, studentId) =>
       inScope(actor, seed.creditAwards).filter((c) => c.studentId === studentId),
+  },
+
+  fundingSources: {
+    list: async (actor) => inScope(actor, seed.fundingSources).slice().sort(byFundOrder),
+    find: async (actor, id) =>
+      inScope(actor, seed.fundingSources).find((f) => f.id === id) ?? null,
+    forMarket: async (actor, marketId) =>
+      inScope(actor, seed.fundingSources)
+        .filter((f) => f.marketId === marketId)
+        .sort(byFundOrder),
+  },
+
+  fundingCommitments: {
+    list: async (actor) => visibleCommitments(actor).slice().sort(byCommitmentOrder),
+    find: async (actor, id) => visibleCommitments(actor).find((c) => c.id === id) ?? null,
+    forSource: async (actor, sourceId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.fundingSourceId === sourceId)
+        .sort(byCommitmentOrder),
+    forApplication: async (actor, applicationId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.applicationId === applicationId)
+        .sort(byCommitmentOrder),
+    forStudent: async (actor, studentId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.studentId === studentId)
+        .sort(byCommitmentOrder),
   },
 
   outcomes: {

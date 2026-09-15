@@ -42,6 +42,8 @@ export const TABLES = [
   "notification_outbox",
   "audit_events",
   "outcomes",
+  "funding_commitments",
+  "funding_sources",
   "credit_award_applications",
   "credit_awards",
   "time_entries",
@@ -71,16 +73,14 @@ export async function seedInto(tx) {
   for (const market of seed.markets) {
     await insert(
       `INSERT INTO markets (id, name, city, counties, stage, board_id, launched_on,
-         subsidy_budget_cents, subsidy_rate_cents, program_year)
-       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6,$7,$8)`,
+         program_year)
+       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6)`,
       [
         market.id,
         market.name,
         market.city,
         market.counties,
         market.launchedOn,
-        cents(market.subsidyBudget),
-        cents(market.subsidyRatePerHour),
         market.programYear,
       ],
     );
@@ -372,6 +372,56 @@ export async function seedInto(tx) {
     }
   }
 
+  // Funds first, then the draws against them. A source needs its market and its
+  // sponsoring organization; a commitment needs the source, the student, the
+  // user who authorized it, and — where the draw is against a placement — the
+  // application. All of those are in by this point.
+  for (const source of seed.fundingSources) {
+    await insert(
+      `INSERT INTO funding_sources (id, market_id, sponsor_org_id, kind, purpose,
+         program_year, name, allocated_cents, rate_cents, status, opened_on, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        source.id,
+        source.marketId,
+        source.sponsorOrgId,
+        source.kind,
+        source.purpose,
+        source.programYear,
+        source.name,
+        cents(source.allocated),
+        source.ratePerHour === undefined ? null : cents(source.ratePerHour),
+        source.status,
+        source.openedOn,
+        source.version,
+      ],
+    );
+  }
+
+  for (const commitment of seed.fundingCommitments) {
+    await insert(
+      `INSERT INTO funding_commitments (id, market_id, funding_source_id, student_id,
+         application_id, amount_cents, hours, rate_cents, status, authorized_on,
+         authorized_by, note, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        commitment.id,
+        commitment.marketId,
+        commitment.fundingSourceId,
+        commitment.studentId,
+        commitment.applicationId ?? null,
+        cents(commitment.amount),
+        commitment.hours ?? null,
+        commitment.ratePerHour === undefined ? null : cents(commitment.ratePerHour),
+        commitment.status,
+        commitment.authorizedOn,
+        commitment.authorizedByUserId,
+        commitment.note ?? null,
+        commitment.version,
+      ],
+    );
+  }
+
   // Last of the scoped tables: an outcome points at a market, a student, the
   // user who recorded it, and — when the learner reached it through a
   // placement — an application. All four are already in.
@@ -452,6 +502,8 @@ try {
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
+       (SELECT count(*) FROM funding_sources)    AS funding_sources,
+       (SELECT count(*) FROM funding_commitments) AS funding_commitments,
        (SELECT count(*) FROM audit_events)       AS audit_events`,
   );
   console.log("seeded:");

@@ -120,13 +120,39 @@ describe("coverage", () => {
   });
 
   it("converts money to cents on the way in", () => {
+    // The allocation moved off the market and onto its wage-subsidy fund, which
+    // is where the conversion now has to happen. $240,000 is 24,000,000 cents;
+    // writing dollars here would read back as $2,400 through `rows.ts`.
+    const wageFund = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO funding_sources") &&
+        s.params.includes("wage_subsidy") &&
+        s.params.includes("mkt-pittsburg"),
+    )!;
+    expect(wageFund.params).toContain(24_000_000);
+    expect(wageFund.params).toContain(2_000);
+  });
+
+  it("leaves a market carrying no money of its own", () => {
+    // Pinned so a well-meaning re-add is caught here rather than by two screens
+    // disagreeing about the same allocation.
     const marketInsert = statements.find((s) =>
       s.text.startsWith("INSERT INTO markets"),
     )!;
-    // $240,000 of allocation is 24,000,000 cents. Writing dollars here would
-    // read back as $2,400 through `rows.ts`.
-    expect(marketInsert.params).toContain(24_000_000);
-    expect(marketInsert.params).toContain(2_000);
+    expect(marketInsert.text).not.toContain("subsidy_budget_cents");
+    expect(marketInsert.text).not.toContain("subsidy_rate_cents");
+  });
+
+  it("writes no rate on a fund that is not paid by the hour", () => {
+    // The schema refuses one, and a rate on a grant is a number nothing would
+    // ever multiply.
+    const grant = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO funding_sources") &&
+        s.params.includes("credit_cost"),
+    )!;
+    // Position 8 is rate_cents in the insert's column list.
+    expect(grant.params[8]).toBeNull();
   });
 
   it("attributes a verified student, which the schema requires", () => {
