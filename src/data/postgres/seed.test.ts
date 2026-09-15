@@ -11,7 +11,7 @@
 import { describe, it, expect } from "vitest";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- plain JS operator script, which cannot import TypeScript
-import { seedInto, TABLES } from "../../../scripts/seed.mjs";
+import { seedInto, RUNTIME_TABLES, TABLES } from "../../../scripts/seed.mjs";
 
 interface Recorded {
   text: string;
@@ -112,21 +112,12 @@ describe("coverage", () => {
     // A fixture that stops being seeded leaves an empty table nobody notices
     // until a portal renders blank.
     const written = new Set(statements.map((s) => target(s.text)));
-    const expected = TABLES.filter(
-      // Produced by the running application, not by fixtures. The outbox fills
-      // as transactions commit; sessions and codes only exist once somebody
-      // signs in, and a seeded session would be a working credential shipped in
-      // the repository. Uploaded files arrive from a person choosing one, and
-      // a fixture file would be a blob in the repository that every checkout
-      // carries and nobody chose.
-      (t: string) =>
-        ![
-          "notification_outbox",
-          "sessions",
-          "sign_in_codes",
-          "uploaded_files",
-        ].includes(t),
-    );
+    // The exclusions come from the seed script itself rather than from a copy
+    // kept here. A second list is a list that goes stale, and this one did:
+    // four credential tables were added to the truncation and this test failed
+    // on tables it was never going to be right about.
+    const runtime = new Set(RUNTIME_TABLES);
+    const expected = TABLES.filter((t: string) => !runtime.has(t));
     expect([...expected].filter((t) => !written.has(t))).toEqual([]);
   });
 
@@ -162,21 +153,30 @@ describe("coverage", () => {
     ).toEqual([]);
   });
 
-  it("seeds no session and no sign-in code", () => {
-    // Worth asserting rather than assuming. A fixture session would be a
-    // credential anyone could read out of this repository and present.
-    const auth = statements.filter(
-      (s) =>
-        s.text.startsWith("INSERT INTO sessions") ||
-        s.text.startsWith("INSERT INTO sign_in_codes"),
+  it("seeds no credential of any kind", () => {
+    // Worth asserting rather than assuming. A fixture session or password would
+    // be a working credential anyone could read out of this repository and
+    // present — and a seeded password is one that every checkout knows and
+    // every deployment starts life with.
+    const credentials = [
+      "sessions",
+      "sign_in_codes",
+      "user_passwords",
+      "user_totp",
+      "user_recovery_codes",
+      "mfa_challenges",
+    ];
+    const written = statements.filter((s) =>
+      credentials.some((table) => s.text.startsWith(`INSERT INTO ${table}`)),
     );
-    expect(auth).toEqual([]);
+    expect(written).toEqual([]);
   });
 
   it("records how each organization signs in", () => {
-    // The board seeds onto codes plus a required second factor rather than
-    // `federated`: it still holds no password for a public employee, and it no
-    // longer locks the agency out of a pilot for want of an SSO adapter.
+    // The board seeds onto codes rather than `federated`: it still holds no
+    // password for a public employee — and no authenticator seed either, since
+    // the factor is the agency's own mailbox — and it no longer locks the
+    // agency out of a pilot for want of an SSO adapter.
     const board = statements.find(
       (s) =>
         s.text.startsWith("INSERT INTO organizations") && s.params.includes("board"),

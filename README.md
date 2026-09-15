@@ -962,6 +962,17 @@ the whole suite green; CI runs it against a container on every change. **The
 database it names is truncated and reseeded** — never point it at one whose
 contents matter.
 
+It covers the **auth store** as well as the repositories, which for a long time
+it did not. `src/auth/postgres-store.ts` holds every credential the platform
+has, and the only thing that ever exercised it was somebody running a dev server
+against Postgres by hand — so a Postgres-only fault in there was invisible until
+a person tried to sign in, which is the one path with no fallback. The
+assertions are the ones only a real database can answer: that the composite
+primary key on `sign_in_codes` keeps a reset code and a sign-in code apart, that
+`last_counter` comes back a number rather than the string a `bigint` column
+hands out by default, and that single use of a recovery code is the database's
+property rather than the caller's.
+
 Running the **whole e2e suite against Postgres** is the other half, and worth
 doing after any change to the data layer:
 
@@ -972,7 +983,10 @@ export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
 npm run db:seed && npm run build && npm run test:e2e
 ```
 
-Every flow the demo has passes on either backend.
+Every flow the demo has passes on either backend, and the sign-on suites below
+are run against both as well — the in-memory store and Postgres each hold
+credentials their own way, and a password that only round-trips through one of
+them is a sign-in page that works in development and not in production.
 
 That third variable is the one door past the guard on demo sign-on, and it is
 there because this suite needs the combination the guard refuses — a role picker,

@@ -38,8 +38,41 @@ const cents = (value) => (value === undefined || value === null ? null : Math.ro
  * deliberately absent: the schema is not the data, and wiping the ledger would
  * make the next `db:migrate` try to rebuild tables that already exist.
  */
+/**
+ * Tables the truncation clears and the fixtures never refill.
+ *
+ * Everything here is produced by the running application rather than by a
+ * fixture, and each one would be actively wrong to ship: a seeded session or
+ * sign-in code is a working credential committed to the repository, a seeded
+ * password is one every checkout knows, and a fixture upload is a blob nobody
+ * chose. The outbox fills as transactions commit.
+ *
+ * Named as a set rather than left implicit because `src/data/postgres/seed.test.ts`
+ * asserts that every *other* table in `TABLES` is written by `seedInto` — a
+ * fixture that quietly stops being seeded leaves an empty table nobody notices
+ * until a portal renders blank.
+ */
+export const RUNTIME_TABLES = [
+  "uploaded_files",
+  "notification_outbox",
+  "sessions",
+  "sign_in_codes",
+  // Credentials. These reference `users` and would be emptied by the CASCADE
+  // whether or not they were listed — named anyway, because a re-seed silently
+  // discarding every password in the database is exactly the kind of thing that
+  // should be readable in the list of what it clears.
+  "user_passwords",
+  "user_totp",
+  "user_recovery_codes",
+  "mfa_challenges",
+];
+
 export const TABLES = [
   "uploaded_files",
+  "user_passwords",
+  "user_totp",
+  "user_recovery_codes",
+  "mfa_challenges",
   "sessions",
   "sign_in_codes",
   "notification_outbox",
