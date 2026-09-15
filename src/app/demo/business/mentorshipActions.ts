@@ -9,7 +9,7 @@ import { mentorshipOfferInput, validate } from "@/services/validation";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { drainPending } from "@/services/outbox";
-import type { ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, type ActionResult } from "@/app/_actions/transition";
 
 /**
  * An employer offers to mentor students.
@@ -56,24 +56,26 @@ export async function submitMentorshipOffer(fields: unknown): Promise<ActionResu
     actor.membership.organizationId ?? "",
   );
 
-  const result = await offerMentorship(actor, input.data, (offer) =>
-    college
-      ? [
-          {
-            marketId: offer.marketId,
-            recipientUserId: `contact:${college.id}`,
-            recipientOrganizationId: college.id,
-            kind: "mentorship.offered",
-            payload: {
-              businessName: business?.name ?? "An employer",
-              mentorName: offer.mentorName,
-              mentorRole: offer.mentorRole,
-              formatLabel: mentorshipFormatLabel(offer.format),
-              capacity: offer.capacity,
+  const result = await attemptWrite(() =>
+    offerMentorship(actor, input.data, (offer) =>
+      college
+        ? [
+            {
+              marketId: offer.marketId,
+              recipientUserId: `contact:${college.id}`,
+              recipientOrganizationId: college.id,
+              kind: "mentorship.offered",
+              payload: {
+                businessName: business?.name ?? "An employer",
+                mentorName: offer.mentorName,
+                mentorRole: offer.mentorRole,
+                formatLabel: mentorshipFormatLabel(offer.format),
+                capacity: offer.capacity,
+              },
             },
-          },
-        ]
-      : [],
+          ]
+        : [],
+    ),
   );
 
   if (!result.ok) {

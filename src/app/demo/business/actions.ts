@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import { reviewHours } from "@/services/timesheet";
 import { reviewHoursInput, validate } from "@/services/validation";
@@ -52,7 +52,7 @@ export async function reviewPlacementHours(
     };
   }
 
-  const result = await reviewHours(actor, input.data);
+  const result = await attemptWrite(() => reviewHours(actor, input.data));
   if (!result.ok) {
     logger.warn("hours.review_refused", { code: result.code });
     return { ok: false, error: result.error };

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActorRole } from "@/domain/types";
-import type { ActionResult } from "@/app/_actions/transition";
+import { attemptWrite, type ActionResult } from "@/app/_actions/transition";
 import { actorForPortal } from "@/auth/session";
 import {
   transitionMentorshipOffer,
@@ -37,6 +37,9 @@ const MOVERS = {
   organization: transitionOrganization,
   mentorship: transitionMentorshipOffer,
 } as const;
+
+/** Whatever the mover for this entity resolves to. */
+type MoveResult = Awaited<ReturnType<(typeof MOVERS)[Entity]>>;
 
 /**
  * Pages to refresh after a move.
@@ -78,13 +81,18 @@ async function move(
     };
   }
 
-  const result = await MOVERS[entity](
-    actor,
-    input.data.id,
-    // The machine validates the target against its own table; an unknown
-    // status is refused there rather than trusted here.
-    input.data.to as never,
-    input.data.reason,
+  // The type argument is explicit because `MOVERS[entity]` is a union of four
+  // movers: called directly it yields a union of results, but inferred through
+  // a callback it collapses to the first member.
+  const result = await attemptWrite<MoveResult>(() =>
+    MOVERS[entity](
+      actor,
+      input.data.id,
+      // The machine validates the target against its own table; an unknown
+      // status is refused there rather than trusted here.
+      input.data.to as never,
+      input.data.reason,
+    ),
   );
 
   if (!result.ok) {

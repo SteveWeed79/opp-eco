@@ -1,8 +1,10 @@
 /**
  * In-memory implementation of the repository contracts.
  *
- * The only implementation in this build. A Postgres version would implement
- * the same interfaces and nothing above this layer would change.
+ * The default, and what runs with no configuration at all: the demo, the unit
+ * suite, and the end-to-end suite. `postgres/repositories.ts` implements the
+ * same contracts against SQL, and the two are asserted to return the same
+ * records for every accessor and every role.
  */
 
 import type {
@@ -11,11 +13,12 @@ import type {
   MentorshipOffer,
   Organization,
   Posting,
+  Student,
   TimeEntry,
 } from "@/domain/types";
 import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
 import { isOfferedToStudents } from "@/domain/mentorship";
-import { byWeekDescending } from "@/domain/timesheet";
+import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 
@@ -32,9 +35,45 @@ function postingIdsOwnedBy(organizationId: string | null): Set<string> {
  */
 function visibleApplications(actor: ActorContext): Application[] {
   const rows = inScope(actor, seed.applications);
-  if (actor.membership.role !== "business") return rows;
-  const own = postingIdsOwnedBy(actor.membership.organizationId);
-  return rows.filter((a) => own.has(a.postingId));
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") {
+    const own = postingIdsOwnedBy(organizationId);
+    return rows.filter((a) => own.has(a.postingId));
+  }
+
+  if (role === "student") {
+    // Their own candidacies and nobody else's — the same narrowing
+    // `visibleTimeEntries` applies, and the same one the SQL layer's
+    // `applicationScope` has always applied. Market scope alone let a signed-in
+    // student read every classmate's application, including the match score and
+    // the funding decision on it, by listing or by guessing an id.
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((a) => a.studentId === self.id) : [];
+  }
+
+  return rows;
+}
+
+/**
+ * Every student record the actor may see.
+ *
+ * Market scope for the college, the board and an employer; a student sees one
+ * record, their own. Market scope alone let a signed-in student list every
+ * classmate in the market — their skills, their eligibility determination, and
+ * whether the college had verified them — which is the same narrowing the SQL
+ * layer's `studentScope` has always applied.
+ */
+function visibleStudents(actor: ActorContext): Student[] {
+  const rows = inScope(actor, seed.students);
+  if (actor.membership.role !== "student") return rows;
+  return rows.filter((s) => s.userId === actor.user.id);
+}
+
+/** Students waiting on the college before students who have not asked yet. */
+function byVerificationQueue(a: Student, b: Student): number {
+  const asked = (s: Student) => (s.status === "pending_verification" ? 0 : 1);
+  return asked(a) - asked(b) || a.name.localeCompare(b.name);
 }
 
 /**
@@ -73,7 +112,14 @@ function visibleTimeEntries(actor: ActorContext): TimeEntry[] {
 
 export const repositories: Repositories = {
   markets: {
-    list: async (actor) => inScope(actor, seed.markets.map((m) => ({ ...m, marketId: m.id }))),
+    // Filtered by id rather than through `inScope`, which reads a `marketId`
+    // a market does not have: decorating one on the way out put a field on
+    // `list`'s markets that `find`'s markets did not carry, so the same record
+    // had two shapes depending on which accessor answered.
+    list: async (actor) =>
+      actor.membership.role === "admin"
+        ? seed.markets
+        : seed.markets.filter((m) => m.id === actor.membership.marketId),
     find: async (actor, id) => {
       const market = seed.markets.find((m) => m.id === id);
       if (!market) return null;
@@ -98,17 +144,23 @@ export const repositories: Repositories = {
   },
 
   students: {
-    list: async (actor) => inScope(actor, seed.students),
-    find: async (actor, id) => inScope(actor, seed.students).find((s) => s.id === id) ?? null,
+    list: async (actor) => visibleStudents(actor),
+    find: async (actor, id) => visibleStudents(actor).find((s) => s.id === id) ?? null,
     pendingVerification: async (actor) =>
-      inScope(actor, seed.students).filter(
-        (s) => s.status === "pending_verification" || s.status === "profile_complete",
-      ),
+      visibleStudents(actor)
+        .filter(
+          (s) => s.status === "pending_verification" || s.status === "profile_complete",
+        )
+        // Asked first, then by name. Ordering this explicitly rather than
+        // leaving it to fixture order is what keeps the queue the same on both
+        // data layers — and what stops a student who has not submitted from
+        // heading a list whose first action is one the college cannot take.
+        .sort(byVerificationQueue),
     forUser: async (actor, userId) =>
-      inScope(actor, seed.students).find((s) => s.userId === userId) ?? null,
+      visibleStudents(actor).find((s) => s.userId === userId) ?? null,
     forApplication: async (actor, application) => {
       const student =
-        inScope(actor, seed.students).find((s) => s.id === application.studentId) ?? null;
+        visibleStudents(actor).find((s) => s.id === application.studentId) ?? null;
       if (!student) return null;
       // Only a business is held at arm's length. The college owns the student
       // relationship and the board needs identity to determine eligibility.
@@ -191,7 +243,7 @@ export const repositories: Repositories = {
         .filter((e) => e.status === "submitted")
         // Oldest first: this is a queue someone works through, and the week a
         // student has been waiting longest on is the one to clear.
-        .sort((a, b) => a.weekStarting.localeCompare(b.weekStarting)),
+        .sort(byWeekAscending),
   },
 
   creditAwards: {

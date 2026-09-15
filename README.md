@@ -84,9 +84,9 @@ src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  PII disclosure. No UI, no database.
 src/auth/        Session resolution behind a provider interface. Replacing
                  simulated sign-on touches this and nothing else.
-src/data/        Repository contracts + in-memory seeded implementation;
-                 Store/UnitOfWork for writes; Postgres schema and SQL
-                 scoping alongside, not connected.
+src/data/        Repository contracts, two implementations behind them — the
+                 in-memory fixtures and Postgres — and the Store/UnitOfWork
+                 for writes. One environment variable picks which.
 src/services/    Write paths (executeTransition for existing records,
                  creation for new ones), input validation, notification
                  dispatch and the outbox that records it.
@@ -101,13 +101,13 @@ src/app/         `/` and the venture pages; `/demo/*` per portal. One shell
 
 Properties worth knowing:
 
-- **No database.** Everything runs off seeded fixtures. The Postgres schema and its scoping SQL are written and tested; connecting is an adapter swap.
+- **Two data layers, one contract.** With `DATABASE_URL` unset everything runs off the seeded fixtures — that is the demo, the unit suite, and a zero-configuration checkout. Set it and the same screens read Postgres, through the same repository interfaces, with writes refused unless `DATABASE_READ_ONLY=false`. A CI job applies the schema, seeds it, and asserts the two layers return the same records for every accessor and every role; see [Running on Postgres](#running-on-postgres).
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
 - **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
-- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
+- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. The queue is part of the data layer — an array on the fixtures, `notification_outbox` on Postgres — and the dispatcher drains whichever one it was handed. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 - **A portal is named zones, not a stack of cards.** Every page was a flat run of identical `Card`s, so reading order carried no rank — a queue blocking a placement, a reference table, and a settings panel touched once a year all looked the same. Two things followed, and both were live: anything appended to the end became invisible, and the college's brand picker read exactly like a queue. `PageSection` groups a page into two to four named zones, and its `settings` tone recesses configuration behind a rule, because a page that gives equal weight to "four students are waiting on you" and "pick a brand colour" has not decided what it is for.
 
@@ -213,6 +213,110 @@ Guaranteeing a readable result is half the job; the other half is saying so. A c
 - **two colours that will not read as two**, and which ink lands on the accent.
 
 **Nothing blocks.** A school knows its own brand, and refusing a legitimate institutional colour is worse than explaining the trade-off. The seeded college is green and gold — an extremely common institutional pairing, and one that collides twice. It was kept rather than swapped for something that reports clean: a checker that only ever produces good news on the data it ships with has not been tested against anything.
+
+## Running on Postgres
+
+The app has two data layers behind one set of repository contracts, and
+`DATABASE_URL` is the whole switch.
+
+| `DATABASE_URL` | Reads | Writes |
+|---|---|---|
+| unset | Seeded fixtures in the server process | Land in the fixture arrays |
+| set | Postgres | **Refused**, unless `DATABASE_READ_ONLY=false` |
+
+Read-only is the default whenever a database is configured, because pointing
+the demo at real Postgres and letting anyone who opens it mutate what everyone
+else is looking at are different decisions. The seed script bypasses the guard:
+loading fixtures is an operator action, not a write the web application makes.
+
+**The driver is chosen from the host, not configured.** A `.neon.tech` URL
+opens through Neon's serverless driver over a WebSocket — which is what a
+serverless deployment wants and the only thing that reaches Neon. Every other
+host opens through `pg` over an ordinary socket, which is the only thing that
+reaches a local or self-hosted Postgres. `DATABASE_DRIVER` overrides the
+inference for a Neon-compatible proxy that does not carry the hostname.
+
+Locally, against any Postgres you have:
+
+```bash
+createdb oppeco
+export DATABASE_URL=postgresql://you@localhost:5432/oppeco
+npm run db:verify     # prove the connection and report the driver
+npm run db:migrate    # apply the schema
+npm run db:seed       # load the same fixtures the demo runs on
+DATABASE_READ_ONLY=false npm run dev
+```
+
+On Neon, use the **direct** connection string for migrations — DDL through a
+connection pooler can land on a different session than the one holding the
+transaction — and the **pooler** host for the running app.
+
+### Pointing a deployment at it
+
+Four variables, in this order:
+
+| Variable | Value | Why |
+|---|---|---|
+| `DATABASE_URL` | the **pooler** host | A serverless deployment opens a connection per invocation; the direct endpoint runs out of backends on a free tier |
+| `DATABASE_READ_ONLY` | leave unset | Refusing writes is the default, and a shared demo is exactly the case it exists for. Set `false` only when the deployment is meant to be mutated |
+| `DATABASE_MAX_CONNECTIONS` | leave unset | 10 suits a free tier |
+| `EMAIL_REDIRECT_TO` | your own address | Unrelated to the database, and the thing to get wrong once |
+
+Migrate and seed from a terminal against the **direct** host before the first
+deploy — `npm run db:migrate && npm run db:seed` — rather than from the running
+app, which has no path that applies a schema and should not have one.
+
+A read-only deployment reads Postgres and refuses every write with a sentence
+saying so, rather than a dead button: a disabled control is a claim the page
+makes and a direct POST ignores, so the refusal lives in the one layer every
+write passes through. Nothing is dispatched from the notification queue there
+either — claiming a message marks it sent, and a deployment that cannot write
+must not mark someone else's messages as sent.
+
+### Proving the two layers agree
+
+Everything in `src/data/postgres` is unit-tested against a recording client,
+which proves the statement text and nothing about whether Postgres accepts it.
+`src/data/postgres/integration.test.ts` closes that gap: it applies the
+migrations, loads the fixtures, and then asserts that every repository
+accessor, for every role, returns the same records as the in-memory layer
+reading the same fixtures — plus the write path, optimistic concurrency, and
+rollback.
+
+```bash
+TEST_DATABASE_URL=postgresql://you@localhost:5432/oppeco_test \
+  npx vitest run src/data/postgres/integration.test.ts
+```
+
+It skips without `TEST_DATABASE_URL`, so a checkout with no database still runs
+the whole suite green; CI runs it against a container on every change. **The
+database it names is truncated and reseeded** — never point it at one whose
+contents matter.
+
+Running the **whole e2e suite against Postgres** is the other half, and worth
+doing after any change to the data layer: point `DATABASE_URL` at a seeded
+local database, set `DATABASE_READ_ONLY=false`, and run `npm run test:e2e`.
+Every flow the demo has passes on either backend.
+
+The first run of that suite found six faults that no amount of TypeScript would
+have caught: a `citext` column whose extension was never created, two seeded
+foreign keys pointing at users that do not exist, two fixture pairs violating
+the app's own one-application-per-posting rule, a verification the schema
+refused because the acting user never reached the `UPDATE`, and a market scoped
+by `markets.market_id` — a column that table does not have. Parity found two
+more in the *other* direction: the in-memory layer let a signed-in student read
+every classmate's application and every classmate's student record, which the
+SQL layer had always refused.
+
+Driving the browser against Postgres found the two that only a running app
+shows. Every notification to an employer, a college or a board was addressed to
+an organization — most employers have no user account — and the outbox column
+referenced `users`, so the insert failed and took the state change beside it
+down. And `outbox.ts` drained the in-memory queue directly, so once that was
+fixed the rows landed in `notification_outbox` and were never sent: the audit
+log said the board was told, the outbox screen said nothing had been sent, and
+both were right. The queue is now a seam on the backend, and the dispatcher
+drains whichever one the data layer filled.
 
 ## Email
 

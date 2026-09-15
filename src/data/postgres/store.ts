@@ -166,13 +166,14 @@ class PostgresUnitOfWork implements UnitOfWork {
    * Name and email are absent on purpose: they live on `users`, and a student
    * record changing does not change who the person is.
    *
-   * `verified_by` is left untouched rather than written, because the domain's
-   * `Student` does not carry it and the schema requires it once a student is
-   * verified. A verification performed through the app therefore needs the
-   * acting user threaded into this method before writes are switched on — the
-   * seed sets it directly, which is why nothing fails today.
+   * `verified_by` comes in beside the student rather than on it. The schema
+   * will not accept a verified student without one — `students_verified_check`
+   * — and the domain's `Student` has no field to carry it, so the acting user
+   * is threaded from the transition that made the decision. Writing it here
+   * rather than leaving the column untouched is what makes the college's
+   * verification survive against a real database.
    */
-  saveStudent(student: Student) {
+  saveStudent(student: Student, verifiedBy: string | null) {
     this.add(sql`
       UPDATE students SET
         program_of_study = ${student.programOfStudy},
@@ -185,6 +186,7 @@ class PostgresUnitOfWork implements UnitOfWork {
         eligibility = ${student.eligibility},
         eligibility_determined_on = ${student.eligibilityDeterminedOn},
         verified_on = ${student.verifiedOn},
+        verified_by = ${verifiedBy},
         updated_at = now()
       WHERE id = ${student.id}`);
   }
@@ -353,11 +355,27 @@ class PostgresUnitOfWork implements UnitOfWork {
    * whole point: a message about work that rolled back is a lie, and a change
    * that commits without its message is a queue nobody watches.
    */
+  /**
+   * One recipient, and the column that can actually hold it.
+   *
+   * An intent naming an organization carries a synthetic `contact:org-x` in
+   * `recipientUserId` — an address for a party with no account, which is not a
+   * user id and must not be written as one. So the organization decides: when
+   * it is set the message belongs to that organization's published contact,
+   * and otherwise `recipientUserId` is a real user. Writing the sentinel into
+   * a column that references `users` is what made every employer, college and
+   * board notification fail, taking the state change beside it down too.
+   */
   enqueueNotification(intent: NotificationIntent) {
+    const organizationId = intent.recipientOrganizationId ?? null;
     this.add(sql`
-      INSERT INTO notification_outbox (market_id, recipient_id, kind, payload)
-      VALUES (
-        ${intent.marketId}, ${intent.recipientUserId}, ${intent.kind},
+      INSERT INTO notification_outbox (
+        market_id, recipient_user_id, recipient_organization_id, kind, payload
+      ) VALUES (
+        ${intent.marketId},
+        ${organizationId ? null : intent.recipientUserId},
+        ${organizationId},
+        ${intent.kind},
         ${JSON.stringify(intent.payload)}::jsonb
       )`);
   }

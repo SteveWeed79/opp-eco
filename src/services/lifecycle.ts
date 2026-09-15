@@ -85,7 +85,9 @@ export async function transitionStudent(
   };
 
   await deps.store.transaction((uow) => {
-    uow.saveStudent(updated);
+    // The verifier is the person who made the decision, and is cleared with the
+    // date when a student leaves the verified state.
+    uow.saveStudent(updated, to === "verified" ? actor.user.id : null);
     audit(uow, actor, {
       marketId: student.marketId,
       at,

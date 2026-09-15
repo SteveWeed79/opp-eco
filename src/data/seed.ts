@@ -26,6 +26,7 @@ import type {
   Track,
   User,
 } from "@/domain/types";
+import { clearanceExpiry } from "@/domain/eligibility";
 import { scoreMatch } from "@/domain/matching";
 import { brandAddress } from "@/brand";
 
@@ -45,12 +46,6 @@ export const DEMO_NOW = new Date();
 
 function daysAgo(n: number): string {
   return new Date(DEMO_NOW.getTime() - n * 86_400_000).toISOString();
-}
-
-function daysAhead(n: number, hour = 15): string {
-  const d = new Date(DEMO_NOW.getTime() + n * 86_400_000);
-  d.setUTCHours(hour, 0, 0, 0);
-  return d.toISOString();
 }
 
 // ---------------------------------------------------------------------------
@@ -551,7 +546,11 @@ export const students: Student[] = studentSeeds.map((s) => ({
   status: s.status,
   eligibility: s.eligibility,
   eligibilityDeterminedOn: s.eligibilityDaysAgo ? daysAgo(s.eligibilityDaysAgo) : null,
-  eligibilityExpiresOn: s.eligibilityDaysAgo ? daysAhead(365 - s.eligibilityDaysAgo) : null,
+  // Computed from the determination by the domain's rule rather than from
+  // today, so it is the same expiry the database's own mapper derives.
+  eligibilityExpiresOn: clearanceExpiry(
+    s.eligibilityDaysAgo ? daysAgo(s.eligibilityDaysAgo) : null,
+  ),
   verifiedOn: s.status === "verified" ? daysAgo(60) : null,
 }));
 
@@ -997,10 +996,15 @@ const appSeeds: AppSeed[] = [
   },
 
   // --- Business sitting on a review ---
+  //
+  // Not Tasha: she is the unsubsidized placement on this same posting below,
+  // and one student may hold one application per posting — the rule
+  // `submitApplication` enforces and the schema's `one_application_per_posting`
+  // restates.
   {
     id: "app-9",
     postingId: "post-utilities-webdev",
-    studentId: "stu-tasha",
+    studentId: "stu-marcus",
     status: "under_review",
     submittedDaysAgo: 17,
     statusSinceDaysAgo: 14,
@@ -1013,10 +1017,13 @@ const appSeeds: AppSeed[] = [
     submittedDaysAgo: 4,
     statusSinceDaysAgo: 4,
   },
+  // Jordan rather than Omar for the same reason: Omar's live placement below
+  // (`app-27`) is against this posting, and a second application to it is a
+  // state neither the app nor the schema will produce.
   {
     id: "app-11",
     postingId: "post-apex-swe",
-    studentId: "stu-omar",
+    studentId: "stu-jordan",
     status: "shortlisted",
     submittedDaysAgo: 9,
     statusSinceDaysAgo: 2,
@@ -1226,10 +1233,18 @@ export const applications: Application[] = appSeeds.map((a) => {
     interviewSlotId: a.interviewSlotId,
     fundingAuthorizedHours: a.fundingHours,
     fundingAuthorizedRate: a.fundingHours ? 20 : undefined,
-    hoursLogged: a.hoursLogged,
-    hoursApproved: a.hoursApproved,
-    deliverableSubmitted: a.deliverableSubmitted,
-    deliverableAccepted: a.deliverableAccepted,
+    // Zero rather than undefined, for the reason the deliverable flags are
+    // false: the columns behind them are NOT NULL DEFAULT 0, and a cache over
+    // the time entries that reads as "unknown" on one data layer and "none" on
+    // the other is a cache nobody can compare.
+    hoursLogged: a.hoursLogged ?? 0,
+    hoursApproved: a.hoursApproved ?? 0,
+    // Defaulted rather than left undefined: the schema stores both as
+    // NOT NULL DEFAULT false, so a fixture that omits them describes a record
+    // the database cannot hold — and the two data layers then disagree about
+    // the same application.
+    deliverableSubmitted: a.deliverableSubmitted ?? false,
+    deliverableAccepted: a.deliverableAccepted ?? false,
     creditAwardId: a.creditAwardId,
     version: 1,
   };
@@ -1509,6 +1524,7 @@ export const auditEvents: AuditEvent[] = [
     entityId: "app-1",
     from: "funding_authorized",
     to: "placement_active",
+    viaOverride: false,
   },
   {
     id: "evt-2",
@@ -1520,6 +1536,7 @@ export const auditEvents: AuditEvent[] = [
     entityId: "stu-alex",
     from: "interview_completed",
     to: "eligible",
+    viaOverride: false,
   },
   {
     id: "evt-3",
@@ -1532,6 +1549,7 @@ export const auditEvents: AuditEvent[] = [
     from: "interview_completed",
     to: "not_eligible",
     reason: "Does not meet WIOA participant eligibility criteria for this program year",
+    viaOverride: false,
   },
   {
     id: "evt-4",
@@ -1543,6 +1561,7 @@ export const auditEvents: AuditEvent[] = [
     entityId: "credit-1",
     from: "pending",
     to: "granted",
+    viaOverride: false,
   },
   {
     id: "evt-5",
@@ -1556,5 +1575,6 @@ export const auditEvents: AuditEvent[] = [
     to: "unsubsidized",
     reason:
       "Board allocation exhausted for this quarter; business agreed to proceed at full cost",
+    viaOverride: false,
   },
 ];

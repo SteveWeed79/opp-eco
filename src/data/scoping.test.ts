@@ -44,6 +44,45 @@ describe("market isolation", () => {
   });
 });
 
+describe("a student sees their own records and nobody else's", () => {
+  const self = seed.studentForUser(student.user.id)!;
+
+  it("lists one student record, their own", async () => {
+    expect(await repositories.students.list(student)).toEqual([self]);
+  });
+
+  it("refuses a classmate's record by id", async () => {
+    const classmate = seed.students.find((s) => s.id !== self.id)!;
+    expect(await repositories.students.find(student, classmate.id)).toBeNull();
+  });
+
+  it("refuses a classmate's identity through forUser", async () => {
+    const classmate = seed.students.find((s) => s.id !== self.id)!;
+    expect(await repositories.students.forUser(student, classmate.userId)).toBeNull();
+  });
+
+  it("lists only their own applications", async () => {
+    const theirs = await repositories.applications.list(student);
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((a) => a.studentId === self.id)).toBe(true);
+  });
+
+  it("refuses a classmate's application by id", async () => {
+    // A match score, a funding decision, and an employer's shortlist are all
+    // on this record. Market scope alone left every one of them readable by
+    // any signed-in student who guessed an id.
+    const other = seed.applications.find((a) => a.studentId !== self.id)!;
+    expect(await repositories.applications.find(student, other.id)).toBeNull();
+    expect(await repositories.applications.forStudent(student, other.studentId)).toEqual([]);
+  });
+
+  it("sees no classmate on a posting it applied to", async () => {
+    const own = (await repositories.applications.list(student))[0];
+    const onPosting = await repositories.applications.forPosting(student, own.postingId);
+    expect(onPosting.every((a) => a.studentId === self.id)).toBe(true);
+  });
+});
+
 describe("business ownership", () => {
   it("lists only its own postings", async () => {
     const foreign = (await repositories.postings
