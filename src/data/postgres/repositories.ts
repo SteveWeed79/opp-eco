@@ -33,7 +33,7 @@ import type {
   TimeEntry,
 } from "@/domain/types";
 import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
-import { byWeekDescending } from "@/domain/timesheet";
+import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import type { Repositories } from "../repositories";
 import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
@@ -73,7 +73,7 @@ import {
  */
 const MARKET_SELECT = `
   SELECT markets.*, COALESCE(
-    (SELECT array_agg(mc.college_id ORDER BY mc.college_id)
+    (SELECT array_agg(mc.college_id ORDER BY mc.college_id COLLATE "C")
        FROM market_colleges mc WHERE mc.market_id = markets.id),
     '{}'::text[]
   ) AS college_ids
@@ -101,7 +101,7 @@ const APPLICATION_SELECT = `
 
 const CREDIT_SELECT = `
   SELECT credit_awards.*, COALESCE(
-    (SELECT array_agg(ca.application_id ORDER BY ca.application_id)
+    (SELECT array_agg(ca.application_id ORDER BY ca.application_id COLLATE "C")
        FROM credit_award_applications ca WHERE ca.credit_award_id = credit_awards.id),
     '{}'::text[]
   ) AS application_ids
@@ -151,6 +151,17 @@ export function postgresRepositories(db: SqlClient): Repositories {
     return actor.membership.role === "board" ? redactTimeEntry(entry) : entry;
   }
 
+  /**
+   * Every id tie-break below is `COLLATE "C"`.
+   *
+   * A surrogate key has no linguistic meaning, and ordering one by the
+   * database's own collation makes the result depend on how that database was
+   * created: `en_US.UTF-8` ignores punctuation and sorts `te-app-20-1` before
+   * `te-app-2-1`, `C.UTF-8` does the opposite. The rows were identical either
+   * way — only their order moved — which is exactly the kind of difference that
+   * shows up as a list reshuffling between one deployment and the next. Human
+   * names keep the database's collation, because there the locale is the point.
+   */
   async function timeEntriesWhere(
     actor: ActorContext,
     extra: Sql,
@@ -158,7 +169,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
     const where = joinSql([timeEntryScope(actor), extra], " AND ");
     const rows = await all(
       sql`SELECT * FROM time_entries WHERE ${where}
-          ORDER BY time_entries.week_starting DESC, time_entries.id`,
+          ORDER BY time_entries.week_starting DESC, time_entries.id COLLATE "C"`,
       toTimeEntry,
     );
     return rows.map((entry) => narrowTimeEntry(actor, entry));
@@ -186,7 +197,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         if (filter?.kind) parts.push(sql`organizations.kind = ${filter.kind}`);
         return all(
           sql`SELECT * FROM organizations WHERE ${joinSql(parts, " AND ")}
-              ORDER BY organizations.name, organizations.id`,
+              ORDER BY organizations.name, organizations.id COLLATE "C"`,
           toOrganization,
         );
       },
@@ -201,7 +212,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM organizations
               WHERE ${marketScope(actor, "organizations")}
                 AND organizations.status IN ('applied', 'under_review', 'info_requested')
-              ORDER BY organizations.applied_on, organizations.id`,
+              ORDER BY organizations.applied_on, organizations.id COLLATE "C"`,
           toOrganization,
         ),
     },
@@ -210,7 +221,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
       list: (actor) =>
         all(
           sql`${rawText(STUDENT_SELECT)} WHERE ${studentScope(actor)}
-              ORDER BY users.name, students.id`,
+              ORDER BY users.name, students.id COLLATE "C"`,
           toStudent,
         ),
       find: (actor, id) =>
@@ -229,7 +240,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
               -- college can see it coming, not so it can head the queue and
               -- offer the one action the college cannot take.
               ORDER BY (students.status = 'pending_verification') DESC,
-                       users.name, students.id`,
+                       users.name, students.id COLLATE "C"`,
           toStudent,
         ),
       forUser: (actor, userId) =>
@@ -258,7 +269,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         if (filter?.status) parts.push(sql`postings.status = ${filter.status}`);
         return all(
           sql`SELECT * FROM postings WHERE ${joinSql(parts, " AND ")}
-              ORDER BY postings.created_at DESC, postings.id`,
+              ORDER BY postings.created_at DESC, postings.id COLLATE "C"`,
           toPosting,
         );
       },
@@ -277,7 +288,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`SELECT * FROM postings
               WHERE ${marketScope(actor, "postings")} AND postings.status = 'published'
-              ORDER BY postings.created_at DESC, postings.id`,
+              ORDER BY postings.created_at DESC, postings.id COLLATE "C"`,
           toPosting,
         ),
       awaitingCollegeHelp: (actor) =>
@@ -285,7 +296,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM postings
               WHERE ${marketScope(actor, "postings")}
                 AND postings.status IN ('help_requested', 'college_drafting')
-              ORDER BY postings.created_at DESC, postings.id`,
+              ORDER BY postings.created_at DESC, postings.id COLLATE "C"`,
           toPosting,
         ),
     },
@@ -300,7 +311,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         }
         return all(
           sql`SELECT * FROM mentorship_offers WHERE ${joinSql(parts, " AND ")}
-              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id`,
+              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id COLLATE "C"`,
           toMentorshipOffer,
         );
       },
@@ -326,7 +337,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM mentorship_offers
               WHERE ${marketScope(actor, "mentorship_offers")}
                 AND mentorship_offers.status = 'open'
-              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id`,
+              ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id COLLATE "C"`,
           toMentorshipOffer,
         ),
     },
@@ -335,7 +346,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
       list: (actor) =>
         all(
           sql`${rawText(APPLICATION_SELECT)} WHERE ${applicationScope(actor)}
-              ORDER BY applications.submitted_on DESC, applications.id`,
+              ORDER BY applications.submitted_on DESC, applications.id COLLATE "C"`,
           toApplication,
         ),
       find: (actor, id) =>
@@ -348,14 +359,14 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`${rawText(APPLICATION_SELECT)}
               WHERE ${applicationScope(actor)} AND applications.student_id = ${studentId}
-              ORDER BY applications.submitted_on DESC, applications.id`,
+              ORDER BY applications.submitted_on DESC, applications.id COLLATE "C"`,
           toApplication,
         ),
       forPosting: (actor, postingId) =>
         all(
           sql`${rawText(APPLICATION_SELECT)}
               WHERE ${applicationScope(actor)} AND applications.posting_id = ${postingId}
-              ORDER BY applications.submitted_on DESC, applications.id`,
+              ORDER BY applications.submitted_on DESC, applications.id COLLATE "C"`,
           toApplication,
         ),
     },
@@ -365,7 +376,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(
           sql`SELECT * FROM interview_slots
               WHERE ${marketScope(actor, "interview_slots")}
-              ORDER BY interview_slots.starts_at, interview_slots.id`,
+              ORDER BY interview_slots.starts_at, interview_slots.id COLLATE "C"`,
           toInterviewSlot,
         ),
       open: (actor) =>
@@ -373,7 +384,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`SELECT * FROM interview_slots
               WHERE ${marketScope(actor, "interview_slots")}
                 AND interview_slots.booked_by IS NULL
-              ORDER BY interview_slots.starts_at, interview_slots.id`,
+              ORDER BY interview_slots.starts_at, interview_slots.id COLLATE "C"`,
           toInterviewSlot,
         ),
     },
@@ -398,7 +409,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
         // Oldest first: this is a queue someone works through, and the week a
         // student has been waiting longest on is the one to clear.
         (await timeEntriesWhere(actor, sql`time_entries.status = 'submitted'`)).sort(
-          (a, b) => a.weekStarting.localeCompare(b.weekStarting),
+          byWeekAscending,
         ),
     },
 
@@ -406,7 +417,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
       list: (actor) =>
         all(
           sql`${rawText(CREDIT_SELECT)} WHERE ${marketScope(actor, "credit_awards")}
-              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id`,
+              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id COLLATE "C"`,
           toCreditAward,
         ),
       forStudent: (actor, studentId) =>
@@ -414,7 +425,7 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`${rawText(CREDIT_SELECT)}
               WHERE ${marketScope(actor, "credit_awards")}
                 AND credit_awards.student_id = ${studentId}
-              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id`,
+              ORDER BY credit_awards.granted_on DESC NULLS LAST, credit_awards.id COLLATE "C"`,
           toCreditAward,
         ),
     },
@@ -427,7 +438,9 @@ export function postgresRepositories(db: SqlClient): Repositories {
         }
         return all(
           sql`SELECT * FROM audit_events WHERE ${joinSql(parts, " AND ")}
-              ORDER BY occurred_at DESC, id DESC`,
+              -- Qualified, and deliberately not collated: the audit log's id
+              -- is a bigserial, and a number has one order on every server.
+              ORDER BY audit_events.occurred_at DESC, audit_events.id DESC`,
           toAuditEvent,
         );
       },

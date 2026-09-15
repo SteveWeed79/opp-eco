@@ -18,7 +18,7 @@ import type {
 } from "@/domain/types";
 import { disclosureFor, redactStudent, redactTimeEntry } from "@/domain/disclosure";
 import { isOfferedToStudents } from "@/domain/mentorship";
-import { byWeekDescending } from "@/domain/timesheet";
+import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 
@@ -243,7 +243,7 @@ export const repositories: Repositories = {
         .filter((e) => e.status === "submitted")
         // Oldest first: this is a queue someone works through, and the week a
         // student has been waiting longest on is the one to clear.
-        .sort((a, b) => a.weekStarting.localeCompare(b.weekStarting)),
+        .sort(byWeekAscending),
   },
 
   creditAwards: {
