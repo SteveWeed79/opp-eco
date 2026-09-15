@@ -248,13 +248,30 @@ export async function verifySignInCode(
   // stolen session on another machine stop working.
   await store.revokeSessionsForUser(user.id, now.toISOString());
 
-  // The second factor, where one is owed. Checked after the code is spent and
-  // the old sessions are gone, so an interrupted sign-in leaves somebody having
-  // to start again rather than leaving a spent code that still works.
+  return finishSignIn(user, membership, now);
+}
+
+/**
+ * The last step of every sign-in, whichever factor came first.
+ *
+ * Shared by the code path and the password path deliberately. A second factor
+ * enforced in one of them and not the other is not a second factor, and two
+ * places that mint a session are two sets of rules about how long one lasts.
+ */
+export async function finishSignIn(
+  user: User,
+  membership: Membership,
+  now: Date,
+): Promise<SignInVerifyResult> {
+  const store = authStore();
+
+  // Checked after the first factor is spent and the old sessions are gone, so
+  // an interrupted sign-in leaves somebody having to start again rather than
+  // leaving a spent credential that still works.
   const enrolment = await store.findTotpEnrolment(user.id);
   if (enrolment?.confirmedAt) {
     const { issueChallenge } = await import("@/services/mfa");
-    const challenge = await issueChallenge(user.id, { now: deps.now });
+    const challenge = await issueChallenge(user.id, { now: () => now });
     logger.info("auth.second_factor_required", {
       userId: user.id,
       role: membership.role,

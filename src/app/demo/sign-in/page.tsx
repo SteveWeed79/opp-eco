@@ -30,8 +30,8 @@ export default async function SignInPage() {
     <div className="max-w-md mx-auto px-6 pt-10 pb-16 space-y-6">
       <PageHeader
         eyebrow="Sign in"
-        title="Get a code"
-        subtitle="No password — we email you a code that works once."
+        title="Sign in"
+        subtitle="Start with the address your organization knows you by. It decides what you are asked for next."
       />
 
       <Card>

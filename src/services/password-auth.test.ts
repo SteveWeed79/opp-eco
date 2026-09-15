@@ -187,6 +187,43 @@ describe("resetting one", () => {
     expect(delivered).toHaveLength(0);
   });
 
+  it("gives a first password to an account that has never had one", async () => {
+    // How every password in the system comes to exist. Nothing here has a
+    // self-serve signup: an administrator or an import creates the account, and
+    // the person chooses their own password after a code reaches the address
+    // their organization knows them by — which is also why nobody is ever told
+    // a password over the phone.
+    //
+    // Nothing is given to this account first, deliberately. When this path did
+    // not work, an account with no stored password had no way in at all: the
+    // form resolves a college to `password`, and the password it does not have
+    // is the only thing it would be asked for.
+    const store = authStore();
+    const user = (await store.findUserByEmail(COLLEGE))!;
+    expect(await store.findPassword(user.id)).toBeNull();
+
+    await requestPasswordReset(COLLEGE, deps);
+    expect(delivered).toHaveLength(1);
+
+    const chosen = "the first kansas afternoon";
+    expect((await resetPassword(COLLEGE, delivered[0].code, chosen, deps)).ok).toBe(true);
+    expect((await verifyPasswordSignIn(COLLEGE, chosen, deps)).ok).toBe(true);
+  });
+
+  it("lets the first administrator into a fresh deployment the same way", async () => {
+    // The bootstrap. An administrator has no organization, so `signInMethodFor`
+    // answers `password` — and on a deployment nobody has signed into yet there
+    // is no password and nobody to set one. The emailed code is the way in, and
+    // if it stopped working a new install would have no reachable account.
+    await requestPasswordReset(ADMIN, deps);
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0].to).toBe(ADMIN);
+
+    const chosen = "a long enough opening phrase";
+    expect((await resetPassword(ADMIN, delivered[0].code, chosen, deps)).ok).toBe(true);
+    expect((await verifyPasswordSignIn(ADMIN, chosen, deps)).ok).toBe(true);
+  });
+
   it("sends nothing to an account that has no password to reset", async () => {
     // A government account signs in with a code. A reset code would be a second
     // code that does something different, arriving unasked.

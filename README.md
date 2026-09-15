@@ -57,9 +57,12 @@ real thing instead, with codes written to the terminal rather than emailed:
 AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev
 ```
 
-Then sign in as `evance@verdigris.example.edu` and paste the code the server
-logs. `mdelgado@sekwp.example.org` is the workforce board, and is refused —
-boards are federated, and that refusal is the feature. See
+Then type `evance@verdigris.example.edu`. The address resolves to a password,
+and on a fresh start there is no password yet — which is the normal state for
+every account here, since nothing has a self-serve signup. Click **Forgot your
+password?**, paste the code the server logs, and choose one.
+`mdelgado@sekwp.example.org` is the workforce board: a public employee, so it is
+sent a one-time code instead and is never shown a password field. See
 [Signing in](#signing-in).
 
 ## Start here
@@ -102,9 +105,10 @@ src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  observation rather than a state machine. No UI, no database.
 src/auth/        Session resolution behind a provider interface, and the two
                  providers behind it: the demo's role cookie and real sign-on
-                 by one-time code. The pre-auth store lives here rather than
-                 in the scoped repositories, because resolving a session is
-                 what produces the actor everything else is scoped by.
+                 by password or one-time code. The pre-auth store lives here
+                 rather than in the scoped repositories, because resolving a
+                 session is what produces the actor everything else is
+                 scoped by.
 src/data/        Repository contracts, two implementations behind them — the
                  in-memory fixtures and Postgres — and the Store/UnitOfWork
                  for writes. One environment variable picks which.
@@ -130,7 +134,7 @@ Properties worth knowing:
 
 - **Two data layers, one contract.** With `DATABASE_URL` unset everything runs off the seeded fixtures — that is the demo, the unit suite, and a zero-configuration checkout. Set it and the same screens read Postgres, through the same repository interfaces, with writes refused unless `DATABASE_READ_ONLY=false`. A CI job applies the schema, seeds it, and asserts the two layers return the same records for every accessor and every role; see [Running on Postgres](#running-on-postgres).
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
-- **Two doors, one session shape.** `AUTH_MODE` unset is the demonstration's role picker; `AUTH_MODE=code` is real sign-on — a one-time code to a work address, a server-side session, no password anywhere. Both resolve to a membership carrying the role and market every read is scoped by, because that part was never the simulated bit. Organizations that run their own identity provider are federated and cannot be signed in here at all; see [Signing in](#signing-in).
+- **Two doors, one session shape.** `AUTH_MODE` unset is the demonstration's role picker; `AUTH_MODE=code` is real sign-on, where the address decides what you are asked for: a password for a learner, a college or an employer, a password and an authenticator for an administrator, and a one-time code to an agency mailbox for a public employee — who this platform holds no password for, deliberately. Both doors resolve to a membership carrying the role and market every read is scoped by, because that part was never the simulated bit; see [Signing in](#signing-in).
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
@@ -504,36 +508,84 @@ still cheap.
 | `AUTH_MODE` | The way in | Sessions |
 |---|---|---|
 | unset | A dropdown that makes you anybody | An httpOnly cookie naming a role |
-| `code` | A one-time code to your work address | A random token; the database holds its SHA-256 |
+| `code` | A password, or a one-time code — your address decides which | A random token; the database holds its SHA-256 |
 
 Both resolve to the same thing — a membership carrying the role and market that
 every repository read is scoped by — because that part was never the simulated
 bit. `src/auth/session.ts` promised that replacing simulated sign-on would touch
 one file and nothing else; real sign-on is that promise being cashed in.
 
-**There is no password, and nothing to reset.** A code is the whole credential:
-eight characters from an alphabet with no `0`, `O`, `1`, `I` or `L` in it, good
-for ten minutes, usable once, dead after five wrong guesses. The database stores
-its SHA-256, never the code, so a dump of that table yields nothing presentable.
-Codes are emailed directly and are deliberately **never** written to the
-notification outbox — the outbox persists every payload and renders it on a
-screen an administrator can open, which would make it a published list of bearer
-tokens for every account on the platform.
+**The address decides the door, and it is asked for first.** One form, several
+doors — nobody is shown a field they cannot use, and there is no separate
+"agency login" URL, because a dedicated address for public employees is a good
+phishing target and trains them to expect one.
 
-**Asking for a code never says whether the account exists.** Sign-on is the one
-page anyone can reach, so an honest "no such account" is a free directory of who
-takes part in this programme — including which public employees work on it. The
-address you typed gets the same second step and the same message either way.
+| Who | What they present | Second factor |
+|---|---|---|
+| A learner, a college, an employer | A password | — |
+| An administrator | A password | An authenticator, every time |
+| A board officer (a public employee) | A one-time code to their agency address | None, deliberately |
 
-**Government identity is federated, never replicated.** A workforce board's
-officers are public employees whose agency owns their identity. An organization
-marked `federated` cannot be signed in here at all, and boards default to it — so
-under real sign-on the seeded board officer genuinely cannot get in. No SSO
-adapter ships yet, and that failure is the correct one: the alternative is this
-platform minting and holding a credential for a government employee because it
-was quicker than waiting for the IdP. They are told plainly where to go, which is
-the one thing the sign-in form will say out loud about an address, because an
-institution's identity arrangement is not a secret about a person.
+**Which door an address uses is answered from its *domain*, not from whether the
+account exists.** An organization that has declared its email domains answers for
+every address on them, real or not. So probing a workforce board's domain reveals
+that the board signs in with codes — an institutional arrangement, not a secret —
+and reveals nothing about which of its officers have accounts. Anything else
+answers `password`, which is the majority case and the one that fails generically
+a step later.
+
+**Passwords are scrypt, not a hash function.** `N=65536, r=8, p=1`, a 16-byte
+random salt and a 32-byte key, stored as `scrypt$N$r$p$salt$key` so the
+parameters travel with the hash and raising the cost is a rehash on the next
+successful sign-in rather than a migration that locks everybody out at once.
+scrypt rather than Argon2id for one deployment reason, stated plainly: it is in
+`node:crypto`, so there is no native module to fail to build on a platform
+nobody tested. Policy is NIST 800-63B's: at least twelve characters, no
+composition rules, and a refusal for the address, the site name and the obvious
+lists — length is what makes a password hard to guess, and a rule demanding a
+symbol mostly produces `Password1!`.
+
+**Every password starts with a code in a mailbox.** Nothing here has a
+self-serve signup: an administrator or an import creates the account, and the
+person chooses their own password after a code reaches the address their
+organization knows them by. "Forgot your password?" *is* that path — the same
+step whether you are replacing one or setting your first — which is also how the
+first administrator gets into a fresh deployment, and why nobody is ever told a
+password over the phone. Reset codes carry their own purpose, so asking for one
+does not invalidate a sign-in code somebody is already holding.
+
+**One-time codes are eight characters** from an alphabet with no `0`, `O`, `1`,
+`I` or `L` in it, good for ten minutes, usable once, dead after five wrong
+guesses. The database stores the SHA-256, never the code, so a dump of that table
+yields nothing presentable. Codes are emailed directly and are deliberately
+**never** written to the notification outbox — the outbox persists every payload
+and renders it on a screen an administrator can open, which would make it a
+published list of bearer tokens for every account on the platform.
+
+**No sign-on failure says whether the account exists.** Sign-on is the one page
+anyone can reach, so an honest "no such account" is a free directory of who takes
+part in this programme — including which public employees work on it. A wrong
+password and an address nobody holds fail in the same words, and in the same
+time: the unknown address is still put through a full scrypt hash, because
+returning instantly would make the response time the directory that the wording
+is not. A reset request always reports success.
+
+**Government employees have no password here, and no authenticator from us
+either.** A workforce board's officers are public employees whose agency owns
+their identity, so the platform holds nothing for them but an address on a domain
+the agency declared — the code can only be sent there, never to a personal
+address an officer controls. Their second factor is the agency's mailbox, which
+their own IT department already protects; issuing them a TOTP seed would be a
+second credential this platform holds for a government employee, which is the
+thing being avoided. `federated` remains a mode for an organization that runs its
+own identity provider, and an address on one is told plainly to go there — an
+institution's identity arrangement is not a secret about a person. No SSO adapter
+ships yet.
+
+**An administrator proves a second factor every time**, because that account
+reads every market, every learner and every figure, and authorises money. The
+account whose compromise is worst should not be the one standing behind the
+weakest thing.
 
 **Sessions expire on two clocks, and the tighter one belongs to the wider
 access.** An absolute lifetime and an idle timeout, both by role: eight hours and
@@ -933,13 +985,22 @@ either the role picker or real sign-on and cannot be both:
 
 ```bash
 AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev > /tmp/oe.log &
-AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test e2e/zzzzzzz-sign-in.spec.ts
+AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test \
+  e2e/zzzzzzz-sign-in.spec.ts e2e/zzzzzzzzzzz-password.spec.ts
 ```
 
 `npm run dev` rather than the production build the rest of the suite uses,
 because `AUTH_ECHO_CODES` is refused in production — the test bends around that
 rather than the other way about. The code is read back out of the server's log,
 which is the only place it exists outside a mailbox.
+
+Neither suite seeds anything out of band. The password suite gives the college
+its password through the product's own front door — request a code, choose a
+password — because that is the only way a real account ever gets one, and
+because a seeding script would need a database that the in-memory backend has
+not got. An earlier version did seed with a script, and the script quietly wrote
+to the in-memory store while the server under test was on Postgres; three tests
+failed against a password that had been set in a different process's memory.
 
 It keeps earning its keep. The most recent run found `saveStudent` blanking a
 learner's verification attribution on every non-verification save, and the

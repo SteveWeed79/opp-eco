@@ -40,7 +40,6 @@ function echoedCodeFor(email: string): string {
   return JSON.parse(last!).code as string;
 }
 
-const COLLEGE = "evance@verdigris.example.edu";
 const BOARD = "mdelgado@sekwp.example.org";
 
 test("a portal refuses an anonymous request before it renders anything", async ({
@@ -77,42 +76,46 @@ test("the way in is the sign-in page, not the role picker", async ({ page }) => 
   await expect(page.getByLabel("Work email")).toBeVisible();
 });
 
-test("a code signs a college in, and only into their own portal", async ({
+test("a code signs a board officer in, and only into their own portal", async ({
   page,
   context,
 }) => {
+  // The board, not the college. Under the address-first form a college resolves
+  // to a password and never sees this path; a public employee is the population
+  // the code path now exists for, and the only one this platform holds no
+  // password for.
   await page.goto("/demo/sign-in");
-  await page.getByLabel("Work email").fill(COLLEGE);
-  await page.getByRole("button", { name: "Email me a code" }).click();
+  await page.getByLabel("Work email").fill(BOARD);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Code")).toBeVisible();
 
-  await page.getByLabel("Code").fill(echoedCodeFor(COLLEGE));
+  await page.getByLabel("Code").fill(echoedCodeFor(BOARD));
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/demo/college");
-  await expect(page.locator("header")).toContainText("Dr. Ellen Vance");
+  await page.waitForURL("**/demo/board");
+  await expect(page.locator("header")).toContainText("Marcia Delgado");
 
   const cookie = (await context.cookies()).find((c) => c.name === "oe_session");
   expect(cookie?.httpOnly).toBe(true);
   expect(cookie?.sameSite).toBe("Lax");
   // The cookie is a token, not a claim. Nothing in it names a role, so nothing
   // in it can be edited into a different one.
-  expect(cookie?.value).not.toContain("college");
+  expect(cookie?.value).not.toContain("board");
 
   // Somebody else's portal, held by a real session: their own, not a refusal
   // to sign in.
   await page.goto("/demo/admin");
-  await page.waitForURL("**/demo/college");
+  await page.waitForURL("**/demo/board");
 });
 
 test("a wrong code refuses, and no session starts", async ({ page, context }) => {
   await page.goto("/demo/sign-in");
-  await page.getByLabel("Work email").fill(COLLEGE);
-  await page.getByRole("button", { name: "Email me a code" }).click();
+  await page.getByLabel("Work email").fill(BOARD);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Code")).toBeVisible();
 
   // Derived from the real code rather than invented, so it is the right shape
   // and the right length — a refusal for being malformed would prove nothing.
-  const real = echoedCodeFor(COLLEGE);
+  const real = echoedCodeFor(BOARD);
   const wrong = real.slice(0, -1) + (real.endsWith("X") ? "Y" : "X");
 
   await page.getByLabel("Code").fill(wrong);
@@ -132,28 +135,40 @@ test("a wrong code refuses, and no session starts", async ({ page, context }) =>
   // part only a browser can answer: the refusal reaches the person.
 });
 
-test("a workforce board officer is sent to their agency, not given a credential", async ({
+test("an invented address on the agency's domain looks exactly like a real officer", async ({
   page,
 }) => {
+  // The enumeration assertion, moved to where it actually bites. Anyone can
+  // guess `firstname.lastname@` at a public agency, and the reply must not say
+  // which guesses landed — a directory of which officers work on this programme
+  // is exactly what a workforce board cannot have published on its behalf.
+  const invented = "nobody.at.all@sekwp.example.org";
   await page.goto("/demo/sign-in");
-  await page.getByLabel("Work email").fill(BOARD);
-  await page.getByRole("button", { name: "Email me a code" }).click();
+  await page.getByLabel("Work email").fill(invented);
+  await page.getByRole("button", { name: "Continue" }).click();
 
-  // Told plainly, and told *instead of* being sent a code. A board's officers
-  // are public employees whose agency owns their identity; minting one here
-  // because no SSO adapter ships yet is the thing this refuses to do.
-  await expect(page.getByText(/identity provider|your agency|sign in there/i)).toBeVisible();
-  await expect(page.getByLabel("Code")).toHaveCount(0);
-});
-
-test("an address nobody holds looks exactly like one somebody does", async ({
-  page,
-}) => {
-  await page.goto("/demo/sign-in");
-  await page.getByLabel("Work email").fill("nobody@nowhere.example.com");
-  await page.getByRole("button", { name: "Email me a code" }).click();
-  // The same second step, and the same message. Sign-on is the one page anyone
-  // can reach, so an honest "no such account" is a directory of who takes part.
+  // Same second step, same words as the real officer gets.
   await expect(page.getByLabel("Code")).toBeVisible();
   await expect(page.getByRole("status")).toContainText(/if that address/i);
+
+  // And nothing was sent. The screen says the same thing either way; the log is
+  // where the difference would be, and there is no code in it for this address.
+  // Narrowed to the delivery line on purpose: `next dev` traces every Server
+  // Action with its arguments, so the address itself is in the log either way.
+  const codes = readFileSync(LOG!, "utf8")
+    .split("\n")
+    .filter((line) => line.includes("auth.code_echoed") && line.includes(invented));
+  expect(codes).toHaveLength(0);
 });
+
+/**
+ * Two neighbours of these tests live elsewhere on purpose.
+ *
+ * A public employee never being shown a password field is in
+ * `zzzzzzzzzzz-password.spec.ts`, alongside the rest of the address-decides-the-
+ * door behaviour. A `federated` organization being told to use its own identity
+ * provider is in `src/services/auth.test.ts`, because nothing is seeded into
+ * that mode any more — asserting it in a browser would mean mutating the
+ * server's seed from a test, which is a worse test than the one that sets the
+ * mode directly.
+ */
