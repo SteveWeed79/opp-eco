@@ -39,6 +39,7 @@ import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   marketScope,
+  mentorshipPairingScope,
   ownMarketScope,
   postingOwnershipScope,
   studentScope,
@@ -50,6 +51,7 @@ import {
   toInterviewSlot,
   toMarket,
   toMentorshipOffer,
+  toMentorshipPairing,
   toOrganization,
   toPosting,
   toStudent,
@@ -162,6 +164,14 @@ export function postgresRepositories(db: SqlClient): Repositories {
    * shows up as a list reshuffling between one deployment and the next. Human
    * names keep the database's collation, because there the locale is the point.
    */
+  /** Newest introduction first, which is the order both surfaces read them in. */
+  function pairingsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([mentorshipPairingScope(actor), extra], " AND ");
+    return sql`SELECT * FROM mentorship_pairings WHERE ${where}
+               ORDER BY mentorship_pairings.introduced_on DESC,
+                        mentorship_pairings.id COLLATE "C"`;
+  }
+
   async function timeEntriesWhere(
     actor: ActorContext,
     extra: Sql,
@@ -339,6 +349,22 @@ export function postgresRepositories(db: SqlClient): Repositories {
                 AND mentorship_offers.status = 'open'
               ORDER BY mentorship_offers.created_at DESC, mentorship_offers.id COLLATE "C"`,
           toMentorshipOffer,
+        ),
+    },
+
+    mentorshipPairings: {
+      list: (actor) => all(pairingsWhere(actor, sql`TRUE`), toMentorshipPairing),
+      find: (actor, id) =>
+        one(pairingsWhere(actor, sql`mentorship_pairings.id = ${id}`), toMentorshipPairing),
+      forOffer: (actor, offerId) =>
+        all(
+          pairingsWhere(actor, sql`mentorship_pairings.offer_id = ${offerId}`),
+          toMentorshipPairing,
+        ),
+      forStudent: (actor, studentId) =>
+        all(
+          pairingsWhere(actor, sql`mentorship_pairings.student_id = ${studentId}`),
+          toMentorshipPairing,
         ),
     },
 

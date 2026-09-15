@@ -15,11 +15,13 @@ import type {
   Application,
   MentorshipOffer,
   MentorshipOfferStatus,
+  MentorshipPairing,
   Posting,
   PostingStatus,
 } from "@/domain/types";
 import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
+import { INTRODUCERS, placesLeft } from "@/domain/mentorship";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -308,4 +310,137 @@ export async function offerMentorship(
   });
 
   return { ok: true, created: offer };
+}
+
+
+// ---------------------------------------------------------------------------
+// Introductions
+// ---------------------------------------------------------------------------
+
+/**
+ * Introduce a student to a mentor.
+ *
+ * The college or an administrator, and nobody else — see `INTRODUCERS`. This is
+ * a creation rather than a transition because before it there is no record at
+ * all: the college's mentor list was a list precisely because the introduction
+ * left no trace, so `capacity` was unverifiable and a mentorship could not
+ * count toward anything.
+ *
+ * Every check here is one the schema also holds, which is deliberate: the
+ * refusals below exist to say something a person can act on, and the
+ * constraints exist because a message is not an enforcement.
+ */
+export async function introduceStudentToMentor(
+  actor: ActorContext,
+  offerId: string,
+  studentId: string,
+  /** Enqueued in the same transaction; the caller cannot know the id yet. */
+  notifications?: (pairing: MentorshipPairing, offer: MentorshipOffer) => NotificationIntent[],
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<MentorshipPairing>> {
+  if (!INTRODUCERS.includes(actor.membership.role)) {
+    return {
+      ok: false,
+      error: "Only the college or an administrator can make an introduction.",
+      code: "forbidden",
+    };
+  }
+
+  const offer = await repositories.mentorshipOffers.find(actor, offerId);
+  if (!offer) {
+    return { ok: false, error: "Mentorship offer not found.", code: "not_found" };
+  }
+  if (offer.status !== "open") {
+    return {
+      ok: false,
+      // A paused employer said "not this term" rather than "no". Saying which
+      // is the difference between a college trying again and giving up.
+      error:
+        offer.status === "paused"
+          ? "That mentor has paused their offer, so they are not taking students right now."
+          : "That mentorship offer has been withdrawn.",
+      code: "forbidden",
+    };
+  }
+
+  const employer = await repositories.organizations.find(actor, offer.businessId);
+  if (!employer) {
+    return { ok: false, error: "That employer is no longer in this market.", code: "not_found" };
+  }
+  const blocked = transactBlockReason(employer);
+  if (blocked) {
+    return { ok: false, error: blocked, code: "forbidden" };
+  }
+
+  const student = await repositories.students.find(actor, studentId);
+  if (!student) {
+    return { ok: false, error: "Student not found.", code: "not_found" };
+  }
+  if (student.marketId !== offer.marketId) {
+    // Unreachable through the repositories, which scope both reads by market.
+    // Stated anyway: this is the check that must not be the one nobody wrote.
+    return { ok: false, error: "That student is in another market.", code: "forbidden" };
+  }
+  if (student.status !== "verified") {
+    return {
+      ok: false,
+      // The college's verification is what says this person is enrolled and
+      // who they claim to be. Mentorship has no supervisor, no timesheet and
+      // no board interview behind it, so that check is the only one standing
+      // between an adult and a student — it is not one to skip for the form
+      // with the least machinery.
+      error: "Verify this student before introducing them to a mentor.",
+      code: "forbidden",
+    };
+  }
+
+  const existing = await repositories.mentorshipPairings.forOffer(actor, offer.id);
+  if (existing.some((p) => p.studentId === student.id && p.status === "introduced")) {
+    return {
+      ok: false,
+      error: `${student.name} has already been introduced to this mentor.`,
+      code: "duplicate",
+    };
+  }
+  if (placesLeft(offer, existing) <= 0) {
+    return {
+      ok: false,
+      error: `${offer.mentorName} is already mentoring ${offer.capacity} student${
+        offer.capacity === 1 ? "" : "s"
+      }. Wait for one of those to finish.`,
+      code: "forbidden",
+    };
+  }
+
+  const at = deps.now().toISOString();
+  const pairing: MentorshipPairing = {
+    id: deps.id("pair"),
+    marketId: offer.marketId,
+    offerId: offer.id,
+    businessId: offer.businessId,
+    studentId: student.id,
+    introducedByUserId: actor.user.id,
+    introducedOn: at,
+    status: "introduced",
+  };
+
+  await deps.store.transaction((uow) => {
+    uow.createMentorshipPairing(pairing);
+    uow.appendAuditEvent({
+      marketId: pairing.marketId,
+      at,
+      actorUserId: actor.user.id,
+      actorRole: actor.membership.role,
+      entityType: "mentorship_pairing",
+      entityId: pairing.id,
+      from: null,
+      to: "introduced",
+      viaOverride: false,
+    });
+    for (const intent of notifications?.(pairing, offer) ?? []) {
+      uow.enqueueNotification(intent);
+    }
+  });
+
+  return { ok: true, created: pairing };
 }

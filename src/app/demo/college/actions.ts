@@ -1,6 +1,7 @@
 "use server";
 
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
+import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 
 /**
  * College-side transitions: submitting for credit, granting it, denying it,
@@ -26,4 +27,34 @@ export async function collegeTransition(
   reason?: unknown,
 ): Promise<ActionResult> {
   return runTransition("college", { applicationId, to, reason });
+}
+
+
+/**
+ * Introduce one of this college's students to a mentor.
+ *
+ * The role is hardcoded, as everywhere: a caller who could name their own role
+ * would be naming who vouched for a student in front of an adult.
+ */
+export async function collegeIntroduceStudent(
+  offerId: unknown,
+  studentId: unknown,
+): Promise<ActionResult> {
+  return makeIntroduction("college", offerId, studentId);
+}
+
+/**
+ * Close an introduction the college made.
+ *
+ * The employer normally does this, being the party who knows whether the
+ * student turned up. The college can too, because an introduction nobody ever
+ * closes holds one of a mentor's places open forever — and the college is the
+ * party that will hear about it first.
+ */
+export async function collegeCloseIntroduction(
+  pairingId: unknown,
+  to: unknown,
+  note: unknown,
+): Promise<ActionResult> {
+  return closeIntroduction("college", pairingId, to, note);
 }

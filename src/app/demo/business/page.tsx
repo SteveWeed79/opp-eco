@@ -45,10 +45,11 @@ import { actorForPortal } from "@/auth/session";
 import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet";
 import { ApproveHours } from "./ApproveHours";
 import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/workflow";
-import { postingTotalHours } from "@/domain/types";
+import { postingTotalHours, type MentorshipPairing } from "@/domain/types";
 import { marketRemainingBudget } from "@/lib/queries";
-import { businessTransition } from "./actions";
+import { businessCloseIntroduction, businessTransition } from "./actions";
 import { NewPosting } from "./NewPosting";
+import { IntroductionOutcome } from "@/components/IntroductionOutcome";
 import { OfferMentorship } from "./OfferMentorship";
 import { opportunityPath } from "@/routes";
 
@@ -87,6 +88,26 @@ export default async function BusinessPage() {
   // This employer's own offers to mentor. Withdrawn ones are gone rather than
   // greyed out: the machine has no move away from withdrawn, so a row with no
   // buttons and no way back is a tombstone the employer cannot act on.
+  // Introductions made to this employer, newest first, grouped by the offer
+  // they were made against.
+  const pairings = await repositories.mentorshipPairings.list(actor);
+  const pairingsByOffer = new Map<string, MentorshipPairing[]>();
+  for (const pairing of pairings) {
+    pairingsByOffer.set(pairing.offerId, [
+      ...(pairingsByOffer.get(pairing.offerId) ?? []),
+      pairing,
+    ]);
+  }
+  const studentNames = new Map(
+    (await repositories.students.list(actor)).map((student) => [
+      student.id,
+      student.name,
+    ]),
+  );
+  const studentName = (id: string) => studentNames.get(id) ?? "A student";
+  const introducedOn = (at: string) =>
+    new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
   const mentorshipOffers = (await repositories.mentorshipOffers.list(actor)).filter(
     (o) => o.status !== "withdrawn",
   );
@@ -632,6 +653,41 @@ export default async function BusinessPage() {
                       once
                       {offer.topics.length > 0 && ` · ${offer.topics.join(" · ")}`}
                     </p>
+
+                    {/* Who the college actually sent, and what became of it.  */}
+                    {/* An offer of two places with no way to see who is in    */}
+                    {/* them is a number the employer cannot act on.           */}
+                    {(pairingsByOffer.get(offer.id) ?? []).map((pairing) => (
+                      <div
+                        key={pairing.id}
+                        className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-line px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-ink-950">
+                            {studentName(pairing.studentId)}
+                            {pairing.status !== "introduced" && (
+                              <span className="ml-2 font-normal text-ink-500">
+                                {pairing.status === "met"
+                                  ? "· happened"
+                                  : "· did not happen"}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-ink-500 mt-0.5">
+                            {pairing.status === "introduced"
+                              ? `Introduced ${introducedOn(pairing.introducedOn)} — they will contact you`
+                              : pairing.outcomeNote}
+                          </p>
+                        </div>
+                        {pairing.status === "introduced" && (
+                          <IntroductionOutcome
+                            pairingId={pairing.id}
+                            studentName={studentName(pairing.studentId)}
+                            action={businessCloseIntroduction}
+                          />
+                        )}
+                      </div>
+                    ))}
                   </div>
                   <TransitionActions
                     id={offer.id}

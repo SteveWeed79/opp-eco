@@ -46,6 +46,7 @@ export const TABLES = [
   "time_entries",
   "applications",
   "interview_slots",
+  "mentorship_pairings",
   "mentorship_offers",
   "postings",
   "students",
@@ -233,6 +234,28 @@ export async function seedInto(tx) {
     );
   }
 
+  // After the offers they point at, and after the students and users they
+  // name — a pairing has a foreign key to all four.
+  for (const pairing of seed.mentorshipPairings) {
+    await insert(
+      `INSERT INTO mentorship_pairings (id, market_id, offer_id, business_id,
+         student_id, introduced_by, introduced_on, status, outcome_note, outcome_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        pairing.id,
+        pairing.marketId,
+        pairing.offerId,
+        pairing.businessId,
+        pairing.studentId,
+        pairing.introducedByUserId,
+        pairing.introducedOn,
+        pairing.status,
+        pairing.outcomeNote ?? null,
+        pairing.outcomeOn ?? null,
+      ],
+    );
+  }
+
   // Slots are generated relative to "now" in the fixtures, so they are
   // materialised here at their absolute times rather than as a rule.
   const slots = seed.interviewSlotsAt(new Date());
@@ -401,6 +424,7 @@ try {
        (SELECT count(*) FROM applications)       AS applications,
        (SELECT count(*) FROM time_entries)       AS time_entries,
        (SELECT count(*) FROM mentorship_offers)  AS mentorship_offers,
+       (SELECT count(*) FROM mentorship_pairings) AS mentorship_pairings,
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM audit_events)       AS audit_events`,

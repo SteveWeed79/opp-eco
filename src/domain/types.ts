@@ -273,6 +273,47 @@ export interface MentorshipOffer {
   createdOn: string;
 }
 
+/**
+ * An introduction, and what became of it.
+ *
+ * `introduced` is the live state and the only one that occupies a place on the
+ * offer: the mentorship is in flight. `met` says it happened, `declined` says
+ * it did not — and both free the place, because a portfolio review that took an
+ * hour in March is not still using one of three seats in September.
+ */
+export type MentorshipPairingStatus = "introduced" | "met" | "declined";
+
+/**
+ * A student introduced to a mentor, by the party that made the introduction.
+ *
+ * Without this record the offer's `capacity` is a number nobody can check, and
+ * a mentorship cannot count toward the outcome this platform says it measures.
+ * That was the cost of leaving the pairing off-platform: the college knew who
+ * it had introduced and the system did not.
+ */
+export interface MentorshipPairing {
+  id: string;
+  marketId: string;
+  offerId: string;
+  /**
+   * The employer, denormalised. A pairing is narrowed to its owner the same way
+   * a time entry is, and the scoping rule should not need a join to say so.
+   */
+  businessId: string;
+  studentId: string;
+  /**
+   * Who made the introduction. A college officer or an administrator — never
+   * the student and never the employer, which is the answer to the question
+   * this record exists to settle.
+   */
+  introducedByUserId: string;
+  introducedOn: string;
+  status: MentorshipPairingStatus;
+  /** What happened, or why it did not. Required to close a pairing. */
+  outcomeNote?: string;
+  outcomeOn?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Applications and placements
 // ---------------------------------------------------------------------------
@@ -477,7 +518,8 @@ export interface AuditEvent {
     | "application"
     | "credit"
     | "time_entry"
-    | "mentorship_offer";
+    | "mentorship_offer"
+    | "mentorship_pairing";
   entityId: string;
   from: string | null;
   to: string;

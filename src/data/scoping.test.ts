@@ -83,6 +83,37 @@ describe("a student sees their own records and nobody else's", () => {
   });
 });
 
+describe("who may read an introduction", () => {
+  it("shows an employer only the introductions made to them", async () => {
+    const theirs = await repositories.mentorshipPairings.list(business);
+    expect(theirs.every((p) => p.businessId === APEX)).toBe(true);
+  });
+
+  it("shows a student only their own", async () => {
+    const self = seed.studentForUser(student.user.id)!;
+    const theirs = await repositories.mentorshipPairings.list(student);
+    expect(theirs.every((p) => p.studentId === self.id)).toBe(true);
+  });
+
+  it("shows the board none of them", async () => {
+    // It reimburses placements. A mentorship carries no wage, no credit and no
+    // public money, so who was introduced to whom is not its business — the
+    // same reasoning that hides work summaries from it on a timesheet.
+    expect(await repositories.mentorshipPairings.list(board)).toEqual([]);
+    expect(
+      await repositories.mentorshipPairings.find(board, seed.mentorshipPairings[0].id),
+    ).toBeNull();
+  });
+
+  it("shows the college the ones in its market", async () => {
+    const theirs = await repositories.mentorshipPairings.list(college);
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(
+      theirs.every((p) => p.marketId === college.membership.marketId),
+    ).toBe(true);
+  });
+});
+
 describe("business ownership", () => {
   it("lists only its own postings", async () => {
     const foreign = (await repositories.postings

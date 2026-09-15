@@ -77,6 +77,34 @@ export function applicationScope(actor: ActorContext): Sql {
   return joinSql(parts, " AND ");
 }
 
+/**
+ * Restrict introductions to the parties with a reason to read one.
+ *
+ * The employer's own, the student's own, the market's for a college or an
+ * administrator — and **nothing at all for the board**, which reimburses
+ * placements and has no workflow reason to know who was introduced to whom.
+ * `FALSE` rather than an omitted clause, so the refusal is in the statement
+ * where a reviewer can see it.
+ */
+export function mentorshipPairingScope(actor: ActorContext): Sql {
+  if (actor.membership.role === "board") return sql`FALSE`;
+
+  const parts: Sql[] = [marketScope(actor, "mentorship_pairings")];
+  if (actor.membership.role === "business") {
+    parts.push(
+      sql`mentorship_pairings.business_id = ${actor.membership.organizationId}`,
+    );
+  }
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`mentorship_pairings.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function studentScope(actor: ActorContext): Sql {
   const parts: Sql[] = [marketScope(actor, "students")];
   if (actor.membership.role === "student") {

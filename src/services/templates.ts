@@ -310,6 +310,29 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "See who is offering", path: PORTAL_PATH.college },
   }),
 
+  // The introduction itself, which goes to both sides at once. Neither message
+  // is a notification about a queue: the employer is being told a real person
+  // is about to contact them, and the student is being told who to contact and
+  // what they are allowed to ask for. A student who gets a name with no idea
+  // what to say with it does not send the email.
+  "mentorship.introduced.employer": (p) => ({
+    subject: `${str(p.studentName)} would like to take you up on your offer`,
+    body:
+      `${str(p.collegeName)} has introduced ${str(p.studentName)}, ${str(p.programOfStudy)}, for ${str(p.formatLabel).toLowerCase()} with ${str(p.mentorName)}. ` +
+      `They will be in touch directly. Nothing here needs approving and nothing is being claimed against your time beyond what you offered — ` +
+      `if now is not the moment, say so and the college will find another mentor rather than leaving the student waiting.`,
+    action: { label: "See your introductions", path: PORTAL_PATH.business },
+  }),
+
+  "mentorship.introduced.student": (p) => ({
+    subject: `You have been introduced to ${str(p.mentorName)} at ${str(p.businessName)}`,
+    body:
+      `${str(p.mentorName)}, ${str(p.mentorRole)} at ${str(p.businessName)}, has agreed to ${str(p.formatLabel).toLowerCase()} with you. ` +
+      `They are expecting you to make contact. This is not an interview and there is no application attached to it — ` +
+      `ask them what the work is actually like, what they look for in a first hire, and what you should be learning now.`,
+    action: { label: "See the introduction", path: PORTAL_PATH.student },
+  }),
+
   // --- Hours ---------------------------------------------------------------
   // The one exchange that repeats every week of a placement, which makes the
   // wording matter more than it does for a one-off status change. A supervisor

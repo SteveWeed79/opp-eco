@@ -213,3 +213,76 @@ test("the audit log and the outbox both record what happened", async ({ page }) 
     .innerText();
   expect(undelivered).toBe("0");
 });
+
+test("the college introduces a student, and every party sees it", async ({ page }) => {
+  // The gap this closes: the mentor list was visible and inert. An employer
+  // declared two places, the college knew who it had introduced, and the
+  // system knew neither — so capacity was unverifiable and a mentorship
+  // counted toward nothing.
+  await page.goto("/demo/college");
+
+  // "places free", not "place": the queues above this one are full of
+  // placements, and a looser filter matches those instead.
+  const row = page
+    .getByRole("listitem")
+    .filter({ hasText: /\d+ of \d+ places? free/ })
+    .first();
+  const before = (await row.innerText()).match(/(\d+) of (\d+) places? free/);
+  expect(before, "the mentor list should show places, not just a capacity").toBeTruthy();
+
+  await row.getByRole("button", { name: "Introduce a student" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // Only verified students are offered: nothing else stands between an adult
+  // and a student on this form. The signed-in student is chosen by name so the
+  // last assertion is about their portal rather than a classmate's — a student
+  // sees their own introductions and nobody else's.
+  const studentName = "Omar Haddad";
+  await dialog.getByRole("radio", { name: new RegExp(studentName) }).click();
+  await dialog.getByRole("button", { name: "Make the introduction" }).click();
+
+  await expect(page.getByRole("status").first()).toContainText("Introduced");
+
+  // A place is spoken for, and the introduction is listed as work in flight.
+  await expect(page.getByText("Introductions in flight")).toBeVisible();
+
+  // The employer is told, and can say what became of it — the half that keeps
+  // the declared capacity honest.
+  await page.goto("/demo/admin/outbox");
+  await expect(page.getByText("take you up on your offer").first()).toBeVisible();
+
+  // And the student is told who to contact, rather than waiting on an email
+  // they may have missed.
+  await page.goto("/demo/student");
+  await expect(
+    page.getByText(/You have been introduced to/).first(),
+  ).toBeVisible();
+
+});
+
+test("an employer records whether the mentorship happened", async ({ page }) => {
+  await page.goto("/demo/business");
+
+  // The seeded live introduction. Closing it gives the mentor their place back.
+  const introduction = page
+    .getByText(/Introduced .* they will contact you/)
+    .first();
+  await expect(introduction).toBeVisible();
+
+  await page.getByRole("button", { name: "It happened" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // The note is required: an introduction closed with nothing said is the only
+  // record this platform will ever hold that a mentorship took place.
+  const confirm = dialog.getByRole("button", { name: "It happened" });
+  await expect(confirm).toBeDisabled();
+
+  await dialog
+    .getByRole("textbox")
+    .fill("Hour on controls engineering; she is applying for the summer posting.");
+  await confirm.click();
+
+  await expect(page.getByRole("status").first()).toContainText("on the record");
+});

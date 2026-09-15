@@ -167,6 +167,7 @@ withDatabase("the fixtures", () => {
          (SELECT count(*) FROM applications)      AS applications,
          (SELECT count(*) FROM time_entries)      AS time_entries,
          (SELECT count(*) FROM mentorship_offers) AS mentorship_offers,
+         (SELECT count(*) FROM mentorship_pairings) AS mentorship_pairings,
          (SELECT count(*) FROM credit_awards)     AS credit_awards`,
     );
     for (const [table, count] of Object.entries(counts)) {
@@ -225,6 +226,7 @@ withDatabase("parity with the in-memory layer", () => {
       awaitingCollegeHelp: await repos.postings.awaitingCollegeHelp(actor),
       mentorshipOffers: await repos.mentorshipOffers.list(actor),
       openOffers: await repos.mentorshipOffers.openInMarket(actor),
+      mentorshipPairings: await repos.mentorshipPairings.list(actor),
       applications: await repos.applications.list(actor),
       interviewSlots: await repos.interviewSlots.list(actor),
       openSlots: await repos.interviewSlots.open(actor),
@@ -285,6 +287,9 @@ withDatabase("parity with the in-memory layer", () => {
       expect(await postgres.mentorshipOffers.find(actor, offer.id)).toEqual(
         await memoryRepositories.mentorshipOffers.find(actor, offer.id),
       );
+      expect(byId(await postgres.mentorshipPairings.forOffer(actor, offer.id))).toEqual(
+        byId(await memoryRepositories.mentorshipPairings.forOffer(actor, offer.id)),
+      );
     }
   });
 
@@ -325,6 +330,11 @@ withDatabase("parity with the in-memory layer", () => {
       );
       expect(byId(await postgres.creditAwards.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.creditAwards.forStudent(actor, student.id)),
+      );
+      expect(
+        byId(await postgres.mentorshipPairings.forStudent(actor, student.id)),
+      ).toEqual(
+        byId(await memoryRepositories.mentorshipPairings.forStudent(actor, student.id)),
       );
     }
 

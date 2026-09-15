@@ -24,6 +24,7 @@ import type {
   CreditAward,
   InterviewSlot,
   MentorshipOffer,
+  MentorshipPairing,
   Organization,
   Posting,
   Student,
@@ -189,6 +190,37 @@ class PostgresUnitOfWork implements UnitOfWork {
         verified_by = ${verifiedBy},
         updated_at = now()
       WHERE id = ${student.id}`);
+  }
+
+  // -- Mentorship introductions ---------------------------------------------
+
+  /**
+   * No upsert, matching `createApplication`: the same student may be
+   * introduced to the same mentor again months later, and the partial unique
+   * index — one *live* pairing per student per offer — is the backstop that
+   * distinguishes that from a double booking.
+   */
+  createMentorshipPairing(pairing: MentorshipPairing) {
+    this.add(sql`
+      INSERT INTO mentorship_pairings (
+        id, market_id, offer_id, business_id, student_id, introduced_by,
+        introduced_on, status, outcome_note, outcome_on
+      ) VALUES (
+        ${pairing.id}, ${pairing.marketId}, ${pairing.offerId},
+        ${pairing.businessId}, ${pairing.studentId}, ${pairing.introducedByUserId},
+        ${pairing.introducedOn}, ${pairing.status},
+        ${pairing.outcomeNote ?? null}, ${pairing.outcomeOn ?? null}
+      )`);
+  }
+
+  saveMentorshipPairing(pairing: MentorshipPairing) {
+    this.add(sql`
+      UPDATE mentorship_pairings SET
+        status = ${pairing.status},
+        outcome_note = ${pairing.outcomeNote ?? null},
+        outcome_on = ${pairing.outcomeOn ?? null},
+        updated_at = now()
+      WHERE id = ${pairing.id}`);
   }
 
   saveOrganization(organization: Organization) {
