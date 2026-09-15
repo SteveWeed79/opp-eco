@@ -107,7 +107,7 @@ Properties worth knowing:
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
-- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
+- **Notifications are queued inside the transaction and sent after it commits.** A send that fails after a commit is retryable; one that succeeds before a rollback has told someone about work that never happened. The queue is part of the data layer — an array on the fixtures, `notification_outbox` on Postgres — and the dispatcher drains whichever one it was handed. `/admin/outbox` shows what was delivered, queued, and undelivered — the audit log says what changed, the outbox says whether anyone was told.
 - **Who hears about what lives in one table.** `notification-policy.ts` maps each status an application reaches to the parties told and what each is told; `templates.ts` holds the wording. A transition notifies the right people without its call site listing them, which is what stops a lifecycle having messages for the interesting steps and silence for the rest.
 - **A portal is named zones, not a stack of cards.** Every page was a flat run of identical `Card`s, so reading order carried no rank — a queue blocking a placement, a reference table, and a settings panel touched once a year all looked the same. Two things followed, and both were live: anything appended to the end became invisible, and the college's brand picker read exactly like a queue. `PageSection` groups a page into two to four named zones, and its `settings` tone recesses configuration behind a rule, because a page that gives equal weight to "four students are waiting on you" and "pick a brand colour" has not decided what it is for.
 
@@ -271,6 +271,11 @@ the whole suite green; CI runs it against a container on every change. **The
 database it names is truncated and reseeded** — never point it at one whose
 contents matter.
 
+Running the **whole e2e suite against Postgres** is the other half, and worth
+doing after any change to the data layer: point `DATABASE_URL` at a seeded
+local database, set `DATABASE_READ_ONLY=false`, and run `npm run test:e2e`.
+Every flow the demo has passes on either backend.
+
 The first run of that suite found six faults that no amount of TypeScript would
 have caught: a `citext` column whose extension was never created, two seeded
 foreign keys pointing at users that do not exist, two fixture pairs violating
@@ -280,6 +285,16 @@ by `markets.market_id` — a column that table does not have. Parity found two
 more in the *other* direction: the in-memory layer let a signed-in student read
 every classmate's application and every classmate's student record, which the
 SQL layer had always refused.
+
+Driving the browser against Postgres found the two that only a running app
+shows. Every notification to an employer, a college or a board was addressed to
+an organization — most employers have no user account — and the outbox column
+referenced `users`, so the insert failed and took the state change beside it
+down. And `outbox.ts` drained the in-memory queue directly, so once that was
+fixed the rows landed in `notification_outbox` and were never sent: the audit
+log said the board was told, the outbox screen said nothing had been sent, and
+both were right. The queue is now a seam on the backend, and the dispatcher
+drains whichever one the data layer filled.
 
 ## Email
 

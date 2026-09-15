@@ -70,6 +70,12 @@ function visibleStudents(actor: ActorContext): Student[] {
   return rows.filter((s) => s.userId === actor.user.id);
 }
 
+/** Students waiting on the college before students who have not asked yet. */
+function byVerificationQueue(a: Student, b: Student): number {
+  const asked = (s: Student) => (s.status === "pending_verification" ? 0 : 1);
+  return asked(a) - asked(b) || a.name.localeCompare(b.name);
+}
+
 /**
  * Every time entry the actor may see, already reduced to what their role needs.
  *
@@ -141,9 +147,15 @@ export const repositories: Repositories = {
     list: async (actor) => visibleStudents(actor),
     find: async (actor, id) => visibleStudents(actor).find((s) => s.id === id) ?? null,
     pendingVerification: async (actor) =>
-      visibleStudents(actor).filter(
-        (s) => s.status === "pending_verification" || s.status === "profile_complete",
-      ),
+      visibleStudents(actor)
+        .filter(
+          (s) => s.status === "pending_verification" || s.status === "profile_complete",
+        )
+        // Asked first, then by name. Ordering this explicitly rather than
+        // leaving it to fixture order is what keeps the queue the same on both
+        // data layers — and what stops a student who has not submitted from
+        // heading a list whose first action is one the college cannot take.
+        .sort(byVerificationQueue),
     forUser: async (actor, userId) =>
       visibleStudents(actor).find((s) => s.userId === userId) ?? null,
     forApplication: async (actor, application) => {

@@ -11,14 +11,17 @@
  * pending array and a delivered array, which is the same shape with the
  * durability removed.
  *
- * Deliberately in-memory, and therefore per server instance and lost on
- * restart — the same caveat the rate limiter carries. Saying so is better than
- * implying a demo has a durable outbox.
+ * The **pending** half is as durable as the data layer underneath it: an array
+ * on the fixtures, the `notification_outbox` table on Postgres, written inside
+ * the transaction that caused it. The **delivered** half below is in-memory
+ * either way — per server instance and lost on restart, the same caveat the
+ * rate limiter carries. Saying so is better than implying a demo has a durable
+ * record of what was sent.
  */
 
 import { dispatch, render, type NotificationChannel } from "./notifications";
-import { pendingNotifications } from "@/data/memory-store";
-import type { NotificationIntent } from "@/data/store";
+import { notificationQueue } from "@/data/backend";
+import type { NotificationIntent, QueuedNotification } from "@/data/store";
 import { logger } from "./logging";
 import { emailConfig } from "./email/config";
 import { resendChannel } from "./email/resend";
@@ -128,9 +131,10 @@ async function drain(): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
 
-  const batch = pendingNotifications.splice(0, pendingNotifications.length);
+  const batch = await notificationQueue.take();
 
-  for (const intent of batch) {
+  for (const item of batch) {
+    const intent = item.intent;
     try {
       const result = await dispatch(
         [intent],
@@ -150,7 +154,7 @@ async function drain(): Promise<{ sent: number; failed: number }> {
         // Requeued here rather than relying on `dispatch` to do it: this loop
         // hands it a throwaway single-element array, so the queue it puts
         // failures back into is not the one that gets drained next time.
-        if (!failure.permanent) pendingNotifications.push(failure.intent);
+        if (!failure.permanent) await requeue(item, failure.error);
       }
       for (const dead of result.undeliverable) {
         // Not requeued: an unknown template or a missing recipient will never
@@ -160,12 +164,9 @@ async function drain(): Promise<{ sent: number; failed: number }> {
       }
     } catch (error) {
       failed += 1;
-      await recordFailure(
-        intent,
-        "failed",
-        error instanceof Error ? error.message : String(error),
-      );
-      pendingNotifications.push(intent);
+      const message = error instanceof Error ? error.message : String(error);
+      await recordFailure(intent, "failed", message);
+      await requeue(item, message);
     }
   }
 
@@ -173,6 +174,26 @@ async function drain(): Promise<{ sent: number; failed: number }> {
     logger.info("notifications.dispatched", { sent, failed });
   }
   return { sent, failed };
+}
+
+/**
+ * Put a message back, and never let that be why a transition reports failure.
+ *
+ * The queue is a database on a Postgres deployment, so returning a message can
+ * itself fail. Losing one message is bad; turning a committed placement into an
+ * error on the student's screen because the outbox could not be written is
+ * worse.
+ */
+async function requeue(item: QueuedNotification, error: string) {
+  try {
+    await notificationQueue.requeue(item, error);
+  } catch (requeueError) {
+    logger.warn("notification.requeue_failed", {
+      kind: item.intent.kind,
+      error:
+        requeueError instanceof Error ? requeueError.message : String(requeueError),
+    });
+  }
 }
 
 async function recordFailure(
@@ -195,16 +216,16 @@ async function recordFailure(
 }
 
 /** Everything an administrator can see, newest first. Scoped by the caller. */
-export function outboxFor(marketId: string | null): {
+export async function outboxFor(marketId: string | null): Promise<{
   delivered: DeliveredNotification[];
   pending: NotificationIntent[];
-} {
+}> {
   return {
     delivered: marketId
       ? deliveredNotifications.filter((n) => n.marketId === marketId)
       : [...deliveredNotifications],
-    pending: marketId
-      ? pendingNotifications.filter((n) => n.marketId === marketId)
-      : [...pendingNotifications],
+    // Read through the queue rather than a module array: what is waiting lives
+    // wherever the data layer put it.
+    pending: await notificationQueue.pending(marketId),
   };
 }

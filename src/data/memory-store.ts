@@ -15,6 +15,8 @@ import * as seed from "./seed";
 import {
   ConcurrencyError,
   type NotificationIntent,
+  type NotificationQueue,
+  type QueuedNotification,
   type Store,
   type UnitOfWork,
 } from "./store";
@@ -29,6 +31,28 @@ let auditSequence = 1000;
  * rollback has told someone about work that did not happen.
  */
 export const pendingNotifications: NotificationIntent[] = [];
+
+/**
+ * The array above, behind the queue contract.
+ *
+ * No ids: an in-memory queue has nothing to address a row by, and the
+ * dispatcher never needs one because `requeue` simply pushes the intent back.
+ */
+export const memoryNotificationQueue: NotificationQueue = {
+  async take() {
+    return pendingNotifications
+      .splice(0, pendingNotifications.length)
+      .map((intent) => ({ id: null, intent }));
+  },
+  async requeue(item: QueuedNotification) {
+    pendingNotifications.push(item.intent);
+  },
+  async pending(marketId: string | null) {
+    return marketId
+      ? pendingNotifications.filter((n) => n.marketId === marketId)
+      : [...pendingNotifications];
+  },
+};
 
 class MemoryUnitOfWork implements UnitOfWork {
   /** Staged so nothing is visible until the whole unit succeeds. */

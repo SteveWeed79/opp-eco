@@ -17,6 +17,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { ReadOnlyError } from "@/data/backend";
 import type { ActorRole, Application } from "@/domain/types";
 import { actorForPortal } from "@/auth/session";
 import { executeTransition, type TransitionCommand } from "@/services/transitions";
@@ -29,6 +30,32 @@ import { PORTAL_PATH } from "@/routes";
 export interface ActionResult {
   ok: boolean;
   error?: string;
+}
+
+/**
+ * Run a write, and turn a read-only deployment's refusal into an answer.
+ *
+ * `ReadOnlyError` carries a sentence written for someone looking at the
+ * screen — "browse freely" — and until this existed nobody caught it: a demo
+ * pointed at a read-only database answered every click with an unhandled
+ * server error instead of the explanation the class was written to give.
+ *
+ * Only that one error is converted. Anything else is a fault rather than a
+ * policy, and swallowing it here would hide it from the logs and from the
+ * caller alike.
+ */
+export async function attemptWrite<T extends { ok: boolean }>(
+  run: () => Promise<T>,
+): Promise<T | { ok: false; error: string; code: "forbidden" }> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ReadOnlyError) {
+      logger.info("write.refused", { reason: "read_only" });
+      return { ok: false, error: error.message, code: "forbidden" };
+    }
+    throw error;
+  }
 }
 
 /** Every portal reads applications, so every portal's view can go stale. */
@@ -77,17 +104,19 @@ export async function runTransition(
     };
   }
 
-  const result = await executeTransition(actor, {
-    applicationId: input.data.applicationId,
-    // Cast is safe because the state machine rejects any status it does not
-    // recognise — an unknown string finds no transition and is refused. The
-    // schema bounds the length; the domain decides the meaning.
-    to: input.data.to as Application["status"],
-    reason: input.data.reason,
-    patch: extras?.patch,
-    sideEffects: extras?.sideEffects,
-    notifications: extras?.notifications,
-  });
+  const result = await attemptWrite(() =>
+    executeTransition(actor, {
+      applicationId: input.data.applicationId,
+      // Cast is safe because the state machine rejects any status it does not
+      // recognise — an unknown string finds no transition and is refused. The
+      // schema bounds the length; the domain decides the meaning.
+      to: input.data.to as Application["status"],
+      reason: input.data.reason,
+      patch: extras?.patch,
+      sideEffects: extras?.sideEffects,
+      notifications: extras?.notifications,
+    }),
+  );
 
   if (!result.ok) {
     logger.warn("transition.refused", {

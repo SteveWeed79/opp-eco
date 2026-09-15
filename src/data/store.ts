@@ -41,6 +41,40 @@ export interface NotificationIntent {
 }
 
 /**
+ * A message that has been queued and not yet sent.
+ *
+ * `id` is the queue's own handle on the row, which the Postgres queue needs to
+ * put a transient failure back and the in-memory queue has no use for. It is
+ * deliberately opaque: nothing above the dispatcher reads it.
+ */
+export interface QueuedNotification {
+  id: string | null;
+  intent: NotificationIntent;
+}
+
+/**
+ * The handoff between a committed transaction and the dispatcher.
+ *
+ * A seam rather than an array because the two data layers hold this queue in
+ * different places: the fixtures in a module-level array, Postgres in the
+ * `notification_outbox` table written inside the same transaction as the state
+ * change. `outbox.ts` imported the array directly, which meant that on a
+ * database deployment every message was written to the table and none was ever
+ * sent — the dispatcher was draining a queue nothing filled.
+ */
+export interface NotificationQueue {
+  /**
+   * Claim everything pending. Claimed messages leave the queue, exactly as a
+   * `splice` does, and come back only through `requeue`.
+   */
+  take(): Promise<QueuedNotification[]>;
+  /** Return a message that failed for a reason a retry could fix. */
+  requeue(item: QueuedNotification, error: string): Promise<void>;
+  /** What is still waiting, for the administrator's outbox. */
+  pending(marketId: string | null): Promise<NotificationIntent[]>;
+}
+
+/**
  * The mutations available inside a transaction. Deliberately narrow — anything
  * not listed here cannot be written, which keeps the write surface reviewable.
  */

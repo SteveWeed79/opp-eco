@@ -224,7 +224,12 @@ export function postgresRepositories(db: SqlClient): Repositories {
           sql`${rawText(STUDENT_SELECT)}
               WHERE ${studentScope(actor)}
                 AND students.status IN ('pending_verification', 'profile_complete')
-              ORDER BY users.name, students.id`,
+              -- Students who have actually asked come first. A profile nobody
+              -- submitted is not waiting on anyone — it is in this list so the
+              -- college can see it coming, not so it can head the queue and
+              -- offer the one action the college cannot take.
+              ORDER BY (students.status = 'pending_verification') DESC,
+                       users.name, students.id`,
           toStudent,
         ),
       forUser: (actor, userId) =>

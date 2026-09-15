@@ -39,6 +39,7 @@ import { contextFor } from "../session";
 import { databaseConfig } from "./config";
 import { createPostgresClient, type PostgresClient } from "./neon";
 import { nodePostgresPool } from "./node-pg";
+import { postgresNotificationQueue, readOnlyNotificationQueue } from "./outbox";
 import { postgresRepositories } from "./repositories";
 import { postgresStore } from "./store";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -356,6 +357,15 @@ withDatabase("parity with the in-memory layer", () => {
       (await memoryRepositories.auditEvents.list(actor)).map((e) => e.entityId),
     );
 
+    // The college's queue leads with someone it can act on: a student who has
+    // asked to be verified, rather than one who has not submitted yet.
+    const waiting = await postgres.students.pendingVerification(actor);
+    expect(waiting.map((s) => s.status)).toEqual(
+      await memoryRepositories.students
+        .pendingVerification(actor)
+        .then((rows) => rows.map((s) => s.status)),
+    );
+
     const slots = await postgres.interviewSlots.open(actor);
     expect(slots.map((s) => s.startsAt)).toEqual(
       [...slots].map((s) => s.startsAt).sort(),
@@ -520,6 +530,71 @@ withDatabase("the write path", () => {
       [application.id],
     );
     expect(row.status).toBe(application.status);
+  });
+
+  it("hands a queued notification to the dispatcher, organization contacts included", async () => {
+    // A message to an employer, a college or a board is addressed to the
+    // organization, because most of them have no user account. The column it
+    // was written to referenced `users`, so the insert failed and took the
+    // transition beside it down; the dispatcher then drained an in-memory
+    // array that a Postgres deployment never filled. Both halves are here.
+    const store = postgresStore(client);
+    const queue = postgresNotificationQueue(client);
+    const actor = contextFor("college");
+    const [application] = await postgresRepositories(client).applications.list(actor);
+
+    await store.transaction((uow) => {
+      uow.enqueueNotification({
+        marketId: application.marketId,
+        recipientUserId: "contact:org-apex",
+        recipientOrganizationId: "org-apex",
+        kind: "posting.submitted",
+        payload: { title: "Water quality data intern" },
+      });
+      uow.enqueueNotification({
+        marketId: application.marketId,
+        recipientUserId: actor.user.id,
+        kind: "student.verified",
+        payload: {},
+      });
+    });
+
+    const waiting = await queue.pending(application.marketId);
+    expect(waiting.map((n) => n.kind)).toEqual(
+      expect.arrayContaining(["posting.submitted", "student.verified"]),
+    );
+    const employerMessage = waiting.find((n) => n.kind === "posting.submitted")!;
+    expect(employerMessage.recipientOrganizationId).toBe("org-apex");
+    expect(employerMessage.recipientUserId).toBe("contact:org-apex");
+    expect(employerMessage.payload).toEqual({ title: "Water quality data intern" });
+
+    // Claiming empties the queue, the way a splice does — two instances
+    // draining at once must not both send it.
+    const claimed = await queue.take();
+    expect(claimed.length).toBeGreaterThanOrEqual(2);
+    expect(await queue.take()).toEqual([]);
+    expect(await queue.pending(null)).toEqual([]);
+
+    // A failure a retry could fix comes back, with the reason recorded.
+    const returned = claimed.find((c) => c.intent.kind === "posting.submitted")!;
+    await queue.requeue(returned, "connection reset");
+    expect((await queue.pending(null)).map((n) => n.kind)).toEqual([
+      "posting.submitted",
+    ]);
+    const [row] = await client.query<{ last_error: string; attempts: number }>(
+      "SELECT last_error, attempts FROM notification_outbox WHERE id = $1",
+      [returned.id],
+    );
+    expect(row.last_error).toBe("connection reset");
+    expect(row.attempts).toBe(1);
+  });
+
+  it("never claims a message on a read-only deployment", async () => {
+    // Claiming marks a row sent, and a demonstration pointed at a shared
+    // database must not mark someone else's messages as sent.
+    const queue = readOnlyNotificationQueue(client);
+    expect(await queue.take()).toEqual([]);
+    expect((await queue.pending(null)).length).toBeGreaterThan(0);
   });
 
   it("lets Postgres itself refuse a read-only transaction", async () => {

@@ -586,16 +586,31 @@ CREATE TRIGGER audit_events_no_update
 -- commit is a placement that quietly dies.
 -- ---------------------------------------------------------------------------
 
+-- A recipient is a user **or** an organization, never both and never neither.
+--
+-- Most employers in a market are a name and an email long before anyone from
+-- that company has an account, and the platform still has to tell them their
+-- candidate cleared — `notification-policy.ts` addresses those messages to the
+-- organization and dispatch reads its published contact. A single
+-- `recipient_id REFERENCES users(id)` could not hold that, so every message to
+-- an employer, a college or a board failed on the foreign key and took its
+-- whole transaction — the application, the booking, the timesheet — down with
+-- it. Two nullable columns with exactly one filled says what is true instead.
 CREATE TABLE notification_outbox (
-  id           bigserial PRIMARY KEY,
-  market_id    text NOT NULL REFERENCES markets(id) ON DELETE RESTRICT,
-  recipient_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind         text NOT NULL,
-  payload      jsonb NOT NULL DEFAULT '{}',
-  created_at   timestamptz NOT NULL DEFAULT now(),
-  dispatched_at timestamptz,
-  attempts     integer NOT NULL DEFAULT 0,
-  last_error   text
+  id                        bigserial PRIMARY KEY,
+  market_id                 text NOT NULL REFERENCES markets(id) ON DELETE RESTRICT,
+  recipient_user_id         text REFERENCES users(id) ON DELETE CASCADE,
+  recipient_organization_id text REFERENCES organizations(id) ON DELETE CASCADE,
+  kind                      text NOT NULL,
+  payload                   jsonb NOT NULL DEFAULT '{}',
+  created_at                timestamptz NOT NULL DEFAULT now(),
+  dispatched_at             timestamptz,
+  attempts                  integer NOT NULL DEFAULT 0,
+  last_error                text,
+
+  CONSTRAINT one_recipient CHECK (
+    num_nonnulls(recipient_user_id, recipient_organization_id) = 1
+  )
 );
 
 CREATE INDEX notification_outbox_pending_idx ON notification_outbox (created_at)
