@@ -38,10 +38,49 @@ const cents = (value) => (value === undefined || value === null ? null : Math.ro
  * deliberately absent: the schema is not the data, and wiping the ledger would
  * make the next `db:migrate` try to rebuild tables that already exist.
  */
+/**
+ * Tables the truncation clears and the fixtures never refill.
+ *
+ * Everything here is produced by the running application rather than by a
+ * fixture, and each one would be actively wrong to ship: a seeded session or
+ * sign-in code is a working credential committed to the repository, a seeded
+ * password is one every checkout knows, and a fixture upload is a blob nobody
+ * chose. The outbox fills as transactions commit.
+ *
+ * Named as a set rather than left implicit because `src/data/postgres/seed.test.ts`
+ * asserts that every *other* table in `TABLES` is written by `seedInto` — a
+ * fixture that quietly stops being seeded leaves an empty table nobody notices
+ * until a portal renders blank.
+ */
+export const RUNTIME_TABLES = [
+  "uploaded_files",
+  "notification_outbox",
+  "sessions",
+  "sign_in_codes",
+  // Credentials. These reference `users` and would be emptied by the CASCADE
+  // whether or not they were listed — named anyway, because a re-seed silently
+  // discarding every password in the database is exactly the kind of thing that
+  // should be readable in the list of what it clears.
+  "user_passwords",
+  "user_totp",
+  "user_recovery_codes",
+  "mfa_challenges",
+];
+
 export const TABLES = [
+  "uploaded_files",
+  "user_passwords",
+  "user_totp",
+  "user_recovery_codes",
+  "mfa_challenges",
+  "sessions",
+  "sign_in_codes",
   "notification_outbox",
   "audit_events",
   "outcomes",
+  "consents",
+  "funding_commitments",
+  "funding_sources",
   "credit_award_applications",
   "credit_awards",
   "time_entries",
@@ -71,16 +110,14 @@ export async function seedInto(tx) {
   for (const market of seed.markets) {
     await insert(
       `INSERT INTO markets (id, name, city, counties, stage, board_id, launched_on,
-         subsidy_budget_cents, subsidy_rate_cents, program_year)
-       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6,$7,$8)`,
+         program_year)
+       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6)`,
       [
         market.id,
         market.name,
         market.city,
         market.counties,
         market.launchedOn,
-        cents(market.subsidyBudget),
-        cents(market.subsidyRatePerHour),
         market.programYear,
       ],
     );
@@ -90,8 +127,8 @@ export async function seedInto(tx) {
     await insert(
       `INSERT INTO organizations (id, market_id, kind, name, county, status,
          contact_name, contact_email, applied_on, hours_per_credit,
-         brand_color, accent_color, logo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         brand_color, accent_color, logo_url, identity_mode, email_domains)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
         org.id,
         org.marketId,
@@ -106,6 +143,8 @@ export async function seedInto(tx) {
         org.brandColor ?? null,
         org.accentColor ?? null,
         org.logoUrl ?? null,
+        org.identityMode,
+        org.emailDomains,
       ],
     );
   }
@@ -372,6 +411,80 @@ export async function seedInto(tx) {
     }
   }
 
+  // Consents need their learner, the institution whose records they cover, and
+  // the user who recorded them — all of which are in by now.
+  for (const consent of seed.consents) {
+    await insert(
+      `INSERT INTO consents (id, market_id, student_id, source_org_id, scope,
+         granted_by, granted_on, expires_on, status, recorded_by, note, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        consent.id,
+        consent.marketId,
+        consent.studentId,
+        consent.sourceOrgId,
+        consent.scope,
+        consent.grantedBy,
+        consent.grantedOn,
+        consent.expiresOn ?? null,
+        consent.status,
+        consent.recordedByUserId,
+        consent.note ?? null,
+        consent.version,
+      ],
+    );
+  }
+
+  // Funds first, then the draws against them. A source needs its market and its
+  // sponsoring organization; a commitment needs the source, the student, the
+  // user who authorized it, and — where the draw is against a placement — the
+  // application. All of those are in by this point.
+  for (const source of seed.fundingSources) {
+    await insert(
+      `INSERT INTO funding_sources (id, market_id, sponsor_org_id, kind, purpose,
+         program_year, name, allocated_cents, rate_cents, status, opened_on, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        source.id,
+        source.marketId,
+        source.sponsorOrgId,
+        source.kind,
+        source.purpose,
+        source.programYear,
+        source.name,
+        cents(source.allocated),
+        source.ratePerHour === undefined ? null : cents(source.ratePerHour),
+        source.status,
+        source.openedOn,
+        source.version,
+      ],
+    );
+  }
+
+  for (const commitment of seed.fundingCommitments) {
+    await insert(
+      `INSERT INTO funding_commitments (id, market_id, funding_source_id, student_id,
+         application_id, amount_cents, hours, rate_cents, status, authorized_on,
+         authorized_by, note, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        commitment.id,
+        commitment.marketId,
+        commitment.fundingSourceId,
+        commitment.studentId,
+        commitment.applicationId ?? null,
+        cents(commitment.amount),
+        commitment.hours ?? null,
+        commitment.ratePerHour === undefined ? null : cents(commitment.ratePerHour),
+        commitment.status,
+        commitment.authorizedOn,
+        commitment.authorizedByUserId,
+        commitment.note ?? null,
+        commitment.version,
+      ],
+    );
+  }
+
   // Last of the scoped tables: an outcome points at a market, a student, the
   // user who recorded it, and — when the learner reached it through a
   // placement — an application. All four are already in.
@@ -452,6 +565,9 @@ try {
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
+       (SELECT count(*) FROM consents)           AS consents,
+       (SELECT count(*) FROM funding_sources)    AS funding_sources,
+       (SELECT count(*) FROM funding_commitments) AS funding_commitments,
        (SELECT count(*) FROM audit_events)       AS audit_events`,
   );
   console.log("seeded:");

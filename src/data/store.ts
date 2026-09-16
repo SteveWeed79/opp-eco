@@ -14,15 +14,20 @@
 import type {
   Application,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
+  Membership,
   Organization,
   Outcome,
   Posting,
   Student,
   TimeEntry,
+  User,
 } from "@/domain/types";
 
 /** A notification queued inside the transaction and dispatched after commit. */
@@ -52,6 +57,13 @@ export interface NotificationIntent {
 export interface QueuedNotification {
   id: string | null;
   intent: NotificationIntent;
+  /**
+   * What was known about it when it was claimed.
+   *
+   * Carried through so a requeue can preserve the original queued time and
+   * increment the attempt count. Absent on a queue that has nothing to carry.
+   */
+  waiting?: PendingNotification;
 }
 
 /**
@@ -64,6 +76,26 @@ export interface QueuedNotification {
  * database deployment every message was written to the table and none was ever
  * sent — the dispatcher was draining a queue nothing filled.
  */
+/**
+ * A message that is still waiting, and what is known about why.
+ *
+ * `pending` used to return bare intents, which meant the only thing anybody
+ * could say about the queue was how deep it is. Depth answers the wrong
+ * question: a queue of thirty draining steadily is healthy and a queue of one
+ * that has been there since Tuesday is not, and they look identical from a
+ * count. The age is what an operator acts on, and the last error is what they
+ * act on it with.
+ */
+export interface PendingNotification {
+  intent: NotificationIntent;
+  /** When it was queued, not when it was last tried. */
+  queuedAt: string;
+  /** Failed delivery attempts so far. Zero for something never tried. */
+  attempts: number;
+  /** Why the last attempt failed, when one has. */
+  lastError: string | null;
+}
+
 export interface NotificationQueue {
   /**
    * Claim everything pending. Claimed messages leave the queue, exactly as a
@@ -72,8 +104,8 @@ export interface NotificationQueue {
   take(): Promise<QueuedNotification[]>;
   /** Return a message that failed for a reason a retry could fix. */
   requeue(item: QueuedNotification, error: string): Promise<void>;
-  /** What is still waiting, for the administrator's outbox. */
-  pending(marketId: string | null): Promise<NotificationIntent[]>;
+  /** What is still waiting, for the administrator's outbox and the health check. */
+  pending(marketId: string | null): Promise<PendingNotification[]>;
 }
 
 /**
@@ -136,6 +168,15 @@ export interface UnitOfWork {
    */
   createMentorshipOffer(offer: MentorshipOffer): void;
   saveMentorshipOffer(offer: MentorshipOffer): void;
+  /**
+   * Publish a slot the board is offering.
+   *
+   * Separate from `saveInterviewSlot` for the same reason every other create
+   * here is separate from its save: the preconditions are opposites. A save
+   * must find a row at a known version; a create must find none, and collapsing
+   * them would let a stale version check quietly become an insert.
+   */
+  createInterviewSlot(slot: InterviewSlot): void;
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number): void;
   /** Insert a week of logged hours. Same create/save split as applications. */
   createTimeEntry(entry: TimeEntry): void;
@@ -149,6 +190,80 @@ export interface UnitOfWork {
    * followed up again six months later gets a second row, because the history
    * is the evidence and an update would destroy it.
    */
+  /**
+   * Open a fund, and change one.
+   *
+   * `saveFundingSource` is versioned, unlike vetting or a posting: an
+   * allocation has more than one desk. A board officer adjusting an award and
+   * an administrator correcting a figure is exactly the concurrent write the
+   * version check exists for, and the loser overwriting a supplemental award
+   * with a stale number is a funder-facing error.
+   */
+  createFundingSource(source: FundingSource): void;
+  saveFundingSource(source: FundingSource, expectedVersion: number): void;
+  /**
+   * Draw against a fund, and give it back.
+   *
+   * Versioned for the same reason, and create-only-then-save rather than an
+   * upsert: releasing a commitment must find one, and committing must not
+   * silently overwrite an existing draw.
+   */
+  createFundingCommitment(commitment: FundingCommitment): void;
+  saveFundingCommitment(commitment: FundingCommitment, expectedVersion: number): void;
+  /**
+   * Record a consent, and change one.
+   *
+   * Versioned, and withdrawal is a save rather than a delete: a learner
+   * withdrawing is an event with a date that the institution which relied on
+   * the consent may have to account for, and a deleted row cannot say what was
+   * permitted when.
+   */
+  /**
+   * Remove a learner's direct identifiers under the retention schedule.
+   *
+   * Its own operation rather than a flag on `saveStudent`, and narrow on
+   * purpose: a learner's name and email live on `users` while the rest of the
+   * record lives on `students`, so a purge is two writes that must not come
+   * apart. Exposing a general `saveUser` to achieve it would hand every caller
+   * the ability to rename a person, which nothing in this product should be
+   * able to do.
+   */
+  purgeLearner(student: Student, at: string): void;
+  /**
+   * Change the work address an account is known by. Nothing else about them.
+   *
+   * Narrow for the same reason `purgeLearner` is: a general `saveUser` would
+   * hand every caller the ability to rename a person. This one can move an
+   * address and cannot touch a name, so what it is for is readable from what it
+   * can do.
+   *
+   * It is the account-recovery path for somebody whose mailbox is gone — a
+   * public employee whose agency address changed, with no password to fall back
+   * on and no identity provider to ask. That makes it the most dangerous write
+   * in this file: the address is the credential on the code path and the reset
+   * route on the password path, so moving it is the act of handing an account
+   * to whoever holds the new mailbox. `changeWorkAddress` is the only caller,
+   * and it is where the reason, the domain check and the audit entry live.
+   */
+  changeUserEmail(userId: string, email: string): void;
+  /**
+   * Give an organization another person, with their own account.
+   *
+   * One operation rather than two, for the reason `purgeLearner` is one: a user
+   * with no membership cannot sign in and cannot be scoped, and a membership
+   * with no user is a dangling reference. Half of this landing is a row nobody
+   * can use and nobody can see.
+   *
+   * **One account is one person.** That is the whole of how attribution works
+   * here — a board officer's eligibility determination is attributable because
+   * `actorUserId` names them, and it stops being attributable the moment an
+   * office shares a login. Nothing in the schema can enforce that; an address
+   * is an address. So it is a rule this operation exists to make easy to
+   * follow: adding a colleague is adding an account, never sharing one.
+   */
+  addOrganizationMember(user: User, membership: Membership): void;
+  createConsent(consent: ConsentRecord): void;
+  saveConsent(consent: ConsentRecord, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;

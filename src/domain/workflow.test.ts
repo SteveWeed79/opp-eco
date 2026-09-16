@@ -49,6 +49,7 @@ function application(over: Partial<Application> = {}): Application {
 
 function student(over: Partial<Student> = {}): Student {
   return {
+    purgedOn: null,
     id: "stu-1",
     marketId: "mkt-1",
     userId: "u-student",

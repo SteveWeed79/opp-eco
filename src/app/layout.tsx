@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { getActor } from "@/auth/session";
+import { demoSignOnEnabled } from "@/auth/config";
 import { siteTitle } from "@/brand";
 import { resolvePartnerTheme } from "@/theme/resolve";
 import { backend } from "@/data/backend";
@@ -33,6 +34,10 @@ export default async function RootLayout({
   // Whether this deployment can be changed at all. Said in the masthead rather
   // than discovered by clicking something and being refused.
   const { readOnly } = backend();
+  // Which door this deployment opens. Read here rather than in the shell,
+  // which is a client component and must not be trusted to work out whether
+  // the role picker is allowed.
+  const demoSignOn = demoSignOnEnabled();
 
   return (
     <html lang="en">
@@ -44,6 +49,7 @@ export default async function RootLayout({
           signedInRole={actor?.membership.role}
           theme={theme}
           readOnly={readOnly}
+          demoSignOn={demoSignOn}
         >
           {children}
         </Shell>

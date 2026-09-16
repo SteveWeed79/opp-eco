@@ -29,11 +29,14 @@ import { clearanceExpiry } from "@/domain/eligibility";
 import type {
   Application,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
   InterviewSlot,
   MarketStage,
   MatchFactor,
   MentorshipOffer,
+  FundingCommitment,
+  FundingSource,
   MentorshipPairing,
   Organization,
   Outcome,
@@ -58,6 +61,11 @@ export type Row = Record<string, unknown>;
  */
 export function dollars(value: unknown): number {
   return Math.round(number(value) / 100);
+}
+
+/** A nullable money column as dollars, keeping "not set" distinct from zero. */
+export function optionalDollars(value: unknown): number | undefined {
+  return value === null || value === undefined ? undefined : dollars(value);
 }
 
 /** Dollars to cents, for the write side. */
@@ -166,8 +174,6 @@ export function toMarket(row: Row): import("@/domain/types").Market {
     boardId: row.board_id === null || row.board_id === undefined ? null : text(row.board_id),
     collegeIds: list(row.college_ids),
     launchedOn: nullableTimestamp(row.launched_on),
-    subsidyBudget: dollars(row.subsidy_budget_cents),
-    subsidyRatePerHour: dollars(row.subsidy_rate_cents),
     programYear: text(row.program_year),
   };
 }
@@ -187,6 +193,8 @@ export function toOrganization(row: Row): Organization {
     brandColor: optionalText(row.brand_color),
     accentColor: optionalText(row.accent_color),
     logoUrl: optionalText(row.logo_url),
+    identityMode: text(row.identity_mode) as Organization["identityMode"],
+    emailDomains: list(row.email_domains),
   };
 }
 
@@ -222,6 +230,7 @@ export function toStudent(row: Row): Student {
       nullableTimestamp(row.eligibility_determined_on),
     ),
     verifiedOn: nullableTimestamp(row.verified_on),
+    purgedOn: nullableTimestamp(row.purged_on),
   };
 }
 
@@ -285,6 +294,63 @@ export function toMentorshipPairing(row: Row): MentorshipPairing {
     status: text(row.status) as MentorshipPairing["status"],
     outcomeNote: optionalText(row.outcome_note),
     outcomeOn: optionalTimestamp(row.outcome_on),
+  };
+}
+
+export function toConsentRecord(row: Row): ConsentRecord {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    studentId: text(row.student_id),
+    sourceOrgId: text(row.source_org_id),
+    scope: text(row.scope) as ConsentRecord["scope"],
+    grantedBy: text(row.granted_by) as ConsentRecord["grantedBy"],
+    grantedOn: timestamp(row.granted_on),
+    // Nullable rather than optional: open-ended is what most institutional
+    // consent forms are, and it must not read as a field somebody forgot.
+    expiresOn: nullableTimestamp(row.expires_on),
+    status: text(row.status) as ConsentRecord["status"],
+    recordedByUserId: text(row.recorded_by),
+    note: optionalText(row.note),
+    version: number(row.version),
+  };
+}
+
+export function toFundingSource(row: Row): FundingSource {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    sponsorOrgId: text(row.sponsor_org_id),
+    kind: text(row.kind) as FundingSource["kind"],
+    purpose: text(row.purpose) as FundingSource["purpose"],
+    programYear: text(row.program_year),
+    name: text(row.name),
+    allocated: dollars(row.allocated_cents),
+    // `optionalDollars`, not `dollars`: a fund that does not pay by the hour
+    // has no rate, and mapping that to 0 would make "unpaid hourly" and "free"
+    // the same value on a screen that multiplies by it.
+    ratePerHour: optionalDollars(row.rate_cents),
+    status: text(row.status) as FundingSource["status"],
+    openedOn: timestamp(row.opened_on),
+    version: number(row.version),
+  };
+}
+
+export function toFundingCommitment(row: Row): FundingCommitment {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    fundingSourceId: text(row.funding_source_id),
+    studentId: text(row.student_id),
+    applicationId: nullableText(row.application_id),
+    amount: dollars(row.amount_cents),
+    hours: row.hours === null || row.hours === undefined ? undefined : number(row.hours),
+    ratePerHour: optionalDollars(row.rate_cents),
+    status: text(row.status) as FundingCommitment["status"],
+    authorizedOn: timestamp(row.authorized_on),
+    authorizedByUserId: text(row.authorized_by),
+    note: optionalText(row.note),
+    version: number(row.version),
   };
 }
 

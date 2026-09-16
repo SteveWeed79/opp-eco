@@ -111,6 +111,96 @@ export const introductionOutcomeInput = z.object({
 });
 
 /**
+ * Recording a consent.
+ *
+ * `sourceOrgId` is accepted from the caller and then checked against them,
+ * rather than being taken from the acting membership: an administrator can
+ * record on a college's behalf, and the record has to name the college either
+ * way. `grantedBy` is likewise accepted rather than derived — whose signature
+ * was required is a question for a registrar, not a schema.
+ */
+export const recordConsentInput = z.object({
+  studentId: id,
+  sourceOrgId: id,
+  scope: z.enum(["education_record", "workforce_data", "program_participation"]),
+  grantedBy: z.enum(["learner", "parent_guardian"]),
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+export const withdrawConsentInput = z.object({ id, reason });
+
+/** Purging a learner's identity. Irreversible, so the reason is required. */
+export const purgeLearnerInput = z.object({ id, reason });
+
+/**
+ * Who gets an account, and under what address.
+ *
+ * The address is bounded and lightly shaped here — one `@`, something either
+ * side, no whitespace — and the rule that actually matters is checked in the
+ * service, where the organization's declared domains are known. This is the
+ * trust boundary catching a 40-kilobyte string, not the policy.
+ */
+const workAddress = z
+  .string()
+  .trim()
+  .min(3, "Enter a work email address")
+  .max(254, "That address is too long")
+  .regex(/^[^\s@]+@[^\s@]+$/, "That is not an email address");
+
+export const addMemberInput = z.object({
+  organizationId: id,
+  name: z.string().trim().min(1, "Enter the person's name").max(120, "That name is too long"),
+  email: workAddress,
+});
+
+/**
+ * Moving an address carries a reason for the same reason an override does: it
+ * is the one write that can hand an account to somebody else, and an audit
+ * entry that cannot say why is the entry nobody can act on a year later.
+ */
+export const changeAddressInput = z.object({
+  currentEmail: workAddress,
+  newEmail: workAddress,
+  reason,
+});
+
+/**
+ * Changing what a fund holds.
+ *
+ * The reason is required rather than optional, unlike most reasons here. An
+ * allocation that moved with nothing recorded about why is the one figure a
+ * funder will certainly ask about, and the moment to capture it is the moment
+ * it changes.
+ *
+ * Both figures are bounded: a whole positive number with a ceiling, so a
+ * fat-fingered extra zero is refused before it becomes a budget somebody plans
+ * against.
+ */
+export const adjustFundingInput = z.object({
+  sourceId: id,
+  allocated: z.number().int().min(0).max(100_000_000).optional(),
+  ratePerHour: z.number().int().positive().max(500).optional(),
+  reason,
+});
+
+/** Drawing on a fund. The rate and the market are derived server-side. */
+export const commitFundsInput = z.object({
+  sourceId: id,
+  studentId: id,
+  // Nullable rather than optional, matching the domain: a grant reaching a
+  // learner with no placement is a real case, and an absent key and an explicit
+  // null must not mean different things at the trust boundary.
+  applicationId: id.nullable(),
+  amount: z.number().int().positive().max(1_000_000),
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+export const releaseCommitmentInput = z.object({
+  id,
+  reason,
+});
+
+/**
  * A follow-up observation.
  *
  * `applicationId` is nullable rather than optional, matching the domain: a

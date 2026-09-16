@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Landmark,
   Lock,
+  LogIn,
   LogOut,
   School,
   SlidersHorizontal,
@@ -18,7 +19,7 @@ import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
 import { signInAs, signOut } from "@/auth/actions";
 import { brand } from "@/brand";
 import { isPartnerSurface } from "@/theme/theme";
-import { DEMO_ROOT, PORTAL_PATH, SITE_NAV, isDemoSurface } from "@/routes";
+import { DEMO_ROOT, PORTAL_PATH, SIGN_IN_PATH, SITE_NAV, isDemoSurface } from "@/routes";
 import type { ResolvedTheme } from "@/theme/resolve";
 
 /**
@@ -64,15 +65,25 @@ export function Shell({
   signedInRole,
   theme,
   readOnly = false,
+  demoSignOn = false,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
-  /** Absent when signed out, which is when every portal is browsable. */
+  /** Absent when signed out. */
   signedInRole?: ActorRole;
   /** Resolved server-side; applied by the demo chrome, which knows the route. */
   theme: ResolvedTheme;
   /** True when the deployment is backed by a database nothing may write to. */
   readOnly?: boolean;
+  /**
+   * Whether the role picker is this deployment's way in.
+   *
+   * Decided on the server, from `AUTH_MODE`, and passed down because this is a
+   * client component and the answer must not be guessable from the browser. It
+   * is presentation only — `signInAs` refuses on its own under real sign-on, so
+   * a forged `true` here buys a dialog that does nothing.
+   */
+  demoSignOn?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -94,6 +105,7 @@ export function Shell({
       signedInRole={signedInRole}
       theme={theme}
       readOnly={readOnly}
+      demoSignOn={demoSignOn}
     >
       {children}
     </DemoChrome>
@@ -106,15 +118,18 @@ function DemoChrome({
   signedInRole,
   theme,
   readOnly = false,
+  demoSignOn = false,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
-  /** Absent when signed out, which is when every portal is browsable. */
+  /** Absent when signed out. */
   signedInRole?: ActorRole;
   /** Resolved server-side; applied here, because only here knows the route. */
   theme: ResolvedTheme;
   /** True when the deployment is backed by a database nothing may write to. */
   readOnly?: boolean;
+  /** True when the role picker is this deployment's way in. */
+  demoSignOn?: boolean;
 }) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
@@ -124,17 +139,27 @@ function DemoChrome({
   /**
    * Which portals this session can open.
    *
-   * Signed out, all of them — the switcher is how a demonstration gets walked
-   * through, and every screen has to be reachable from a bare link.
-   *
    * Signed in, only your own. An administrator signing in used to be handed
    * any portal they clicked, which crashed all four of the others: every
    * portal reads an organization and a market off the membership, and an
    * administrator holds neither. Beyond the crash, an administrator inhabiting
    * a student's portal is not oversight — the admin console is the read path
    * built for that, and it is the one that redacts.
+   *
+   * Signed out, it depends on the deployment. Under the demo, all of them —
+   * the switcher is how a demonstration gets walked through, and every screen
+   * has to be reachable from a bare link. Under real sign-on, none: the server
+   * sends every one of them to the sign-in page, and a link that is certain to
+   * bounce is worse than no link.
    */
-  const reachable = (portal: ActorRole) => !signedInRole || signedInRole === portal;
+  const reachable = (portal: ActorRole) =>
+    signedInRole ? signedInRole === portal : demoSignOn;
+
+  /** Why a portal is closed, which differs by which of the two cases it is. */
+  const closedBecause = (label: string) =>
+    signedInRole
+      ? `Sign out to view the ${label} portal. You are signed in as ${signedInAs}.`
+      : `Sign in to view the ${label} portal.`;
 
   /**
    * A partner's colours apply to the student and college portals only.
@@ -217,7 +242,7 @@ function DemoChrome({
                       key={portal.role}
                       type="button"
                       disabled
-                      title={`Sign out to view the ${portal.label} portal. You are signed in as ${signedInAs}.`}
+                      title={closedBecause(portal.label)}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold text-ink-400 cursor-not-allowed"
                     >
                       <Icon className="w-3.5 h-3.5" aria-hidden="true" />
@@ -277,7 +302,7 @@ function DemoChrome({
                   </button>
                 </form>
               </div>
-            ) : (
+            ) : demoSignOn ? (
               <button
                 type="button"
                 onClick={() => setSignOnOpen(true)}
@@ -286,6 +311,18 @@ function DemoChrome({
                 <Lock className="w-4 h-4 text-brand-400" aria-hidden="true" />
                 Sign on
               </button>
+            ) : (
+              /* A link, not the dialog. Under real sign-on the picker is not
+                 hidden because it is untidy — it is an authentication bypass,
+                 and the control that replaces it has to lead somewhere that
+                 actually asks for a credential. */
+              <Link
+                href={SIGN_IN_PATH}
+                className="bg-gradient-to-b from-ink-700 to-ink-950 text-white px-4 py-2.5 rounded-card font-semibold text-sm shadow-[0_1px_0_rgb(255_255_255/0.14)_inset,0_2px_6px_-1px_rgb(2_6_23/0.4)] hover:from-brand-600 hover:to-brand-700 active:translate-y-px transition-all flex items-center gap-2 shrink-0"
+              >
+                <LogIn className="w-4 h-4 text-brand-400" aria-hidden="true" />
+                Sign in
+              </Link>
             )}
           </div>
 
@@ -312,7 +349,7 @@ function DemoChrome({
                       key={portal.role}
                       type="button"
                       disabled
-                      title={`Sign out to view the ${portal.label} portal.`}
+                      title={closedBecause(portal.label)}
                       className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap text-ink-400 cursor-not-allowed"
                     >
                       {portal.label}
@@ -344,7 +381,9 @@ function DemoChrome({
 
         <DemoFooter />
 
-        {signOnOpen && <SignOnDialog onClose={() => setSignOnOpen(false)} />}
+        {signOnOpen && demoSignOn && (
+          <SignOnDialog onClose={() => setSignOnOpen(false)} />
+        )}
       </div>
     </ToastProvider>
   );

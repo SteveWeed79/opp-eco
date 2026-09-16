@@ -28,6 +28,17 @@ const files = readdirSync(DIR)
   .map((name) => ({ name, body: readFileSync(join(DIR, name), "utf8") }));
 
 describe("the migrations on disk", () => {
+
+  it("agrees with the migration the health check expects to find applied", async () => {
+    // `health.ts` cannot list this directory at runtime — on a serverless
+    // deployment the repository's files are not there — so it carries the name
+    // as a constant. This is what stops that constant drifting: add a migration
+    // without updating it and the health check reports a schema that is up to
+    // date while the code reads columns nobody created.
+    const { EXPECTED_MIGRATION } = await import("@/services/health");
+    const files = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
+    expect(EXPECTED_MIGRATION).toBe(files.at(-1));
+  });
   it("finds some", () => {
     expect(files.length).toBeGreaterThan(0);
   });

@@ -196,7 +196,7 @@ describe("submitting an application", () => {
 
   it("tells the employer, in the same transaction", async () => {
     track(await submitApplication(student(), openPostingId()), "applications");
-    expect(pendingNotifications.some((n) => n.kind === "application.submitted")).toBe(true);
+    expect(pendingNotifications.some((n) => n.intent.kind === "application.submitted")).toBe(true);
   });
 });
 
@@ -343,7 +343,7 @@ describe("offering to mentor", () => {
       "mentorshipOffers",
     );
 
-    expect(pendingNotifications.some((n) => n.kind === "mentorship.offered")).toBe(true);
+    expect(pendingNotifications.some((n) => n.intent.kind === "mentorship.offered")).toBe(true);
   });
 
   it("audits the offer coming into existence", async () => {

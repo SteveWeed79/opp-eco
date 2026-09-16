@@ -21,7 +21,11 @@
 
 import { dispatch, render, type NotificationChannel } from "./notifications";
 import { notificationQueue } from "@/data/backend";
-import type { NotificationIntent, QueuedNotification } from "@/data/store";
+import type {
+  NotificationIntent,
+  PendingNotification,
+  QueuedNotification,
+} from "@/data/store";
 import { logger } from "./logging";
 import { emailConfig } from "./email/config";
 import { resendChannel } from "./email/resend";
@@ -218,7 +222,7 @@ async function recordFailure(
 /** Everything an administrator can see, newest first. Scoped by the caller. */
 export async function outboxFor(marketId: string | null): Promise<{
   delivered: DeliveredNotification[];
-  pending: NotificationIntent[];
+  pending: PendingNotification[];
 }> {
   return {
     delivered: marketId

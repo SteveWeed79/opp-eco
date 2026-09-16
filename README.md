@@ -48,6 +48,23 @@ One caveat worth knowing before you run them: the demo store lives in the
 server process, so `e2e/booking.spec.ts` permanently books the seed's only
 bookable application. Restart the server to reseed.
 
+### Trying real sign-on
+
+`npm run dev` gives you the role picker, which makes you anybody. To walk the
+real thing instead, with codes written to the terminal rather than emailed:
+
+```bash
+AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev
+```
+
+Then type `evance@verdigris.example.edu`. The address resolves to a password,
+and on a fresh start there is no password yet — which is the normal state for
+every account here, since nothing has a self-serve signup. Click **Forgot your
+password?**, paste the code the server logs, and choose one.
+`mdelgado@sekwp.example.org` is the workforce board: a public employee, so it is
+sent a one-time code instead and is never shown a password field. See
+[Signing in](#signing-in).
+
 ## Start here
 
 - [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
@@ -71,7 +88,9 @@ bookable application. Restart the server to reseed.
 | Workforce clearance | Per applicant, per job | Not portable — every standard application gets its own board interview |
 | Demo data | Entirely fictional organizations | Real Kansas cities and counties; no institution, board, or business is real |
 | Seeded markets | The four-community proving ground | Pittsburg, Emporia, and Hays — three university towns — plus Beloit, deliberately a tenth their size. Three university markets can prove the model works next to a university; they cannot show whether it travels |
-| Payments | Out of scope | The platform tracks subsidy obligations but moves no money |
+| Funding | Many sources, one placement | A board's wage subsidy, a foundation's grant against the cost of internship credit, a college's fee waiver, an employer's contribution. A market carries no money of its own — every figure is the balance of a fund |
+| Allocations | Expected to change | A supplemental award or a rescission is ordinary program administration, so adjusting one is an audited write with a reason, not a fixture edit |
+| Payments | Out of scope | The platform tracks funding obligations but moves no money |
 | Current phase | Pitch / stakeholder demo | Polished clickable flow over a real domain layer |
 
 ## Architecture
@@ -81,19 +100,29 @@ The five portals are five views onto **one workflow state machine**, not five in
 ```
 src/domain/      Pure TypeScript. Entities, guarded transitions, workflow
                  profiles per track, credit accumulation, match scoring,
-                 PII disclosure, and the follow-up outcome — the one record
-                 here that is an observation rather than a state machine.
-                 No UI, no database.
-src/auth/        Session resolution behind a provider interface. Replacing
-                 simulated sign-on touches this and nothing else.
+                 PII disclosure, funding sources and the ledger against them,
+                 and the follow-up outcome — the one record here that is an
+                 observation rather than a state machine. No UI, no database.
+src/auth/        Session resolution behind a provider interface, and the two
+                 providers behind it: the demo's role cookie and real sign-on
+                 by password or one-time code. The pre-auth store lives here
+                 rather than in the scoped repositories, because resolving a
+                 session is what produces the actor everything else is
+                 scoped by.
 src/data/        Repository contracts, two implementations behind them — the
                  in-memory fixtures and Postgres — and the Store/UnitOfWork
                  for writes. One environment variable picks which.
 src/services/    Write paths (executeTransition for existing records,
                  creation for new ones), input validation, notification
-                 dispatch and the outbox that records it.
+                 dispatch and the outbox that records it, and the upload
+                 pipeline — validation, quarantine, scanning, signed
+                 retrieval — whose store follows DATABASE_URL like the rest.
 src/lib/         Derived views (what's stuck, market health, funnel) so no
                  portal computes its own answer.
+src/services/health.ts
+                 Whether this deployment is working, and which part is not.
+                 Read by /api/health and by the admin console, and forbidden
+                 from naming anybody.
 src/components/  Component library, rendered at /demo/design.
 src/routes.ts    Every path, in one place. The `/demo` prefix, the portal
                  paths, and which surface a pathname belongs to.
@@ -105,7 +134,7 @@ Properties worth knowing:
 
 - **Two data layers, one contract.** With `DATABASE_URL` unset everything runs off the seeded fixtures — that is the demo, the unit suite, and a zero-configuration checkout. Set it and the same screens read Postgres, through the same repository interfaces, with writes refused unless `DATABASE_READ_ONLY=false`. A CI job applies the schema, seeds it, and asserts the two layers return the same records for every accessor and every role; see [Running on Postgres](#running-on-postgres).
 - **One write path.** `executeTransition` is the only way state changes: guard, persist, audit, and notify in a single transaction, with optimistic concurrency.
-- **Sign-on is simulated, sessions are not.** An httpOnly cookie resolves to a membership, which carries the role and market every read is scoped by. Only the credential check is fake.
+- **Two doors, one session shape.** `AUTH_MODE` unset is the demonstration's role picker; `AUTH_MODE=code` is real sign-on, where the address decides what you are asked for: a password for a learner, a college or an employer, a password and an authenticator for an administrator, and a one-time code to an agency mailbox for a public employee — who this platform holds no password for, deliberately. Both doors resolve to a membership carrying the role and market every read is scoped by, because that part was never the simulated bit; see [Signing in](#signing-in).
 - **Portals render buttons from `availableTransitions`**, so permission logic cannot drift across five surfaces. Adding a transition to the table makes its button appear everywhere it applies without editing a page.
 - **Authorization is re-checked on the server.** Server Actions accept direct POSTs, so a button being absent from a page proves nothing.
 - **One action per portal, each with its role hardcoded.** Not one generic action taking a portal name — a caller who supplies their own role supplies their own authorization. The client names a target status and never a patch; anything a transition writes is derived server-side.
@@ -178,6 +207,109 @@ So an introduction is a record. A live one spends one of the mentor's declared p
 Who may do what follows from that. The employer normally closes an introduction, being the only party who knows whether the student turned up; the college and the administrator can too, because one nobody ever closes holds a mentor's place open forever. Only verified students can be introduced. The board sees none of it — it reimburses placements, and a mentorship carries no wage, no credit and no public money, so who was introduced to whom is not its business.
 
 `paused` exists so that a busy quarter is not a resignation. An offer whose only exit was `withdrawn` would take an employer off the mentor list permanently the first time they were short-handed, and a paused offer disappears from the student's list in the same request it is paused — an employer still listed after saying they could not take anyone is fielding introductions they just declined.
+
+## Funding
+
+**A market carries no money of its own.** It used to: `subsidyBudget` and
+`subsidyRatePerHour` sat on the market record, and that was the entire funding
+model — one workforce board, one allocation, one hourly rate. That is the
+mechanic the Southeast Kansas pilot runs on, and it is not the thing the venture
+sells. What it sells is **funding coordination**, and the second, third and
+fourth source were not expressible.
+
+The concrete cost of that: the 177-student survey's top barrier is the tuition a
+student pays to *receive credit* for work the board is already subsidising. The
+nonprofit arm exists partly to pay it. There was nowhere to record either the
+cost or the grant that covered it.
+
+So a figure now lives on a `FundingSource` and nowhere else:
+
+| Sponsor | Purpose | Seeded example |
+|---|---|---|
+| Workforce board | Wage subsidy | $240,000 at $20/hour |
+| Foundation | Cost of internship credit | $18,000 |
+| College | Cost of internship credit | $9,000 fee waiver |
+| Foundation | Transportation | $6,000 |
+
+Kind and purpose are separate axes on purpose. A foundation can pay a wage or a
+bus fare and a college can waive a fee or fund a stipend; collapsing them would
+mean a new kind of sponsor every time a new cost appeared.
+
+### The numbers are expected to move
+
+This is the part that shaped the design. An allocation is not a constant that
+happens to be stored — a supplemental award arrives, a rescission takes some
+back, a board revises its rate between cohorts. While the figure was a fixture
+on the market it could only change by a redeploy, which meant in practice it
+never changed and every screen quoted a number nobody had revisited.
+
+Adjusting one is now a write with a **required reason**, landing in the audit log
+beside the old and new figures. "The number in the database is different now" is
+not an explanation, and an allocation that moved is the one figure a funder will
+certainly ask about.
+
+**Reducing an allocation below what is already committed is allowed.** That is
+the decision worth arguing. A rescission is a real thing that happens to public
+money, and a board that has committed $180,000 and just had its award cut to
+$150,000 is overcommitted in fact — refusing the edit would leave the software
+showing a figure the board knows is wrong. It is the same argument as approved
+hours exceeding an authorized cap: naming it is the only honest option, and the
+console leads with it.
+
+A *new commitment* that would not fit is refused, and the asymmetry is
+deliberate. An allocation moving is news arriving from outside and the
+platform's job is to show it; a commitment is the platform's own act, and
+knowingly promising money a fund does not hold is how a student is told they
+have a grant that will not arrive.
+
+### The ledger
+
+A `FundingCommitment` is one draw against one fund, and **every balance
+anywhere is derived from sources and commitments**. Nothing caches a total: a
+stored total is a number that can disagree with the ledger, and a funder asking
+where their money went is the worst possible audience for two answers.
+
+Commitments carry their own rate, copied at authorization rather than read
+through the fund. A board moving next year's cohort from $20 to $18 must not
+retroactively rewrite what it already promised at $20.
+
+Three statuses, and the distinction the old model could not make:
+
+- **authorized** — promised, not yet paid.
+- **disbursed** — the placement ran and finished, so the money was *spent*.
+- **released** — it ended before anyone started, so the money returns.
+
+Settlement happens inside the same transaction as the state change that caused
+it (`settlementFor`), because five portals can move an application into a
+terminal status and a rule living in one of them is a rule the other four break.
+A released row is kept rather than deleted — "what did we commit and not spend"
+is a question a board asks at the end of a program year, and a missing row
+cannot answer it.
+
+Before this, `marketRemainingBudget` simply stopped counting any terminal
+application, which silently treated a completed, fully reimbursed placement and
+an application withdrawn on day one as the same event. For a board reconciling a
+program year they are opposites.
+
+### Who may move money, and who may see it
+
+Spending is decided by **ownership, not role**: the organization that sponsors a
+fund, plus the administrator. "The board may commit" stops being true the moment
+a market has two boards, and "the college may commit" would let one college draw
+on another institution's scholarship.
+
+Reading is deliberately wide. Every actor in a market sees every fund in it — a
+student working out whether they can afford the credit and an employer working
+out whether hosting is viable are asking the same question, and a funding model
+visible only to its sponsor would reproduce the gap this venture exists to close.
+What is narrowed is the *commitments*: an employer sees draws against placements
+it hosts, a student sees their own.
+
+The one new organization kind, `nonprofit`, exists because a fund needs a
+sponsor. The wider network the vision names — K-12 districts, training
+providers, economic development offices — is still absent: each needs its own
+answer to what vetting means for it, and adding kinds nothing uses would be a
+migration that buys a longer enum.
 
 ## Hours
 
@@ -279,6 +411,478 @@ presented as outstanding, with no way to discover otherwise. `canReadOutcomes`
 exists so a derived view can tell "no outcome exists" from "you may not see one",
 and `outcomeScope` is tested against it so the two cannot drift.
 
+## What leaves the building
+
+Every other privacy control here decides what a *signed-in* caller may read. A
+notification is different in kind: it leaves the system entirely, over a channel
+nobody controls, into an inbox that will be forwarded, searched, backed up, and
+eventually breached by somebody else.
+
+DOL's TEGL 39-11 — which reaches anyone handling participant PII in a
+WIOA-funded program, and the $20/hour reimbursement almost certainly is WIOA
+Title I money — says never to email unencrypted sensitive PII to anyone. So:
+
+**No message names the learner it is about.** Subject lines carry a record
+reference (`APP-12`) instead. That reverses a rule this codebase used to hold
+deliberately — *"a subject line without a name is unsortable"* — and the
+replacement sorts just as well while identifying nobody. A subject line is the
+least protected part of an email: logged by every relay, shown on a lock screen,
+quoted whole in every reply.
+
+The templates were rewritten, and a denylist strips participant keys at
+`enqueueNotification` as a backstop — at the `UnitOfWork` rather than the
+renderer, because the Postgres queue persists the payload to a table and a guard
+at render time would clean the email while leaving the name in a database.
+`notification-privacy.test.ts` renders every template against every seeded
+learner and fails on any leak.
+
+**Every employer-facing message carries the FERPA redisclosure notice.** An
+employer forwarding a candidate to a colleague at another company has created a
+problem that traces back to this product, so the product carries the warning.
+
+Names of people acting professionally stay — a board officer on an interview
+slot, a mentor, an employer contact. Those are role-functional identities, and a
+student booking a call should know who they are meeting.
+
+## Consent
+
+Once a college hands this platform a roster, a verification or a credit award,
+those are education records. **Consent is a property of the record's source
+institution** — not of the learner, and not of the platform. A college's consent
+does not authorise a high school's records about the same person, and a
+dual-credit placement can generate both.
+
+So a consent names the institution it covers, and it has a visible consequence
+rather than being paperwork: an employer's step up from an abbreviated name to
+contact details requires **both** the placement stage and education-record
+consent on file. Withdraw it and the employer's view narrows on the next read.
+
+**Who signed is recorded, not computed.** FERPA rights transfer to the learner
+at 18 *or* on postsecondary enrolment at any age — so a dual-enrolled
+sixteen-year-old consents for themselves on the college's records while their
+parent still holds the school's. Deriving that needs the school a learner
+*attends*, which the model does not have, and a registrar's settled local answer,
+which no column can supply.
+
+The seed ships one verified learner with no consent on file, so the gate is
+visible on the data the demo runs on.
+
+## Retention
+
+Kansas requires deleting a learner's personal information once it is no longer
+required for the purpose collected, and with dual-credit high schoolers in scope
+that binds directly. **A record with no deletion date is a record kept forever**,
+so the schedule is decided before there is real data:
+
+| Record | Kept | From |
+|---|---|---|
+| Uploaded files | 1 year | the placement ending |
+| Learner identity | 3 years | last participation |
+| Applications and placements | 5 years | reaching a terminal status |
+| Audit log | 7 years | the entry being written |
+
+Two decisions worth arguing with:
+
+**Purging anonymises rather than deletes.** The rows stay; the identifiers go. A
+programme has accountability obligations that outlive any individual's privacy
+interest, and deleting a learner would silently restate every historical figure a
+board was already reported. What survives is what aggregates are *by* — which is
+also why this is anonymisation for the purpose of not holding contact details and
+not a claim of k-anonymity: in a market the size of Beloit, one programme in one
+year may be one person.
+
+**The clock runs from last participation, not from record creation**, and an
+active learner is never purged however old their record is — the rule is "no
+longer required for the purpose collected", and a live application is that
+purpose.
+
+There is no unattended sweep, deliberately. Anonymisation is irreversible and the
+first automatic run would hit every record at once; a person pressing a button
+against a computed list is how you find out the schedule is wrong while that is
+still cheap.
+
+## Signing in
+
+`AUTH_MODE` picks one of two doors, and the default is the demonstration's.
+
+| `AUTH_MODE` | The way in | Sessions |
+|---|---|---|
+| unset | A dropdown that makes you anybody | An httpOnly cookie naming a role |
+| `code` | A password, or a one-time code — your address decides which | A random token; the database holds its SHA-256 |
+
+Both resolve to the same thing — a membership carrying the role and market that
+every repository read is scoped by — because that part was never the simulated
+bit. `src/auth/session.ts` promised that replacing simulated sign-on would touch
+one file and nothing else; real sign-on is that promise being cashed in.
+
+**The address decides the door, and it is asked for first.** One form, several
+doors — nobody is shown a field they cannot use, and there is no separate
+"agency login" URL, because a dedicated address for public employees is a good
+phishing target and trains them to expect one.
+
+| Who | What they present | Second factor |
+|---|---|---|
+| A learner, a college, an employer | A password | — |
+| An administrator | A password | An authenticator, every time |
+| A board officer (a public employee) | A one-time code to their agency address | None, deliberately |
+
+**Which door an address uses is answered from its *domain*, not from whether the
+account exists.** An organization that has declared its email domains answers for
+every address on them, real or not. So probing a workforce board's domain reveals
+that the board signs in with codes — an institutional arrangement, not a secret —
+and reveals nothing about which of its officers have accounts. Anything else
+answers `password`, which is the majority case and the one that fails generically
+a step later.
+
+**Passwords are scrypt, not a hash function.** `N=65536, r=8, p=1`, a 16-byte
+random salt and a 32-byte key, stored as `scrypt$N$r$p$salt$key` so the
+parameters travel with the hash and raising the cost is a rehash on the next
+successful sign-in rather than a migration that locks everybody out at once.
+scrypt rather than Argon2id for one deployment reason, stated plainly: it is in
+`node:crypto`, so there is no native module to fail to build on a platform
+nobody tested. Policy is NIST 800-63B's: at least twelve characters, no
+composition rules, and a refusal for the address, the site name and the obvious
+lists — length is what makes a password hard to guess, and a rule demanding a
+symbol mostly produces `Password1!`.
+
+**Every password starts with a code in a mailbox.** Nothing here has a
+self-serve signup: an administrator or an import creates the account, and the
+person chooses their own password after a code reaches the address their
+organization knows them by. "Forgot your password?" *is* that path — the same
+step whether you are replacing one or setting your first — which is also how the
+first administrator gets into a fresh deployment, and why nobody is ever told a
+password over the phone. Reset codes carry their own purpose, so asking for one
+does not invalidate a sign-in code somebody is already holding.
+
+**One-time codes are eight characters** from an alphabet with no `0`, `O`, `1`,
+`I` or `L` in it, good for ten minutes, usable once, dead after five wrong
+guesses. The database stores the SHA-256, never the code, so a dump of that table
+yields nothing presentable. Codes are emailed directly and are deliberately
+**never** written to the notification outbox — the outbox persists every payload
+and renders it on a screen an administrator can open, which would make it a
+published list of bearer tokens for every account on the platform.
+
+**No sign-on failure says whether the account exists.** Sign-on is the one page
+anyone can reach, so an honest "no such account" is a free directory of who takes
+part in this programme — including which public employees work on it. A wrong
+password and an address nobody holds fail in the same words, and in the same
+time: the unknown address is still put through a full scrypt hash, because
+returning instantly would make the response time the directory that the wording
+is not. A reset request always reports success.
+
+**Government employees have no password here, and no authenticator from us
+either.** A workforce board's officers are public employees whose agency owns
+their identity, so the platform holds nothing for them but an address on a domain
+the agency declared — the code can only be sent there, never to a personal
+address an officer controls. Their second factor is the agency's mailbox, which
+their own IT department already protects; issuing them a TOTP seed would be a
+second credential this platform holds for a government employee, which is the
+thing being avoided. `federated` remains a mode for an organization that runs its
+own identity provider, and an address on one is told plainly to go there — an
+institution's identity arrangement is not a secret about a person. No SSO adapter
+ships yet.
+
+**One account is one person, and adding a colleague is adding an account.** A
+workforce board with four officers is four accounts on four work addresses. That
+is not a preference — it is the whole of how attribution works here. An
+eligibility determination is attributable because the audit entry names an
+individual, and it stops being attributable the moment an office shares a login,
+*silently*: the entry still looks well-formed, it just means "somebody there".
+Nothing could add a person to an organization until recently, which meant a board
+that grew was a board that shared a mailbox. `addOrganizationMember` is the path,
+the role comes from the organization rather than from a form field, and the
+address has to be on a domain the organization declared.
+
+**A lost mailbox has a way back.** An agency address changes and, on the code
+path, there is no password to fall back on — so without a recovery path the
+person is locked out for good. An administrator can move a work address, and
+because that is also the act of handing an account to whoever holds the new
+mailbox it carries the controls to match: a required reason, the declared-domain
+rule, an audit entry recording both addresses, every session and outstanding code
+revoked, and a warning to the address being left behind. The account is named by
+its current address rather than picked from a list, because a list of everybody
+is the directory this page spends its effort not being.
+
+**An administrator proves a second factor every time**, because that account
+reads every market, every learner and every figure, and authorises money. The
+account whose compromise is worst should not be the one standing behind the
+weakest thing.
+
+**Sessions expire on two clocks, and the tighter one belongs to the wider
+access.** An absolute lifetime and an idle timeout, both by role: eight hours and
+thirty minutes for an administrator or a board officer, twelve and two for a
+college or an employer, twenty-four and four for a student. Signing out revokes
+the session server-side rather than only dropping the cookie, because a cookie
+deleted on one machine does nothing about the session it named.
+
+**Two configurations are refused at boot rather than at a request:** the role
+picker against a writable database — anyone becoming anyone and changing real
+records — and `AUTH_MODE=code` with no way to deliver a code, which is an account
+nobody can reach. `AUTH_ECHO_CODES=true` writes codes to the server log for
+development and is refused in production.
+
+### The gate is in the layout, not only the page
+
+Every portal page calls `actorForPortal`, and for a while every one of them
+still answered an anonymous request with `200` and its own chrome.
+
+Each portal has a `loading.tsx`. That wraps the page in a Suspense boundary, so
+the response commits and the skeleton starts streaming *before* the page
+component runs — and a `redirect()` from inside that boundary is too late to be
+a redirect. Next appends a client-side navigation instead. In a browser it looks
+right, which is why it survived: you land on the sign-in page. Anything reading
+the status code — a scanner, a crawler, a link unfurler, `curl` — got a
+successful response to a request that should have been refused.
+
+A segment's layout renders above its own loading boundary, so
+`src/auth/portal-layout.tsx` is a two-line `layout.tsx` per portal that calls the
+same gate before a byte is committed. The pages keep their call: they need the
+actor, and a check that disappears when one file is deleted is not a check.
+
+`src/auth/portal-gate.test.ts` asserts the rule structurally — any segment that
+streams a fallback must refuse above it — because nothing in a type or a normal
+unit test notices when adding one file changes what `redirect()` means in the
+file beside it.
+
+The same switch governs a quieter version of the same leak: the shell resolves a
+partner college's name and brand colours for signed-out visitors, so a
+demonstration is themed from a bare link. Under real sign-on that reads records
+as the system context to answer a question nobody authenticated asked, and puts a
+named institution in the masthead of a response to an anonymous request.
+`anonymousFallbackAllowed` gates both.
+
+## Uploads
+
+The only place this application accepts arbitrary bytes from the internet, so
+it is the one subsystem written as though every field were hostile. The
+declared MIME type is attacker-controlled, the extension is
+attacker-controlled, the filename is attacker-controlled. Only the bytes are
+evidence, and only for formats that have a signature.
+
+```
+scanner present? → rate limit → size → filename → extension → magic bytes
+→ store quarantined → scan → clean
+```
+
+One entry point, `receiveUpload`, so no caller can skip a step, and the order
+is load-bearing: cheap rejections come first, and the file is unreachable
+between being stored and being cleared.
+
+**Files survive a restart.** The store was an in-process `Map`, which is fine
+for a demonstration and indefensible the moment a learner attaches a real
+transcript — the record would say the file was accepted and the file would be
+gone. `FileStore` now has two implementations behind it, picked from
+`DATABASE_URL` exactly like the repositories and the auth store, because a
+resume in Postgres and an application in a fixture array is a pairing that can
+only produce orphans.
+
+The bytes live in Postgres, in `bytea`, and that is a choice with a ceiling
+stated rather than discovered. What it buys: one backup covers records and
+documents together, there is no second set of credentials to rotate, a file
+cannot be orphaned by a failed write on the other side, and the rules that
+already scope every read are the rules protecting the bytes. What it costs: a
+read loads the whole file into memory and the database carries the bulk. At the
+pilot's size — resumes capped at 5MB, deliverables at 20MB, a few hundred
+learners — that is worth it. Past a few thousand files, `FileStore` is the seam
+an S3 or Blob adapter plugs into and the table becomes metadata.
+
+They cross the wire as base64 text rather than as a `Buffer`, deliberately.
+Passing a buffer works on node-postgres and does not work uniformly: Neon's
+HTTP path serialises parameters as JSON, where a `Buffer` becomes
+`{"type":"Buffer","data":[…]}`, and a `bytea` result can come back as a hex
+string. `decode($n, 'base64')` in and `encode(content, 'base64')` out makes
+every value a plain string that every driver agrees about, for a third more on
+the wire and one fewer class of bug that appears only in production against the
+one driver the tests do not run.
+
+**Scanning is real if you point it somewhere.** `CLAMAV_HOST` switches the
+scanner from the EICAR stub to clamd, spoken directly over a socket — a
+command, length-prefixed chunks, a terminator, one line back. No client library,
+because four screenfuls of framing is not worth a supply-chain surface in the
+one place that handles bytes from the internet.
+
+It throws rather than guessing. Unreachable, timed out, or an unrecognised
+reply all raise, and the file stays quarantined. `INSTREAM size limit exceeded.
+ERROR` is not a verdict — reading it as "clean" is exactly how an unscanned file
+becomes a downloadable one, and the failure people actually ship is a scanner
+that has been down for a month while uploads kept succeeding.
+
+The stub is refused where the records are real. A deployment with a database and
+writes enabled but no `CLAMAV_HOST` accepts no files at all and says why, because
+a scanner that detects one test string and passes everything else is not a weak
+scanner — it is no scanner with a reassuring name. The refusal is at the upload
+rather than at boot: a deployment that will not start gets the guard removed
+rather than the scanner installed.
+
+**A purge takes the files with it.** Durability created that obligation —
+while files died with the process, the retention schedule never had to think
+about them. `purgeLearnerIdentity` now sweeps the learner's files after the
+record commits, and `canRetrieve` refuses any file whose learner has been
+purged. The second one is the control, because it does not depend on the first
+having succeeded; the sweep is cleanup.
+
+## Knowing it works
+
+The question an operator actually has is never "is the process running" — the
+process is nearly always running. It is *why did nobody get told*, *why can't
+anyone sign in*, and *is the database the one I think it is*. So the checks are
+against the things that have silently failed in this codebase's own history: a
+queue that filled while nothing drained it, a mode switch that made every page
+throw at boot, a schema one migration behind the code reading it.
+
+| Check | Answers |
+|---|---|
+| `data` | Where records are read from, and whether that place responds |
+| `schema` | Whether the database has the columns this build expects |
+| `notifications` | Whether anyone is actually being told, and whether the queue is draining |
+| `sign-on` | How people get in, and whether that configuration boots |
+| `uploads` | Whether files are accepted, and what is scanning them |
+
+**The queue has a clock of its own.** Every write path drains the outbox after
+it commits, which covers the common case and hides the interesting one: a
+message that fails transiently goes back on the queue and then waits for
+*somebody else's* unrelated write to push it out. On a quiet evening in a rural
+market that is not a retry, it is a night. `/api/cron/notifications` runs the
+same drain on a schedule, guarded by `CRON_SECRET` and compared in constant
+time.
+
+`vercel.json` carries a **daily** entry, and that is the Hobby plan's ceiling
+rather than a considered interval — Vercel refuses anything more frequent at
+build time, which is how this was found: the deployment failed on the first
+push. A sweep that waits up to twenty-four hours is a floor, not a schedule.
+Every write path still drains as it commits, so the timer only catches what
+nothing else swept. On Pro, or on any scheduler that can send an authenticated
+GET, `*/5 * * * *` is the number to use. Unset, it refuses: failing open
+would mean the deployment that forgot to configure it is the one left exposed,
+and it answers 404 rather than 401 because a 401 confirms there is something
+there worth guessing at.
+
+**The notifications check measures age, not depth.** Depth answers the wrong
+question — thirty messages draining steadily are healthy, one sitting since
+Tuesday is not, and a count cannot tell them apart. The Postgres outbox always
+had `created_at`, `attempts` and `last_error`; nothing read them, because
+`pending()` returned bare intents. It now returns what is actually known about a
+waiting message, and `/demo/admin/outbox` says how long each has waited, how
+many attempts have failed, and why. A retry keeps the original queued time
+rather than resetting it — a message that has failed for three days must not
+look like one that arrived a minute ago.
+
+**`degraded` answers 200, not 503.** A status page that pages somebody at 3am
+because email is redirected to a test address has taught them to ignore it, and
+an application serving requests is up. Only `failing` — the database gone, the
+schema behind, sign-on refusing to boot — is a 503. Degraded is the state that
+misleads people, because it looks working from outside; that is the whole
+reason it has a name of its own.
+
+**The endpoint answers at two resolutions.** An uptime monitor needs an
+unauthenticated endpoint, and an unauthenticated endpoint is reconnaissance the
+moment it answers in detail. "Postgres is not answering", `0010_files.sql has
+not been applied`, `clamd at 10.0.0.4:3310` — each is a sentence written for an
+operator and a gift to anybody else. So an anonymous caller gets the verdict and
+nothing else, and an administrator gets the report:
+
+```bash
+curl -i localhost:3000/api/health     # {"status":"ok"} and nothing more
+```
+
+`/demo/admin/health` is the same checks for the person the monitor wakes up,
+and the console carries the verdict on the link rather than behind it — a health
+page nobody opens while things look fine is one first opened during the
+incident.
+
+**Nothing in a health report may name a person.** It is the one thing here
+designed to be read by a monitor, a status page and whoever is on call, none of
+which have the access controls the database has; under FERPA a log holding a
+participant's details inherits the handling rules of the data itself. Every
+detail is a count, a duration or a setting, and `health.test.ts` asserts that
+against every seeded person rather than a sample.
+
+The check for a pending migration carries the expected filename as a constant
+rather than listing the directory, because on a serverless deployment the
+repository's files are not there at runtime. `migrations.test.ts` asserts the
+constant matches the newest file, so it cannot drift into reporting a schema
+that is up to date while the code reads columns nobody created.
+
+### Finding one request again
+
+`proxy.ts` mints an `x-request-id` per request and echoes it on the response,
+keeping an id the platform already set rather than minting a second — two ids
+for one request is worse than none, because each looks authoritative in a
+different system. It is eight characters from an alphabet with no `0`, `O`, `1`,
+`I` or `L`, because its job is to survive being read down a phone line and typed
+into a search box.
+
+An inbound value that is not plausibly an id is replaced rather than escaped: it
+is attacker-controlled and ends up in a log line and a response header, so a
+newline that would forge a second log entry gets a fresh id instead of careful
+quoting.
+
+The route-level error boundary shows Next's own `digest`, which is the
+server-side handle for that specific error. Worth knowing: that boundary's
+`logger.error` call runs in the browser, so it reaches the console and not the
+server — the digest is the correlation that works, not the log line beside it.
+
+## No button that does nothing
+
+Two controls shipped that swallowed the click: "Publish slots" on the board's
+header and "Update profile" on the learner's. Both rendered as raised, primary,
+entirely convincing buttons. In a demonstration shown to funders that is worse
+than a missing feature — a missing feature reads as not built yet, and a button
+that does nothing reads as broken.
+
+`Button` no longer accepts one. Its props are a union: it calls something, it
+submits a form, or it is `disabled` with a `title` saying why. The third is not
+a loophole — a disabled control with a reason tells somebody what would make it
+work, while a live one with no handler tells them the software is broken.
+Turning that on found four in the product, two of which I had not catalogued:
+
+| Was | Is |
+|---|---|
+| "Publish slots" | The board publishing a morning of interview slots |
+| "Update profile" | A learner editing what a match is scored on |
+| "Post a project" | The same posting form as the header's, opened on the micro track |
+| "Reach out" | Disabled, with the reason: there is no messaging path, and a nudge would go through the college |
+
+**Publishing slots** is a batch, because that is how the work happens — an
+officer blocks out a morning, not one appointment — and doing it in one
+transaction means a board never ends up with half a morning published and no way
+to tell which half. The officer's name is on the slot rather than taken from the
+session, because the person who publishes a calendar is routinely not the person
+who sits the interviews, and a student meeting a different name than they were
+promised is a bad first impression of a public agency. A published slot keeps
+the time the board chose; seeded ones are regenerated relative to now so the
+demonstration never opens on appointments that have already happened.
+
+**Editing a profile** covers what a learner owns and nothing else. Name, email
+and college are what the registrar verified — and the email is the credential
+under real sign-on, so self-service editing of it is an account-takeover
+primitive rather than a profile feature. Eligibility and status are absent for
+the same reason: they are somebody else's determination about this person. The
+form says so rather than leaving somebody hunting for a field that is not there.
+
+### Two bugs this turned up
+
+Neither was in the new code, and neither could have been found without a
+database.
+
+**`saveStudent` blanked the verification attribution.** It took a `verifiedBy`
+and wrote it straight into the column, so every non-verification save sent
+`null` and erased who verified the learner. For a verified record that trips
+`verification_is_attributable` — status says verified, `verified_on` is set, and
+`verified_by` has just been cleared — and the write fails outright. It stayed
+hidden because until a learner could edit their own profile, every caller that
+saved a verified student *was* the verification; and because the in-memory layer
+ignores the parameter, parity agreed on nothing. `null` now means "leave it as it
+was", which is what the parameter always meant.
+
+**The student portal read its own learner out of the fixtures.** `page.tsx`
+called `studentForUser` from `seed.ts` directly — the one place in the
+application that reached around the repository contract. On the fixtures the two
+are the same object, so nothing showed. On Postgres the portal rendered the
+seeded learner's programme, hours, skills and eligibility whatever the database
+held, and a learner editing their profile saved to the database and watched the
+page keep showing the old values.
+
 ## Theming
 
 A student should see their school, not a vendor. The student and college portals are white-labelled to the **education organization the student attends** — the college today, a dual-credit high school when secondary is modelled. The admin console and the board console are deliberately not themed: painting a board's oversight screen in one college's colours would misrepresent what the board is looking at.
@@ -379,10 +983,65 @@ the whole suite green; CI runs it against a container on every change. **The
 database it names is truncated and reseeded** — never point it at one whose
 contents matter.
 
+It covers the **auth store** as well as the repositories, which for a long time
+it did not. `src/auth/postgres-store.ts` holds every credential the platform
+has, and the only thing that ever exercised it was somebody running a dev server
+against Postgres by hand — so a Postgres-only fault in there was invisible until
+a person tried to sign in, which is the one path with no fallback. The
+assertions are the ones only a real database can answer: that the composite
+primary key on `sign_in_codes` keeps a reset code and a sign-in code apart, that
+`last_counter` comes back a number rather than the string a `bigint` column
+hands out by default, and that single use of a recovery code is the database's
+property rather than the caller's.
+
 Running the **whole e2e suite against Postgres** is the other half, and worth
-doing after any change to the data layer: point `DATABASE_URL` at a seeded
-local database, set `DATABASE_READ_ONLY=false`, and run `npm run test:e2e`.
-Every flow the demo has passes on either backend.
+doing after any change to the data layer:
+
+```bash
+export DATABASE_URL=postgresql://you@localhost:5432/oppeco
+export DATABASE_READ_ONLY=false
+export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
+npm run db:seed && npm run build && npm run test:e2e
+```
+
+Every flow the demo has passes on either backend, and the sign-on suites below
+are run against both as well — the in-memory store and Postgres each hold
+credentials their own way, and a password that only round-trips through one of
+them is a sign-in page that works in development and not in production.
+
+That third variable is the one door past the guard on demo sign-on, and it is
+there because this suite needs the combination the guard refuses — a role picker,
+a database, and writes — while running a production build, so nothing about the
+process tells it apart from a deployed demo. Nobody sets a variable to that
+string about a database whose contents matter, which is the entire safeguard.
+
+The sign-on suite is the exception and runs on its own, because a process is
+either the role picker or real sign-on and cannot be both:
+
+```bash
+AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev > /tmp/oe.log &
+AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test \
+  e2e/zzzzzzz-sign-in.spec.ts e2e/zzzzzzzzzzz-password.spec.ts \
+  e2e/zzzzzzzzzzzz-access.spec.ts
+```
+
+`npm run dev` rather than the production build the rest of the suite uses,
+because `AUTH_ECHO_CODES` is refused in production — the test bends around that
+rather than the other way about. The code is read back out of the server's log,
+which is the only place it exists outside a mailbox.
+
+Neither suite seeds anything out of band. The password suite gives the college
+its password through the product's own front door — request a code, choose a
+password — because that is the only way a real account ever gets one, and
+because a seeding script would need a database that the in-memory backend has
+not got. An earlier version did seed with a script, and the script quietly wrote
+to the in-memory store while the server under test was on Postgres; three tests
+failed against a password that had been set in a different process's memory.
+
+It keeps earning its keep. The most recent run found `saveStudent` blanking a
+learner's verification attribution on every non-verification save, and the
+student portal reading its own learner out of the fixtures rather than through
+the repositories — neither of which the in-memory layer can express.
 
 The first run of that suite found six faults that no amount of TypeScript would
 have caught: a `citext` column whose extension was never created, two seeded
@@ -429,10 +1088,13 @@ The outbox states plainly whether "delivered" means an email left the building o
 ### Not wired, on purpose
 
 - **Awarding credit across several placements at once.** It has to decide which completed projects an award consumes and where leftover hours go, which is the open credit-stacking question (Q21). Granting per placement works and does not prejudge it.
-- **Interview slot publishing.** The board's "Publish slots" button. Slots already have a repository and optimistic concurrency; what is missing is the form and a rule about how far ahead a board may publish.
-- **Editing a student profile.** "Update profile" on the student portal. It is a PII write path rather than a status change, so it wants field-level rules about what a student may alter after verification — changing your name after a college vouched for you is not the same as changing your available hours.
-- **Uploads on a real surface.** The service is complete and tested — storage, scanning, signed URLs, access control — but only appears in the design gallery. Nothing yet decides which documents a placement actually requires.
+- **Uploads on a real surface.** The pipeline is complete and tested — durable storage, real scanning, signed URLs, access control, and a purge that reaches the files — but nothing calls `receiveUpload`. The question it is waiting on is a product one, not a wiring one: which documents a placement actually requires, from whom, and at which step. Until that is answered there is no honest place to put the control.
 - **A job description document to download.** Employers often already have one as a PDF, and the opportunity page is where it belongs. The upload pipeline is built but every file in it is scoped to a *student* — `UploadTarget` requires a `studentId` and `canRetrieve` derives access from the student record. A posting's attachment inverts that: it belongs to an organization, and on a published posting it is readable by every student in the market, which is a broader rule than any file has today. That is a deliberate extension of the access model, not a wiring job.
+- **Program-year rollover.** A fund carries a `programYear` and nothing rolls it
+  over. What happens to an unspent allocation at year end, whether a live
+  commitment crosses the boundary with it, and whether the next year's fund is a
+  new row or the same one re-allocated are all policy questions a board answers
+  differently from a foundation (Q24).
 - **A fixed follow-up interval.** Workforce reporting measures employment at set
   quarters after exit — the second and the fourth — and an outcome here is
   recorded whenever somebody asks. The record already separates the date an

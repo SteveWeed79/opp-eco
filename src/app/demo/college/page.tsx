@@ -3,6 +3,7 @@ import {
   Award,
   Compass,
   FileEdit,
+  ShieldCheck,
   HandHeart,
   PenLine,
   UserCheck,
@@ -26,7 +27,7 @@ import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import {
   followUpQueue,
-  marketRemainingBudget,
+  marketFunding,
   studentCreditProgress,
 } from "@/lib/queries";
 import { isSelfSufficientForCredit } from "@/domain/credit";
@@ -34,6 +35,9 @@ import { availableTransitions, isTerminal } from "@/domain/workflow";
 import { postingMachine, studentMachine } from "@/domain/lifecycle";
 import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
 import { OUTCOME_KINDS } from "@/domain/outcome";
+import { CONSENT_GRANTORS, CONSENT_SCOPES, hasConsent } from "@/domain/consent";
+import { RecordConsent } from "@/components/RecordConsent";
+import { DEMO_NOW } from "@/data/seed";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { IntroductionOutcome } from "@/components/IntroductionOutcome";
 import { RecordOutcome } from "@/components/RecordOutcome";
@@ -51,6 +55,7 @@ import { platformTheme } from "@/theme/theme";
 import {
   collegeCloseIntroduction,
   collegeIntroduceStudent,
+  collegeRecordConsent,
   collegeRecordOutcome,
   collegeTransition,
 } from "./actions";
@@ -70,7 +75,7 @@ export default async function CollegePage() {
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
-  const remainingBudget = await marketRemainingBudget(actor, market);
+  const remainingBudget = (await marketFunding(actor, market.id)).wage?.remaining ?? 0;
 
   const pendingVerification = await repositories.students.pendingVerification(actor);
   const needsDrafting = await repositories.postings.awaitingCollegeHelp(actor);
@@ -93,6 +98,31 @@ export default async function CollegePage() {
    * reimbursed the placement, and the administrator is watching five markets.
    */
   const followUps = await followUpQueue(actor);
+
+  /**
+   * Learners this college has verified but has no education-record consent for.
+   *
+   * Exception-first, like every queue on this page. It is the college's to
+   * clear because consent is a property of the institution whose records it
+   * covers — and it has a visible consequence rather than being paperwork: an
+   * employer sees an abbreviated name and no way to make contact until it is
+   * on file, however far the placement has got.
+   */
+  const consentsOnFile = await repositories.consents.list(actor);
+  const missingConsent = (await repositories.students.list(actor)).filter(
+    (candidate) =>
+      candidate.status === "verified" &&
+      !candidate.purgedOn &&
+      !hasConsent(
+        consentsOnFile,
+        {
+          studentId: candidate.id,
+          sourceOrgId: college.id,
+          scope: "education_record",
+        },
+        DEMO_NOW,
+      ),
+  );
 
   // The employers currently offering time. The college is told when one is
   // made and the message links here, so this is the page that has to show it.
@@ -567,6 +597,73 @@ export default async function CollegePage() {
             {hoursPerCredit} hours per credit is your institution&rsquo;s configurable
             policy (Q11), enforced when a posting is published rather than discovered
             after the work is done.
+          </Assumption>
+        </div>
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Consent — the paperwork that decides what an employer may see.      */}
+      {/*                                                                     */}
+      {/* Not a compliance chore bolted on the end: without an education-record */}
+      {/* consent on file, an employer sees an abbreviated name and no way to  */}
+      {/* reach the learner, however far the placement has got. The queue is   */}
+      {/* the college's because consent is a property of the institution whose */}
+      {/* records it covers, and no other party can assert it.                 */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader
+          level={3}
+          icon={<ShieldCheck className="w-5 h-5" />}
+          title="Consent on file"
+          subtitle="Verified learners whose records cannot yet be disclosed to an employer"
+        />
+        {missingConsent.length === 0 ? (
+          <Empty>Every verified learner has an education-record consent on file.</Empty>
+        ) : (
+          <ul className="row-list divide-y divide-line">
+            {missingConsent.map((learner) => (
+              <li
+                key={learner.id}
+                className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <span className="font-semibold text-sm text-ink-950">
+                    {learner.name}
+                  </span>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {learner.programOfStudy} · employers see an abbreviated name only
+                  </p>
+                </div>
+                <RecordConsent
+                  studentId={learner.id}
+                  sourceOrgId={college.id}
+                  learnerLabel={learner.name}
+                  institutionName={college.name}
+                  scopes={CONSENT_SCOPES.map((scope) => ({
+                    value: scope.value,
+                    label: scope.label,
+                    meta: scope.meta,
+                    description: scope.description,
+                  }))}
+                  grantors={CONSENT_GRANTORS.map((grantor) => ({
+                    value: grantor.value,
+                    label: grantor.label,
+                    meta: grantor.meta,
+                    description: "",
+                  }))}
+                  action={collegeRecordConsent}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="px-6 pb-5">
+          <Assumption>
+            Who had to sign is recorded rather than worked out. FERPA rights
+            transfer at 18 or on enrolment at the college at any age, so a
+            dual-credit learner may consent for themselves here while a parent
+            still holds what their school knows — and no field on this screen
+            can tell which applies.
           </Assumption>
         </div>
       </Card>

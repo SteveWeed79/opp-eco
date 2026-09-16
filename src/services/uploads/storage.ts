@@ -47,6 +47,16 @@ export interface FileStore {
   metadata(key: string): Promise<StoredFile | null>;
   markScanned(key: string, status: ScanStatus): Promise<void>;
   remove(key: string): Promise<void>;
+  /**
+   * Every file about one learner, gone. Returns the keys it removed.
+   *
+   * Exists because storage became durable. While the store was a `Map`, a
+   * purged learner's resume died with the process and the retention schedule
+   * never had to think about it. Now it outlives everything, so the purge has
+   * to reach it — and it returns what it took rather than a count, so the audit
+   * entry can name it instead of asserting that something happened.
+   */
+  removeForStudent(studentId: string): Promise<string[]>;
 }
 
 /**
@@ -68,7 +78,13 @@ export function contentTypeFor(extension: string): string {
   return CONTENT_TYPES[extension] ?? "application/octet-stream";
 }
 
-/** In-memory store. A Vercel Blob or S3 adapter satisfies the same interface. */
+/**
+ * In-memory store.
+ *
+ * Loses everything on restart, which is correct for the demonstration and was
+ * the only implementation for too long. `postgres-store.ts` is the durable one;
+ * an S3 or Blob adapter would satisfy the same five methods.
+ */
 export function createMemoryFileStore(): FileStore {
   const files = new Map<string, { meta: StoredFile; data: Uint8Array }>();
 
@@ -98,10 +114,24 @@ export function createMemoryFileStore(): FileStore {
     async remove(key) {
       files.delete(key);
     },
+    async removeForStudent(studentId) {
+      const keys = [...files.values()]
+        .filter((entry) => entry.meta.studentId === studentId)
+        .map((entry) => entry.meta.key);
+      for (const key of keys) files.delete(key);
+      return keys;
+    },
   };
 }
 
-export const fileStore = createMemoryFileStore();
+/**
+ * The process-wide in-memory store.
+ *
+ * Still exported, and still what the demo runs on, but no longer what callers
+ * reach for: `fileStore()` in `backend.ts` picks this or Postgres from
+ * `DATABASE_URL`, the same way every other store in this application is chosen.
+ */
+export const memoryFileStore = createMemoryFileStore();
 
 // ---------------------------------------------------------------------------
 // Signed retrieval

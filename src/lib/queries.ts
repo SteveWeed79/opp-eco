@@ -22,13 +22,22 @@ import {
   PAUSE_STATUSES,
   WAITING_STATUSES,
   daysInStatus,
-  fundingCommitment,
   isTerminal,
 } from "@/domain/workflow";
 import type { ActorContext } from "@/domain/types";
 import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
+import {
+  retentionStatusFor,
+  stillParticipating,
+  type RetentionStatus,
+} from "@/domain/retention";
+import {
+  balancesFor,
+  wageSubsidySource,
+  type FundingBalance,
+} from "@/domain/funding";
 import {
   awaitsFollowUp,
   canReadOutcomes,
@@ -115,7 +124,13 @@ export interface MarketHealth {
   liveApplications: number;
   inPause: number;
   committed: number;
+  /** The wage fund's allocation. Zero where a market has no fund yet. */
+  allocated: number;
+  /** What that fund pays per hour. Zero where there is no fund. */
+  ratePerHour: number;
   remaining: number;
+  /** More committed than the fund now holds. Reachable, and named rather than hidden. */
+  overcommitted: boolean;
   placements: number;
   creditHoursGranted: number;
 }
@@ -124,20 +139,23 @@ export async function marketHealth(
   actor: ActorContext,
   market: Market,
 ): Promise<MarketHealth> {
-  const [allApplications, allCredits, students, businesses, published] =
+  const [allApplications, allCredits, students, businesses, published, funding] =
     await Promise.all([
       await repositories.applications.list(actor),
       await repositories.creditAwards.list(actor),
       await repositories.students.list(actor),
       await repositories.organizations.list(actor, { kind: "business" }),
       await repositories.postings.published(actor),
+      marketFunding(actor, market.id),
     ]);
 
   const applications = allApplications.filter((a) => a.marketId === market.id);
 
-  const committed = applications
-    .filter((a) => !isTerminal(a.status))
-    .reduce((sum, a) => sum + fundingCommitment(a), 0);
+  // From the ledger, not from the applications. They used to be the same sum
+  // and are no longer: a placement that ran and finished has *spent* its
+  // commitment rather than freed it, which the old "is the application
+  // terminal" test counted as released.
+  const committed = funding.wage ? funding.wage.committed : 0;
 
   const credits = allCredits.filter(
     (c) => c.marketId === market.id && c.status === "granted",
@@ -157,7 +175,10 @@ export async function marketHealth(
     liveApplications: applications.filter((a) => !isTerminal(a.status)).length,
     inPause: applications.filter((a) => PAUSE_STATUSES.includes(a.status)).length,
     committed,
-    remaining: market.subsidyBudget - committed,
+    allocated: funding.wage ? funding.wage.source.allocated : 0,
+    ratePerHour: funding.wage?.source.ratePerHour ?? 0,
+    remaining: funding.wage ? funding.wage.remaining : 0,
+    overcommitted: funding.wage ? funding.wage.overcommitted : false,
     placements: applications.filter((a) =>
       [
         "placement_active",
@@ -177,15 +198,68 @@ export async function allMarketHealth(
   return Promise.all(markets.map((m) => marketHealth(actor, m)));
 }
 
-/** Uncommitted allocation left in a market's program year. */
+export interface MarketFunding {
+  /** Every fund in the market, in purpose order. */
+  balances: FundingBalance[];
+  /**
+   * The wage-subsidy fund — what every budget figure in this product meant
+   * before there was more than one kind of money.
+   *
+   * Null for a market with no fund yet, which is a stage rather than an error:
+   * Beloit's board is still in conversation, so there is nobody to sponsor one.
+   * Callers must handle it; the alternative is a division by zero on the day a
+   * market is opened.
+   */
+  wage: FundingBalance | null;
+  /** Across every fund, not only the board's. */
+  totalAllocated: number;
+  totalCommitted: number;
+  totalRemaining: number;
+}
+
+/**
+ * Every fund in a market and what is left in each.
+ *
+ * The single place a balance is computed. Nothing stores a total — a stored
+ * total is a number that can disagree with the ledger, and a funder asking
+ * where their money went is the worst possible audience for two answers.
+ */
+export async function marketFunding(
+  actor: ActorContext,
+  marketId: string,
+): Promise<MarketFunding> {
+  const [sources, commitments] = await Promise.all([
+    repositories.fundingSources.forMarket(actor, marketId),
+    repositories.fundingCommitments.list(actor),
+  ]);
+
+  const balances = balancesFor(sources, commitments);
+  const wageSource = wageSubsidySource(sources);
+
+  return {
+    balances,
+    wage: wageSource ? balances.find((b) => b.source.id === wageSource.id) ?? null : null,
+    totalAllocated: balances.reduce((sum, b) => sum + b.source.allocated, 0),
+    totalCommitted: balances.reduce((sum, b) => sum + b.committed, 0),
+    totalRemaining: balances.reduce((sum, b) => sum + b.remaining, 0),
+  };
+}
+
+/**
+ * Uncommitted wage subsidy left in a market's program year.
+ *
+ * Kept as its own function with the same signature it always had, because the
+ * state machine's funding guard takes this one number and should not have to
+ * know that funding grew a model behind it. **Can be negative**, where an
+ * allocation was cut below what was already committed — the guard refuses a new
+ * commitment against a negative remainder on its own, which is the correct
+ * behaviour and needed no change.
+ */
 export async function marketRemainingBudget(
   actor: ActorContext,
   market: Market,
 ): Promise<number> {
-  const committed = (await repositories.applications.list(actor))
-    .filter((a) => a.marketId === market.id && !isTerminal(a.status))
-    .reduce((sum, a) => sum + fundingCommitment(a), 0);
-  return market.subsidyBudget - committed;
+  return (await marketFunding(actor, market.id)).wage?.remaining ?? 0;
 }
 
 /**
@@ -299,10 +373,40 @@ export async function studentCreditProgress(
   return creditProgress(completed, hoursPerCredit);
 }
 
+/**
+ * Wage subsidy committed across every market the actor can see.
+ *
+ * Wage subsidy specifically, not all money: this is the administrator's
+ * headline figure and it has always meant the board's commitment. Foundation
+ * and institutional funds are reported beside it rather than folded into it,
+ * because a total that mixes public and philanthropic dollars is the one number
+ * neither funder would accept.
+ */
 export async function subsidyDeployed(actor: ActorContext): Promise<number> {
-  return (await repositories.applications.list(actor))
-    .filter((a) => !isTerminal(a.status))
-    .reduce((sum, a) => sum + fundingCommitment(a), 0);
+  const [sources, commitments] = await Promise.all([
+    repositories.fundingSources.list(actor),
+    repositories.fundingCommitments.list(actor),
+  ]);
+  const wageIds = new Set(
+    sources.filter((s) => s.purpose === "wage_subsidy").map((s) => s.id),
+  );
+  return commitments
+    .filter((c) => wageIds.has(c.fundingSourceId) && c.status !== "released")
+    .reduce((sum, c) => sum + c.amount, 0);
+}
+
+/** Everything committed that is not the board's wage subsidy. */
+export async function assistanceDeployed(actor: ActorContext): Promise<number> {
+  const [sources, commitments] = await Promise.all([
+    repositories.fundingSources.list(actor),
+    repositories.fundingCommitments.list(actor),
+  ]);
+  const otherIds = new Set(
+    sources.filter((s) => s.purpose !== "wage_subsidy").map((s) => s.id),
+  );
+  return commitments
+    .filter((c) => otherIds.has(c.fundingSourceId) && c.status !== "released")
+    .reduce((sum, c) => sum + c.amount, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -412,4 +516,74 @@ export async function studentOutcomes(
   studentId: string,
 ): Promise<Outcome[]> {
   return repositories.outcomes.forStudent(actor, studentId);
+}
+
+// ---------------------------------------------------------------------------
+// Retention
+// ---------------------------------------------------------------------------
+
+export interface RetentionItem {
+  student: Student;
+  status: RetentionStatus;
+  /** Still taking part, so the clock has not started however old the record is. */
+  active: boolean;
+}
+
+/**
+ * Learners whose identity is due to be removed, longest overdue first.
+ *
+ * Exception-first, like every other operational list here: a roll of every
+ * learner and their deletion date is a report, and what an operator needs is
+ * the ones that have come due. Active learners are excluded outright — the rule
+ * is "no longer required for the purpose collected", and a live application is
+ * that purpose.
+ *
+ * Returns nothing for anyone but an administrator. A college has no purge
+ * button and showing it a list of its own students due for anonymisation would
+ * be an invitation to chase something it cannot do.
+ */
+export async function retentionHorizon(
+  actor: ActorContext,
+): Promise<RetentionItem[]> {
+  if (actor.membership.role !== "admin") return [];
+
+  const [students, applications] = await Promise.all([
+    repositories.students.list(actor),
+    repositories.applications.list(actor),
+  ]);
+
+  const items: RetentionItem[] = [];
+  for (const student of students) {
+    if (student.purgedOn) continue;
+    const mine = applications.filter((a) => a.studentId === student.id);
+    const status = retentionStatusFor(student, applications, DEMO_NOW);
+    // Undateable records are skipped rather than listed: one the platform
+    // cannot date is something to investigate by hand, not something to offer
+    // an irreversible button against.
+    if (!status) continue;
+    items.push({ student, status, active: stillParticipating(mine) });
+  }
+
+  return items.sort((a, b) => a.status.daysRemaining - b.status.daysRemaining);
+}
+
+/**
+ * The subset that has actually come due.
+ *
+ * Nothing in a pre-pilot seed is three years old, so this is empty today and
+ * the console says so rather than hiding the section. A retention schedule
+ * whose screen only appears once it is already being breached is a schedule
+ * nobody checks until it is too late.
+ */
+export async function retentionDue(
+  actor: ActorContext,
+): Promise<RetentionItem[]> {
+  return (await retentionHorizon(actor)).filter((item) => item.status.due && !item.active);
+}
+
+/** Every learner whose identity has already been removed. */
+export async function purgedLearners(
+  actor: ActorContext,
+): Promise<Student[]> {
+  return (await repositories.students.list(actor)).filter((s) => s.purgedOn !== null);
 }

@@ -142,7 +142,7 @@ describe("a successful transition writes everything together", () => {
     // Nothing was sent during the transaction; everything is queued for the
     // drain that runs after it commits.
     expect(pendingNotifications.length).toBeGreaterThan(0);
-    expect(pendingNotifications.some((n) => n.kind === "custom.extra")).toBe(true);
+    expect(pendingNotifications.some((n) => n.intent.kind === "custom.extra")).toBe(true);
   });
 
   it("applies the notification policy without the caller asking", async () => {
@@ -153,7 +153,7 @@ describe("a successful transition writes everything together", () => {
     // rest had silence.
     await executeTransition(student, { applicationId: "app-4", to: "interview_scheduled" });
 
-    const kinds = pendingNotifications.map((n) => n.kind);
+    const kinds = pendingNotifications.map((n) => n.intent.kind);
     expect(kinds).toContain("interview.booked.student");
     expect(kinds).toContain("interview.booked.board");
     expect(kinds).toContain("interview.booked.employer");
@@ -173,7 +173,7 @@ describe("a successful transition writes everything together", () => {
     });
 
     const employerMessages = pendingNotifications.filter(
-      (n) => n.kind === "interview.booked.employer",
+      (n) => n.intent.kind === "interview.booked.employer",
     );
     expect(employerMessages).toHaveLength(1);
   });
@@ -187,9 +187,9 @@ describe("a successful transition writes everything together", () => {
     await executeTransition(student, { applicationId: "app-4", to: "interview_scheduled" });
 
     const employer = pendingNotifications.find(
-      (n) => n.kind === "interview.booked.employer",
+      (n) => n.intent.kind === "interview.booked.employer",
     );
-    expect(employer?.recipientOrganizationId).toBeTruthy();
+    expect(employer?.intent.recipientOrganizationId).toBeTruthy();
   });
 
   it("stamps the market from the application, not the caller", async () => {
@@ -201,7 +201,7 @@ describe("a successful transition writes everything together", () => {
     // A notification belongs to the market of the thing that caused it, so a
     // caller cannot address one into someone else's market.
     const marketId = find("app-4").marketId;
-    expect(pendingNotifications.every((n) => n.marketId === marketId)).toBe(true);
+    expect(pendingNotifications.every((n) => n.intent.marketId === marketId)).toBe(true);
   });
 
   it("records how far a closed application got", async () => {

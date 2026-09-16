@@ -21,15 +21,20 @@
 import type {
   Application,
   AuditEvent,
+  ConsentRecord,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
+  Membership,
   Organization,
   Outcome,
   Posting,
   Student,
   TimeEntry,
+  User,
 } from "@/domain/types";
 import {
   ConcurrencyError,
@@ -37,6 +42,7 @@ import {
   type Store,
   type UnitOfWork,
 } from "../store";
+import { withoutParticipantPII } from "@/services/notification-privacy";
 import { sql, type Sql } from "./client";
 import type { PostgresClient } from "./neon";
 import { cents } from "./rows";
@@ -175,10 +181,28 @@ class PostgresUnitOfWork implements UnitOfWork {
    * rather than leaving the column untouched is what makes the college's
    * verification survive against a real database.
    */
+  /**
+   * `verifiedBy` is "who verified them, if this write is a verification".
+   *
+   * It is **not** a column to be overwritten with whatever the caller happened
+   * to pass, which is what this did: every non-verification save sent `null`
+   * and blanked the attribution. For an already-verified learner that trips
+   * `verification_is_attributable` — status says verified, `verified_on` is
+   * set, and `verified_by` has just been erased — so the write fails outright.
+   *
+   * Latent until a learner edited their own profile, because until then every
+   * caller that saved a verified student was the verification itself. The
+   * in-memory layer ignores the parameter entirely, so parity could not see it
+   * either; the Postgres end-to-end run is what found it.
+   *
+   * `COALESCE` makes null mean "leave it as it was", which is what the
+   * parameter always meant and what the other layer already did.
+   */
   saveStudent(student: Student, verifiedBy: string | null) {
     this.add(sql`
       UPDATE students SET
         program_of_study = ${student.programOfStudy},
+        purged_on = ${student.purgedOn},
         class_standing = ${student.classStanding},
         expected_graduation = ${student.expectedGraduation},
         skills = ${student.skills},
@@ -188,7 +212,7 @@ class PostgresUnitOfWork implements UnitOfWork {
         eligibility = ${student.eligibility},
         eligibility_determined_on = ${student.eligibilityDeterminedOn},
         verified_on = ${student.verifiedOn},
-        verified_by = ${verifiedBy},
+        verified_by = COALESCE(${verifiedBy}, verified_by),
         updated_at = now()
       WHERE id = ${student.id}`);
   }
@@ -236,6 +260,8 @@ class PostgresUnitOfWork implements UnitOfWork {
         brand_color = ${organization.brandColor ?? null},
         accent_color = ${organization.accentColor ?? null},
         logo_url = ${organization.logoUrl ?? null},
+        identity_mode = ${organization.identityMode},
+        email_domains = ${organization.emailDomains},
         updated_at = now()
       WHERE id = ${organization.id}`);
   }
@@ -269,6 +295,19 @@ class PostgresUnitOfWork implements UnitOfWork {
   }
 
   // -- Interview slots ------------------------------------------------------
+
+  createInterviewSlot(slot: InterviewSlot) {
+    this.add(sql`
+      INSERT INTO interview_slots (
+        id, market_id, board_id, starts_at, duration_minutes, officer_name,
+        booked_by, booked_at, meeting_url, version
+      ) VALUES (
+        ${slot.id}, ${slot.marketId}, ${slot.boardId}, ${slot.startsAt},
+        ${slot.durationMinutes}, ${slot.officerName},
+        ${slot.bookedByStudentId}, ${slot.bookedAt ?? null},
+        ${slot.meetingUrl}, ${slot.version}
+      )`);
+  }
 
   saveInterviewSlot(slot: InterviewSlot, expectedVersion: number) {
     // Two students racing for the last slot is the likeliest write conflict in
@@ -369,6 +408,156 @@ class PostgresUnitOfWork implements UnitOfWork {
 
   // -- Audit and notification ----------------------------------------------
 
+  /**
+   * Two statements, one transaction.
+   *
+   * The `students` row records that it happened; the `users` row is where the
+   * name and the email actually are. Splitting them across two units of work
+   * would allow a learner marked purged who still has contact details on file,
+   * which is the only outcome worth preventing here.
+   */
+  purgeLearner(student: Student, at: string) {
+    this.add(sql`
+      UPDATE students SET purged_on = ${at}, skills = '{}', interests = '{}',
+        expected_graduation = NULL, class_standing = ${student.classStanding},
+        updated_at = now()
+      WHERE id = ${student.id}`);
+    this.add(sql`
+      UPDATE users SET name = ${student.name}, email = ${student.email}
+      WHERE id = ${student.userId}`);
+  }
+
+  changeUserEmail(userId: string, email: string) {
+    this.add(sql`UPDATE users SET email = ${email} WHERE id = ${userId}`);
+  }
+
+  addOrganizationMember(user: User, membership: Membership) {
+    this.add(sql`
+      INSERT INTO users (id, name, email)
+      VALUES (${user.id}, ${user.name}, ${user.email})`);
+    this.add(sql`
+      INSERT INTO memberships (id, user_id, organization_id, market_id, role)
+      VALUES (
+        ${membership.id}, ${membership.userId}, ${membership.organizationId},
+        ${membership.marketId}, ${membership.role}
+      )`);
+  }
+
+  // -- Consent --------------------------------------------------------------
+
+  createConsent(consent: ConsentRecord) {
+    this.add(sql`
+      INSERT INTO consents (
+        id, market_id, student_id, source_org_id, scope, granted_by,
+        granted_on, expires_on, status, recorded_by, note, version
+      ) VALUES (
+        ${consent.id}, ${consent.marketId}, ${consent.studentId},
+        ${consent.sourceOrgId}, ${consent.scope}, ${consent.grantedBy},
+        ${consent.grantedOn}, ${consent.expiresOn}, ${consent.status},
+        ${consent.recordedByUserId}, ${consent.note ?? null}, ${consent.version}
+      )`);
+  }
+
+  /**
+   * Status, expiry and note only.
+   *
+   * The scope, the institution and the grantor are absent from the SET list on
+   * purpose: those describe what was actually signed, and a consent edited into
+   * covering something it never did is worse than no record at all. Correcting
+   * one means withdrawing it and recording the real thing.
+   */
+  saveConsent(consent: ConsentRecord, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE consents SET
+          status = ${consent.status},
+          expires_on = ${consent.expiresOn},
+          note = ${consent.note ?? null},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${consent.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Consent", id: consent.id },
+    );
+  }
+
+  // -- Funding --------------------------------------------------------------
+
+  createFundingSource(source: FundingSource) {
+    this.add(sql`
+      INSERT INTO funding_sources (
+        id, market_id, sponsor_org_id, kind, purpose, program_year, name,
+        allocated_cents, rate_cents, status, opened_on, version
+      ) VALUES (
+        ${source.id}, ${source.marketId}, ${source.sponsorOrgId}, ${source.kind},
+        ${source.purpose}, ${source.programYear}, ${source.name},
+        ${cents(source.allocated)}, ${optionalCents(source.ratePerHour)},
+        ${source.status}, ${source.openedOn}, ${source.version}
+      )`);
+  }
+
+  /**
+   * The write that lets the numbers move.
+   *
+   * Versioned, and the `RETURNING id` is what turns a stale write into a told
+   * failure rather than a silent one: a supplemental award overwritten by an
+   * administrator's stale figure is an error a funder eventually finds.
+   */
+  saveFundingSource(source: FundingSource, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE funding_sources SET
+          name = ${source.name},
+          allocated_cents = ${cents(source.allocated)},
+          rate_cents = ${optionalCents(source.ratePerHour)},
+          status = ${source.status},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${source.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Funding source", id: source.id },
+    );
+  }
+
+  createFundingCommitment(commitment: FundingCommitment) {
+    this.add(sql`
+      INSERT INTO funding_commitments (
+        id, market_id, funding_source_id, student_id, application_id,
+        amount_cents, hours, rate_cents, status, authorized_on, authorized_by,
+        note, version
+      ) VALUES (
+        ${commitment.id}, ${commitment.marketId}, ${commitment.fundingSourceId},
+        ${commitment.studentId}, ${commitment.applicationId},
+        ${cents(commitment.amount)}, ${commitment.hours ?? null},
+        ${optionalCents(commitment.ratePerHour)}, ${commitment.status},
+        ${commitment.authorizedOn}, ${commitment.authorizedByUserId},
+        ${commitment.note ?? null}, ${commitment.version}
+      )`);
+  }
+
+  /**
+   * Status and note only.
+   *
+   * The amount, the hours and the rate are deliberately absent from the SET
+   * list: a commitment is what was promised at the moment it was made, and
+   * editing the figure afterwards would let a released draw be rewritten into a
+   * smaller one that was never actually released. Correcting a commitment means
+   * releasing it and making another.
+   */
+  saveFundingCommitment(commitment: FundingCommitment, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE funding_commitments SET
+          status = ${commitment.status},
+          note = ${commitment.note ?? null},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${commitment.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Funding commitment", id: commitment.id },
+    );
+  }
+
   createOutcome(outcome: Outcome) {
     this.add(sql`
       INSERT INTO outcomes (
@@ -413,17 +602,26 @@ class PostgresUnitOfWork implements UnitOfWork {
    * a column that references `users` is what made every employer, college and
    * board notification fail, taking the state change beside it down too.
    */
+  /**
+   * Queued with participant PII stripped, matching the in-memory store.
+   *
+   * It matters more here than there. This payload is written to
+   * `notification_outbox` as jsonb and sits in the database — and in every
+   * backup of it — until the row is drained. A guard applied at render time
+   * would clean the email and leave the participant's name in a table.
+   */
   enqueueNotification(intent: NotificationIntent) {
-    const organizationId = intent.recipientOrganizationId ?? null;
+    const safe = withoutParticipantPII(intent);
+    const organizationId = safe.recipientOrganizationId ?? null;
     this.add(sql`
       INSERT INTO notification_outbox (
         market_id, recipient_user_id, recipient_organization_id, kind, payload
       ) VALUES (
-        ${intent.marketId},
-        ${organizationId ? null : intent.recipientUserId},
+        ${safe.marketId},
+        ${organizationId ? null : safe.recipientUserId},
         ${organizationId},
-        ${intent.kind},
-        ${JSON.stringify(intent.payload)}::jsonb
+        ${safe.kind},
+        ${JSON.stringify(safe.payload)}::jsonb
       )`);
   }
 }

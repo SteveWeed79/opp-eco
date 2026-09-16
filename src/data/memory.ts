@@ -10,6 +10,8 @@
 import type {
   ActorContext,
   Application,
+  ConsentRecord,
+  FundingCommitment,
   MentorshipOffer,
   MentorshipPairing,
   Organization,
@@ -27,8 +29,11 @@ import {
 import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { byObservedDescending } from "@/domain/outcome";
+import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
+import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
+import { DEMO_NOW } from "./seed";
 
 /** Postings an organization owns, for narrowing application access. */
 function postingIdsOwnedBy(organizationId: string | null): Set<string> {
@@ -96,6 +101,64 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
     return self ? rows.filter((p) => p.studentId === self.id) : [];
   }
   if (role === "board") return [];
+  return rows;
+}
+
+/**
+ * Consents the actor has standing to read.
+ *
+ * A learner sees their own — a record asserting that they agreed to something
+ * is the one they are most entitled to check. The institution that recorded it
+ * sees it because it is the one that will have to produce the form. An employer
+ * sees none: it is the beneficiary of the disclosure rather than a party to the
+ * agreement, and what consent buys it is a wider view of the learner, not sight
+ * of the paperwork.
+ */
+function visibleConsents(actor: ActorContext): ConsentRecord[] {
+  const { role, organizationId } = actor.membership;
+  if (role === "business") return [];
+
+  const rows = inScope(actor, seed.consents);
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((c) => c.studentId === self.id) : [];
+  }
+  if (role === "college") {
+    return rows.filter((c) => c.sourceOrgId === organizationId);
+  }
+  return rows;
+}
+
+/**
+ * Draws against a fund, narrowed by whose money and whose learner it is.
+ *
+ * An employer sees the commitments against placements it hosts, because it is
+ * the party being reimbursed and a payment it cannot see is one it cannot
+ * reconcile. A student sees their own — a grant covering their tuition is a
+ * fact about their own finances before it is a line in a board's report.
+ * Everyone else sees the market's.
+ *
+ * The funds themselves are deliberately NOT narrowed like this: everyone in a
+ * market reads every source. A student deciding whether they can afford the
+ * credit and an employer deciding whether hosting is viable are asking the same
+ * question, and a funding model visible only to its sponsor would reproduce the
+ * gap this venture exists to close.
+ */
+function visibleCommitments(actor: ActorContext): FundingCommitment[] {
+  const rows = inScope(actor, seed.fundingCommitments);
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") {
+    const own = postingIdsOwnedBy(organizationId);
+    const hosted = new Set(
+      seed.applications.filter((a) => own.has(a.postingId)).map((a) => a.id),
+    );
+    return rows.filter((c) => c.applicationId && hosted.has(c.applicationId));
+  }
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((c) => c.studentId === self.id) : [];
+  }
   return rows;
 }
 
@@ -218,7 +281,19 @@ export const repositories: Repositories = {
       // Only a business is held at arm's length. The college owns the student
       // relationship and the board needs identity to determine eligibility.
       if (actor.membership.role !== "business") return student;
-      return redactStudent(student, disclosureFor(application));
+
+      // Two conditions, and both must hold. The placement has to have reached a
+      // stage where the employer needs to reach the learner directly, **and**
+      // the crediting institution must have education-record consent on file.
+      // The stage rule alone let a college's FERPA-covered record widen to an
+      // employer on the strength of a status change nobody consented to.
+      const blocked = disclosureBlockReason(
+        seed.consents,
+        { studentId: student.id, sourceOrgId: student.collegeId },
+        DEMO_NOW,
+      );
+      const level = blocked ? "summary" : disclosureFor(application);
+      return redactStudent(student, level);
     },
   },
 
@@ -313,6 +388,42 @@ export const repositories: Repositories = {
     list: async (actor) => inScope(actor, seed.creditAwards),
     forStudent: async (actor, studentId) =>
       inScope(actor, seed.creditAwards).filter((c) => c.studentId === studentId),
+  },
+
+  consents: {
+    list: async (actor) => visibleConsents(actor).slice().sort(byConsentOrder),
+    find: async (actor, id) => visibleConsents(actor).find((c) => c.id === id) ?? null,
+    forStudent: async (actor, studentId) =>
+      visibleConsents(actor)
+        .filter((c) => c.studentId === studentId)
+        .sort(byConsentOrder),
+  },
+
+  fundingSources: {
+    list: async (actor) => inScope(actor, seed.fundingSources).slice().sort(byFundOrder),
+    find: async (actor, id) =>
+      inScope(actor, seed.fundingSources).find((f) => f.id === id) ?? null,
+    forMarket: async (actor, marketId) =>
+      inScope(actor, seed.fundingSources)
+        .filter((f) => f.marketId === marketId)
+        .sort(byFundOrder),
+  },
+
+  fundingCommitments: {
+    list: async (actor) => visibleCommitments(actor).slice().sort(byCommitmentOrder),
+    find: async (actor, id) => visibleCommitments(actor).find((c) => c.id === id) ?? null,
+    forSource: async (actor, sourceId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.fundingSourceId === sourceId)
+        .sort(byCommitmentOrder),
+    forApplication: async (actor, applicationId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.applicationId === applicationId)
+        .sort(byCommitmentOrder),
+    forStudent: async (actor, studentId) =>
+      visibleCommitments(actor)
+        .filter((c) => c.studentId === studentId)
+        .sort(byCommitmentOrder),
   },
 
   outcomes: {

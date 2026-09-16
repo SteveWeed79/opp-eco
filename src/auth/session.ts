@@ -1,8 +1,10 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ActorContext, ActorRole } from "@/domain/types";
 import { contextFor, demoAccounts } from "@/data/session";
-import { PORTAL_PATH } from "@/routes";
+import { PORTAL_PATH, SIGN_IN_PATH } from "@/routes";
+import { anonymousFallbackAllowed, authConfig } from "./config";
 
 /**
  * Session resolution.
@@ -19,6 +21,27 @@ import { PORTAL_PATH } from "@/routes";
  */
 
 export const SESSION_COOKIE = "oe_demo_role";
+
+/**
+ * The real session cookie, holding an opaque token.
+ *
+ * A different name from the demo cookie on purpose. Switching a deployment from
+ * the role picker to real sign-on must not leave a browser presenting the
+ * string "board" to a resolver that now expects a token — one name for two
+ * meanings is how a mode switch becomes an authentication bug.
+ */
+export const AUTH_COOKIE = "oe_session";
+
+/**
+ * Somebody between the two factors.
+ *
+ * A different name from the session cookie on purpose, and holding a value that
+ * resolves to nothing: `codeSessionProvider` looks up `oe_session` and knows
+ * nothing about this one, so a challenge token presented as a session is simply
+ * not a session. One name for two meanings is how a half-finished sign-in
+ * becomes a finished one.
+ */
+export const MFA_COOKIE = "oe_mfa";
 
 /**
  * What a real provider would implement. Auth.js, Clerk, and WorkOS all reduce
@@ -46,21 +69,54 @@ export const demoSessionProvider: SessionProvider = {
   },
 };
 
-let provider: SessionProvider = demoSessionProvider;
+/**
+ * Real sign-on: an opaque token resolved against a server-side session.
+ *
+ * Deliberately the same interface as the demo provider. That is the seam the
+ * original file promised — "replacing simulated sign-on touches this and
+ * nothing else" — and this is it being cashed in.
+ */
+export const codeSessionProvider: SessionProvider = {
+  name: "email-code",
+  async resolve() {
+    const store = await cookies();
+    const token = store.get(AUTH_COOKIE)?.value;
+    if (!token) return null;
+    const { resolveSessionToken } = await import("@/services/auth");
+    return resolveSessionToken(token);
+  },
+};
+
+function providerForMode(): SessionProvider {
+  return authConfig().mode === "code" ? codeSessionProvider : demoSessionProvider;
+}
+
+let provider: SessionProvider | null = null;
 
 /** Swap the provider — used by tests, and by whatever replaces the demo. */
-export function setSessionProvider(next: SessionProvider) {
+export function setSessionProvider(next: SessionProvider | null) {
   provider = next;
 }
 
 export function currentProvider(): SessionProvider {
+  provider ??= providerForMode();
   return provider;
 }
 
-export async function getActor(): Promise<ActorContext | null> {
-  return provider.resolve();
-}
-
+/**
+ * Who is calling, resolved once per request.
+ *
+ * Memoized, because a single portal render asks four times over — the root
+ * layout for the masthead and theme, the segment layout for the gate, the page
+ * for its scoping, and the page again to decide what is linkable. Each ask is
+ * four round trips and a write to the session's last-seen stamp, so without
+ * this the cheapest page in the application does sixteen queries to answer one
+ * question. React's `cache` is scoped to the request, so signing in during one
+ * and reading in the next still sees the new session.
+ */
+export const getActor = cache(
+  async (): Promise<ActorContext | null> => currentProvider().resolve(),
+);
 
 /**
  * The actor for a portal page.
@@ -76,9 +132,20 @@ export async function getActor(): Promise<ActorContext | null> {
  *    on a null dereference and rendered the error boundary. The administrator
  *    already sees every market through the admin console, which is the read
  *    path built for the purpose and the one that redacts.
- *  - **Signed out.** Falls back to the portal's own demo account, because this
- *    is a demonstration where every screen must be reachable from a bare link.
- *    A real deployment replaces that fallback with `unauthorized()`.
+ *  - **Signed out.** Under real sign-on, redirected to sign in. Under the demo
+ *    it falls back to the portal's own account, because a demonstration has to
+ *    be walkable from a bare link — see `anonymousFallbackAllowed`.
+ *
+ * **Call this from the segment's `layout`, not only its `page`.** Every portal
+ * has a `loading.tsx`, which wraps the page in a Suspense boundary; by the time
+ * a component inside that boundary runs, the response has committed and begun
+ * streaming, and Next can no longer answer with a 307. It appends a client-side
+ * navigation instead — a browser flicks to the sign-in page, but the status is
+ * 200 and the shell has already gone out on the wire. A layout renders above
+ * its own loading boundary, so the same call there refuses before anything is
+ * flushed. `src/auth/portal-layout.tsx` is that gate; the pages still call this
+ * as well, because they need the actor and because a check that disappears when
+ * one file is deleted is not a check.
  */
 export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
   const session = await getActor();
@@ -89,6 +156,7 @@ export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
     // crash it replaces.
     redirect(PORTAL_PATH[session.membership.role]);
   }
+  if (!anonymousFallbackAllowed()) redirect(SIGN_IN_PATH);
   return contextFor(portal);
 }
 
@@ -106,7 +174,10 @@ export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
  * market and a role, not an exemption from the repository rules.
  */
 export async function viewerActor(): Promise<ActorContext> {
-  return (await getActor()) ?? contextFor("student");
+  const session = await getActor();
+  if (session) return session;
+  if (!anonymousFallbackAllowed()) redirect(SIGN_IN_PATH);
+  return contextFor("student");
 }
 
 /**

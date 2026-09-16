@@ -26,7 +26,8 @@ import type {
 import { attemptTransition, isTerminal } from "@/domain/workflow";
 import { timesheetTotals } from "@/domain/timesheet";
 import { repositories } from "@/data/backend";
-import { marketRemainingBudget } from "@/lib/queries";
+import { marketFunding } from "@/lib/queries";
+import { settlementFor } from "@/domain/funding";
 import {
   ConcurrencyError,
   type NotificationIntent,
@@ -121,12 +122,29 @@ export async function executeTransition(
 
   const proposed: Application = { ...existing, ...command.patch };
 
+  // Read once and used three times below — the guard's remaining balance, the
+  // rate quoted in notifications, and nothing else needs a second round trip.
+  const funding = await marketFunding(actor, market.id);
+
+  /**
+   * Draws against this placement, read before the transaction because a
+   * `UnitOfWork` writes and does not read.
+   *
+   * Only fetched when the move could settle something. Most transitions cannot,
+   * and a query per status change on a page that renders a dozen of them is the
+   * cost this avoids.
+   */
+  const commitments = await repositories.fundingCommitments.forApplication(
+    actor,
+    existing.id,
+  );
+
   const verdict = attemptTransition(
     actor,
     {
       application: proposed,
       student,
-      remainingBudget: await marketRemainingBudget(actor, market),
+      remainingBudget: funding.wage?.remaining ?? 0,
       postingOwnerId: posting.businessId,
       // Counted here rather than trusted from the caller. The page renders a
       // button using its own count, but the button is not the authority — a
@@ -187,6 +205,24 @@ export async function executeTransition(
       uow.appendAuditEvent(event);
       command.sideEffects?.(uow, updated);
 
+      /**
+       * Settle the money in the same transaction as the state change.
+       *
+       * A placement that finished has *spent* its commitment; one that ended
+       * before anyone started gives it back. Doing this here rather than in
+       * each caller is what stops the two diverging: five portals can move an
+       * application into a terminal status, and a settlement rule living in one
+       * of them is a rule the other four break.
+       */
+      for (const commitment of commitments) {
+        const settled = settlementFor(updated, commitment);
+        if (!settled) continue;
+        uow.saveFundingCommitment(
+          { ...commitment, status: settled },
+          commitment.version,
+        );
+      }
+
       // Policy first, caller second, deduplicated on recipient and kind so a
       // caller adding a message the table already covers cannot send it twice.
       const policyIntents = command.suppressPolicyNotifications
@@ -199,6 +235,7 @@ export async function executeTransition(
             college: parties.college,
             employer: parties.employer,
             board: parties.board,
+            wageRatePerHour: funding.wage?.source.ratePerHour ?? 0,
           });
 
       const seen = new Set<string>();

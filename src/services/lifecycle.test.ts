@@ -121,7 +121,7 @@ describe("verifying a student", () => {
 
     await transitionStudent(college(), "stu-omar", "verified");
 
-    expect(pendingNotifications.filter((n) => n.kind === "student.verified")).toHaveLength(1);
+    expect(pendingNotifications.filter((n) => n.intent.kind === "student.verified")).toHaveLength(1);
     expect(seed.auditEvents[0]).toMatchObject({
       entityType: "student",
       entityId: "stu-omar",
@@ -162,7 +162,7 @@ describe("publishing a posting", () => {
 
     expect(result.ok).toBe(true);
     expect(
-      pendingNotifications.filter((n) => n.kind === "posting.published"),
+      pendingNotifications.filter((n) => n.intent.kind === "posting.published"),
     ).toHaveLength(1);
   });
 
@@ -177,9 +177,9 @@ describe("publishing a posting", () => {
     );
 
     const sent = pendingNotifications.find(
-      (n) => n.kind === "posting.changes_requested",
+      (n) => n.intent.kind === "posting.changes_requested",
     );
-    expect(sent?.payload.reason).toContain("hours per week");
+    expect(sent?.intent.payload.reason).toContain("hours per week");
   });
 
   it("refuses to publish a posting nobody could match", async () => {
@@ -224,7 +224,7 @@ describe("vetting an organization", () => {
 
     expect(result.ok).toBe(true);
     expect(
-      pendingNotifications.filter((n) => n.kind === "organization.approved"),
+      pendingNotifications.filter((n) => n.intent.kind === "organization.approved"),
     ).toHaveLength(1);
   });
 
@@ -277,9 +277,9 @@ describe("vetting an organization", () => {
       "Insurance certificate lapsed.",
     );
 
-    const sent = pendingNotifications.find((n) => n.kind === "organization.suspended");
+    const sent = pendingNotifications.find((n) => n.intent.kind === "organization.suspended");
     expect(sent).toBeTruthy();
-    expect(sent?.payload.reason).toContain("Insurance");
+    expect(sent?.intent.payload.reason).toContain("Insurance");
   });
 
   it("is refused to every role but admin", async () => {

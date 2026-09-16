@@ -233,6 +233,30 @@ currently represent. Ordered by how much of the vision each one unlocks.
 
 ### D1. Funding is one source; it needs to be many
 
+> **Built.** `FundingSource` (sponsor, kind, purpose, allocation, optional
+> hourly rate) and `FundingCommitment` (the ledger) are in, across both data
+> layers, with migrations `0005_partner_kinds.sql` and `0006_funding.sql`.
+> **`Market.subsidyBudget` and `subsidyRatePerHour` are gone** rather than kept
+> in step — a figure written in one place and read in five is what the codebase
+> avoids everywhere else — and every balance on every screen is derived from
+> sources and commitments.
+>
+> **Three things came out differently from the sketch below.** An allocation is
+> *expected to change*, so `adjustFundingSource` is a first-class audited write
+> with a required reason, and reducing one below what is already committed is
+> **allowed** — a rescission is real, and the fund reports itself overcommitted
+> rather than the edit being refused. Commitments carry their own rate, so
+> changing a fund's rate cannot rewrite what was already promised. And
+> settlement distinguishes *disbursed* from *released*, which the old
+> "is the application terminal" test could not: a finished placement spent its
+> money and an abandoned one gives it back.
+>
+> `organization_kind` gained exactly one value, `nonprofit`, because a fund
+> needs a sponsor — the rest of D2 is untouched and still open. **What still
+> needs a decision** is program-year rollover (Q24).
+
+
+
 `Market` carries `subsidyBudget`, `subsidyRatePerHour`, and a single `boardId`. Every
 funding claim in the system is a workforce board reimbursing $20/hour against approved
 hours. The application describes a venture whose distinctive service is **funding
@@ -606,7 +630,7 @@ A, since it changes who the front door addresses.
 | ~~Next~~ **Done** | B (`/partners`) and G (claim discipline) | Both landed with the front-door split: `/partners` describes the three tiers by scope, and the landing page no longer promises $20/hour in every market. |
 | **Next** | C (phases, reopen Q8) | Cheap, and it is what stops the other changes reading as overreach. |
 | ~~Before the pilot~~ **Done** | D4 (outcomes) | Built. The record exists before the data does, which was the whole argument for doing it early. |
-| **Before the pilot** | D1 (funding sources) | Needs to exist *before* data starts arriving, or year one is unmeasurable in the terms the application promises. |
+| ~~Before the pilot~~ **Done** | D1 (funding sources) | Built. The foundation's dollars and the survey's top barrier — the cost of internship credit — are recordable, and a market's allocation is a row that can change rather than a constant. |
 | **Before the pilot** | D3 (`Learner`) | Identity refactors get more expensive every month there is real data. |
 | **With phase 2** | D2 (partner kinds), E full (partner portal) | Follow the first partner who is neither a college nor a board. |
 | **With phase 3** | D5 (experience profiles) | The refactor pays for itself at the third experience type, not the second. |

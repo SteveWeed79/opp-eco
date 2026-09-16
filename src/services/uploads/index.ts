@@ -4,11 +4,14 @@
  * One entry point, so no caller can accidentally skip a step. The order is
  * load-bearing:
  *
- *   rate limit → size → filename → extension → magic bytes → store
- *   quarantined → scan → clean
+ *   scanner present? → rate limit → size → filename → extension → magic bytes
+ *   → store quarantined → scan → clean
  *
  * Cheap rejections come first so a hostile body is refused before anything
- * reads it, and the file is unreachable between storing and scanning.
+ * reads it, and the file is unreachable between storing and scanning. The
+ * first step is new and is not about this file: a deployment holding real
+ * records with only the EICAR stub behind it passes everything, so it is told
+ * to stop accepting uploads rather than accepting them unscanned.
  */
 
 import type { ActorContext } from "@/domain/types";
@@ -21,17 +24,20 @@ import {
 } from "./validation";
 import {
   contentTypeFor,
-  fileStore,
   signDownloadUrl,
   type FileStore,
   type StoredFile,
 } from "./storage";
-import { scanStoredFile, type Scanner, stubScanner } from "./scanning";
+import { fileStore } from "./backend";
+import { scanStoredFile, type Scanner } from "./scanning";
+import { configuredScanner, uploadRefusalReason } from "./config";
 
 export * from "./validation";
 export * from "./storage";
 export * from "./scanning";
 export * from "./access";
+export * from "./backend";
+export * from "./config";
 
 export type UploadResult =
   | { ok: true; file: StoredFile; downloadUrl: string }
@@ -52,8 +58,20 @@ export async function receiveUpload(
   target: UploadTarget,
   deps: { store?: FileStore; scanner?: Scanner } = {},
 ): Promise<UploadResult> {
-  const store = deps.store ?? fileStore;
-  const scanner = deps.scanner ?? stubScanner;
+  const store = deps.store ?? fileStore();
+  const scanner = deps.scanner ?? configuredScanner();
+
+  // Before the rate limit and before a byte is read: a deployment holding real
+  // records with no scanner behind it should not be accepting files at all,
+  // and saying so is cheaper than storing something nothing will ever clear.
+  // An explicitly injected scanner is the test's business and skips this.
+  if (!deps.scanner) {
+    const refusal = uploadRefusalReason();
+    if (refusal) {
+      logger.warn("upload.refused", { purpose, reason: "no_scanner" });
+      return { ok: false, error: refusal };
+    }
+  }
 
   const limit = checkRateLimit(
     callerKey("upload", actor.user.id),

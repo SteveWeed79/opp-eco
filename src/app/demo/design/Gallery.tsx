@@ -105,15 +105,30 @@ function ActionsSection() {
 
   return (
     <>
+      {/* Every swatch is wired, because `Button` no longer accepts a control
+          with nothing behind it — and a gallery of buttons that swallow the
+          click is the least convincing possible demonstration of a button. */}
       <Section title="Buttons" note="Danger is reserved for irreversible actions, so the colour keeps its meaning">
         <div className="flex flex-wrap gap-3">
-          <Button variant="primary">Primary</Button>
-          <Button variant="dark">Dark</Button>
-          <Button variant="ghost">Ghost</Button>
-          <Button variant="danger">Danger</Button>
-          <Button variant="quiet">Quiet</Button>
-          <Button variant="primary" disabled>Disabled</Button>
-          <Button variant="primary" size="sm">Small</Button>
+          {(["primary", "dark", "ghost", "danger", "quiet"] as const).map((variant) => (
+            <Button
+              key={variant}
+              variant={variant}
+              onClick={() => toast.show("info", `${variant} button pressed`)}
+            >
+              {variant[0].toUpperCase() + variant.slice(1)}
+            </Button>
+          ))}
+          <Button variant="primary" disabled title="Disabled is a state this gallery is demonstrating">
+            Disabled
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => toast.show("info", "small button pressed")}
+          >
+            Small
+          </Button>
         </div>
       </Section>
 
