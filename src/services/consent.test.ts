@@ -324,4 +324,109 @@ describe("purging a learner's identity", () => {
       if (at !== -1) seed.auditEvents.splice(at, 1);
     }
   });
+
+  it("takes the free text on their observations with it, and leaves the figures", async () => {
+    // The gap this test was written for. A purge scrubbed the name on `users`
+    // and the profile on `students` and left `outcomes.detail` and
+    // `host_offers.note` exactly as written — and a sentence is the one field
+    // here that carries a name without anybody noticing. "No headcount, but she
+    // was good" is an ordinary thing for an employer to write and a direct
+    // identifier sitting beside a record whose identity has been erased.
+    //
+    // The other half of the assertion matters as much: the kind, the county and
+    // the answer survive. Purging anonymises rather than deletes, and what
+    // survives is what the aggregates are computed from.
+    const { purgeLearnerIdentity } = await import("./retention");
+    const { createMemoryFileStore } = await import("@/services/uploads/storage");
+    const { store } = await import("@/data/backend");
+    const { isTerminal } = await import("@/domain/workflow");
+
+    const learner = seed.students.find(
+      (s) =>
+        !s.purgedOn &&
+        seed.applications
+          .filter((a) => a.studentId === s.id)
+          .every((a) => isTerminal(a.status)),
+    )!;
+    const studentBefore = { ...learner };
+    const outcomesBefore = seed.outcomes.map((o) => ({ ...o }));
+    const offersBefore = seed.hostOffers.map((o) => ({ ...o }));
+
+    // Free text to lose, written for this test rather than borrowed from a
+    // fixture. The learner the retention rules actually allow through has no
+    // observations of their own in the seed, and a test that passes because
+    // there was nothing to clear is not a test.
+    const theirApplication =
+      seed.applications.find((a) => a.studentId === learner.id)?.id ?? null;
+    seed.outcomes.push({
+      id: "out-purge-probe",
+      marketId: learner.marketId,
+      studentId: learner.id,
+      applicationId: theirApplication,
+      kind: "employed",
+      employedByHost: false,
+      employmentCounty: "Crawford",
+      employmentState: "KS",
+      assertedInRegion: null,
+      observedOn: "2026-06-01T00:00:00.000Z",
+      recordedOn: "2026-06-01T00:00:00.000Z",
+      recordedByUserId: "u-ellen",
+      source: "college",
+      detail: "Hired at the hospital in town, started in June.",
+    });
+    seed.hostOffers.push({
+      id: "hoff-purge-probe",
+      marketId: learner.marketId,
+      applicationId: theirApplication ?? "app-purge-probe",
+      businessId: "org-apex",
+      studentId: learner.id,
+      answer: "none",
+      recordedByUserId: "u-dana",
+      recordedOn: "2026-06-01T00:00:00.000Z",
+      source: "business",
+      note: "No headcount this year, but we would take them back.",
+    });
+
+    const farFuture = new Date("2040-01-01T00:00:00.000Z");
+
+    try {
+      const result = await purgeLearnerIdentity(
+        admin(),
+        learner.id,
+        "Retention schedule.",
+        { store, now: () => farFuture, files: () => createMemoryFileStore() },
+      );
+      expect(result.ok).toBe(true);
+
+      for (const row of seed.outcomes.filter((o) => o.studentId === learner.id)) {
+        expect(row.detail).toBeUndefined();
+        // Still a measurable observation. The figure is the point of keeping it.
+        expect(row.kind).toBeTruthy();
+      }
+      for (const row of seed.hostOffers.filter((o) => o.studentId === learner.id)) {
+        expect(row.note).toBeUndefined();
+        expect(row.answer).toBeTruthy();
+      }
+
+      // Scoped, not a sweep. Another learner's note is none of this purge's
+      // business, and clearing it would be a silent data loss nobody asked for.
+      const others = seed.hostOffers.filter((o) => o.studentId !== learner.id);
+      const othersBefore = offersBefore.filter((o) => o.studentId !== learner.id);
+      expect(others.map((o) => o.note)).toEqual(othersBefore.map((o) => o.note));
+      expect(
+        seed.outcomes.filter((o) => o.studentId !== learner.id).map((o) => o.detail),
+      ).toEqual(
+        outcomesBefore.filter((o) => o.studentId !== learner.id).map((o) => o.detail),
+      );
+    } finally {
+      const i = seed.students.findIndex((s) => s.id === studentBefore.id);
+      if (i !== -1) seed.students[i] = studentBefore;
+      seed.outcomes.splice(0, seed.outcomes.length, ...outcomesBefore);
+      seed.hostOffers.splice(0, seed.hostOffers.length, ...offersBefore);
+      const at = seed.auditEvents.findIndex(
+        (e) => e.entityId === studentBefore.id && e.to === "purged",
+      );
+      if (at !== -1) seed.auditEvents.splice(at, 1);
+    }
+  });
 });

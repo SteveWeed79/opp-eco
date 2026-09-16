@@ -595,6 +595,21 @@ active learner is never purged however old their record is — the rule is "no
 longer required for the purpose collected", and a live application is that
 purpose.
 
+**A purge reaches the free text on observations**, meaning `outcomes.detail` and
+`host_offers.note`. This did not, at first: the purge scrubbed the name on
+`users` and the profile on `students` and left every sentence anybody had
+written exactly as written. A sentence is the one field in either table that can
+carry a name without anybody noticing — "no headcount, but she was good" is an
+ordinary thing for an employer to write and a direct identifier sitting beside a
+record whose identity has just been erased. The test for it writes its own text
+first, because the learner the retention rules actually let through has no
+observations in the fixtures, and a test that passes because there was nothing
+to clear is not a test.
+
+The kind, the county and the host's answer survive, which is the same rule
+stated from the other side: what goes is what identifies, what stays is what
+aggregates.
+
 There is no unattended sweep, deliberately. Anonymisation is irreversible and the
 first automatic run would hit every record at once; a person pressing a button
 against a computed list is how you find out the schedule is wrong while that is

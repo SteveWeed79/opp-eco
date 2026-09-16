@@ -426,6 +426,13 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       UPDATE users SET name = ${student.name}, email = ${student.email}
       WHERE id = ${student.userId}`);
+    // The free text on every observation about them, for the reason the
+    // contract gives. Nulled rather than deleted: the row is the figure, and
+    // the sentence is the only part of it that can name somebody.
+    this.add(sql`
+      UPDATE outcomes SET detail = NULL WHERE student_id = ${student.id}`);
+    this.add(sql`
+      UPDATE host_offers SET note = NULL WHERE student_id = ${student.id}`);
   }
 
   changeUserEmail(userId: string, email: string) {

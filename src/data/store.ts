@@ -228,6 +228,18 @@ export interface UnitOfWork {
    * apart. Exposing a general `saveUser` to achieve it would hand every caller
    * the ability to rename a person, which nothing in this product should be
    * able to do.
+   *
+   * **It reaches the free text on observations too** — `outcomes.detail` and
+   * `host_offers.note` — and that is four writes in one unit rather than two
+   * for the same reason. The rule this schedule states is that the rows stay
+   * and the identifiers go, and what survives is what aggregates are *by*.
+   * Nothing aggregates over a sentence, and a sentence is the one field here
+   * that can carry a name without anybody noticing: "no headcount, but she was
+   * good" is an ordinary thing for an employer to write and a direct identifier
+   * sitting beside a record whose identity has been scrubbed.
+   *
+   * The kind, the county and the answer are left alone. They are the figures
+   * the purge exists to preserve, and none of them names anybody.
    */
   purgeLearner(student: Student, at: string): void;
   /**

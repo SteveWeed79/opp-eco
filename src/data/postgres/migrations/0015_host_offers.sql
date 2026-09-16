@@ -78,15 +78,17 @@ CREATE TABLE host_offers (
 -- happens on every visit to the business portal.
 CREATE INDEX host_offers_by_business ON host_offers (business_id, recorded_on DESC);
 
--- Serves `forStudent`, which is how a learner's own portal finds the answer
--- about their own placement.
+-- Serves two reads: a learner's own portal finding the answer about their own
+-- placement, and the retention purge clearing `note` for everything about a
+-- learner being anonymised.
 --
--- Note what this does NOT do: the retention purge removes a learner's direct
--- identifiers and does not reach the free text on observations — not here and
--- not on `outcomes.detail` either. An employer's note about a purged learner
--- survives the purge. That is the existing behaviour rather than something
--- this table introduces, and it is worth an explicit line because the obvious
--- assumption is the opposite.
+-- That second one is why this index is not optional. The purge nulls the free
+-- text here and on `outcomes.detail`, because a sentence is the one field in
+-- either table that can carry a name without anybody noticing — "no headcount,
+-- but she was good" is an ordinary thing for an employer to write and a direct
+-- identifier sitting beside a record whose identity has been scrubbed. The
+-- answer, the kind and the county survive; they are the figures the purge
+-- exists to preserve and none of them names anybody.
 CREATE INDEX host_offers_by_student ON host_offers (student_id);
 
 COMMIT;

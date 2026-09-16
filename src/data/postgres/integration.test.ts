@@ -517,6 +517,40 @@ withDatabase("the write path", () => {
   /** A fresh database for each write case, so one cannot depend on another. */
   beforeAll(reseed);
 
+  it("clears the free text on a purged learner's observations, and nobody else's", async () => {
+    // The in-memory layer has this covered in `consent.test.ts`; this is the
+    // half that only SQL can get wrong. Two UPDATEs with a `student_id`
+    // predicate look obviously right and are exactly the shape that silently
+    // touches every row when the predicate is dropped — so the assertion is
+    // both that the learner's text is gone and that somebody else's is not.
+    const store = postgresStore(client);
+    const repos = postgresRepositories(client);
+    const admin = contextFor("admin");
+
+    const offers = await repos.hostOffers.list(admin);
+    const mine = offers.find((o) => o.note)!;
+    expect(mine).toBeTruthy();
+    const theirs = offers.find((o) => o.note && o.studentId !== mine.studentId);
+    expect(theirs).toBeTruthy();
+
+    const student = (await repos.students.find(admin, mine.studentId))!;
+    await store.transaction((uow) => {
+      uow.purgeLearner({ ...student, name: "Purged", email: "" }, new Date().toISOString());
+    });
+
+    const after = await repos.hostOffers.list(admin);
+    expect(after.find((o) => o.id === mine.id)?.note).toBeUndefined();
+    expect(after.find((o) => o.id === theirs!.id)?.note).toBe(theirs!.note);
+
+    // The answer itself survives. Purging anonymises rather than deletes, and
+    // what survives is what the aggregates are computed from.
+    expect(after.find((o) => o.id === mine.id)?.answer).toBe(mine.answer);
+
+    for (const row of await repos.outcomes.forStudent(admin, mine.studentId)) {
+      expect(row.detail).toBeUndefined();
+    }
+  });
+
   it("commits the row, its audit entry, and its notification together", async () => {
     const store = postgresStore(client);
     const actor = contextFor("college");

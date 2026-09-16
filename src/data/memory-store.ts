@@ -293,6 +293,20 @@ class MemoryUnitOfWork implements UnitOfWork {
           email: student.email,
         };
       }
+      // And the free text, for the reason the contract gives: a sentence is
+      // the one field here that can carry a name without anybody noticing.
+      // Rewritten in place rather than filtered out — the observation itself is
+      // what the figures are computed from and has to survive.
+      for (let i = 0; i < seed.outcomes.length; i++) {
+        if (seed.outcomes[i].studentId === student.id && seed.outcomes[i].detail) {
+          seed.outcomes[i] = { ...seed.outcomes[i], detail: undefined };
+        }
+      }
+      for (let i = 0; i < seed.hostOffers.length; i++) {
+        if (seed.hostOffers[i].studentId === student.id && seed.hostOffers[i].note) {
+          seed.hostOffers[i] = { ...seed.hostOffers[i], note: undefined };
+        }
+      }
     });
   }
 
