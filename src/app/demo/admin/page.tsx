@@ -7,6 +7,7 @@ import {
   Compass,
   HandCoins,
   HandHeart,
+  Handshake,
   ShieldCheck,
   MapPin,
   TrendingUp,
@@ -30,6 +31,7 @@ import {
   TableWrap,
   TrackBadge,
 } from "@/components/ui";
+import { HOST_OFFER_ANSWERS } from "@/domain/offer";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { organizationMachine } from "@/domain/lifecycle";
@@ -53,6 +55,9 @@ import {
   allMarketHealth,
   averagePauseDays,
   funnel,
+  followUpQueue,
+  hostOfferQueue,
+  hostOfferReport,
   outcomeReport,
   retentionHorizon,
   stalledApplications,
@@ -147,6 +152,9 @@ export default async function AdminPage() {
     deployed,
     pauseDays,
     outcomes,
+    offers,
+    offerQueue,
+    followUps,
   ] = await Promise.all([
     allMarketHealth(admin),
     stalledApplications(admin),
@@ -156,6 +164,9 @@ export default async function AdminPage() {
     subsidyDeployed(admin),
     averagePauseDays(admin),
     outcomeReport(admin),
+    hostOfferReport(admin),
+    hostOfferQueue(admin),
+    followUpQueue(admin),
   ]);
   /**
    * Every fund across every market, and who could be awarded from one.
@@ -642,8 +653,147 @@ export default async function AdminPage() {
             </Assumption>
           </div>
         </Card>
+
+        {/* -------------------------------------------------------------- */}
+        {/* What the hosts did.                                             */}
+        {/*                                                                 */}
+        {/* The one question with exactly one party who can answer it, and  */}
+        {/* the only place the difference between "we offered and they left */}
+        {/* anyway" and "we made no offer" is visible. Two towns with the   */}
+        {/* same hire rate and different offer rates have opposite problems */}
+        {/* and only one of them is about jobs.                             */}
+        {/* -------------------------------------------------------------- */}
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<Handshake className="w-5 h-5" />}
+            title="What the hosts did"
+            subtitle="Whether the employer who supervised the placement offered to keep them"
+          />
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex flex-wrap gap-6">
+              <Stat
+                label="Kept on by the host"
+                value={
+                  offers.hireRate === null
+                    ? "—"
+                    : `${Math.round(offers.hireRate * 100)}%`
+                }
+                hint={
+                  offers.hireRate === null
+                    ? "Nobody has answered yet"
+                    : `${offers.accepted} of ${offers.answered} answered`
+                }
+              />
+              <Stat
+                label="Offered anything"
+                value={
+                  offers.offerRate === null
+                    ? "—"
+                    : `${Math.round(offers.offerRate * 100)}%`
+                }
+                hint={
+                  offers.declined > 0
+                    ? `${offers.declined} turned an offer down`
+                    : "Offers made, accepted or not"
+                }
+              />
+              <Stat
+                label="Nobody asked"
+                value={String(offers.unanswered)}
+                hint="Finished placements with no answer — silence, not a no"
+                tone={offers.unanswered > offers.answered ? "warn" : "neutral"}
+              />
+            </div>
+
+            {offers.answered === 0 ? (
+              <Empty>
+                No employer has answered yet. The rate stays blank rather than
+                reading zero — an unasked question is not a refusal to hire.
+              </Empty>
+            ) : (
+              <div className="space-y-3">
+                {HOST_OFFER_ANSWERS.map(({ value, label }) => {
+                  const count =
+                    value === "accepted"
+                      ? offers.accepted
+                      : value === "declined"
+                        ? offers.declined
+                        : offers.none;
+                  return (
+                    <div key={value}>
+                      <div className="flex items-baseline justify-between mb-1">
+                        <span className="text-sm text-ink-700">{label}</span>
+                        <span className="text-sm font-bold text-ink-950 tabular">
+                          {count}
+                        </span>
+                      </div>
+                      <ProgressBar
+                        value={count}
+                        max={offers.answered || 1}
+                        label={`${label} answers`}
+                        tone="brand"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Assumption>
+              A recorded &ldquo;we made no offer&rdquo; is a finding. A placement
+              nobody has answered for is a gap, and the two are never added
+              together — the rate is over what was answered, and what was not is
+              the count beside it.
+            </Assumption>
+          </div>
+        </Card>
       </div>
       </PageSection>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Who to ring.                                                        */}
+      {/*                                                                     */}
+      {/* Every other card on this page is a figure. This is a worklist, and  */}
+      {/* it exists because a non-answer is not a yes and not a no: it is     */}
+      {/* somebody's job to find out. Two columns because they are two calls  */}
+      {/* to two different people — the employer knows what it decided, the   */}
+      {/* learner knows where they are now, and neither can answer for the    */}
+      {/* other.                                                              */}
+      {/* ------------------------------------------------------------------ */}
+      {(offerQueue.length > 0 || followUps.length > 0) && (
+        <PageSection
+          title="Still to chase"
+          description="Finished placements nobody has answered for. Not bad results — no results, which is the only gap on this page a phone call closes."
+        >
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ChaseList
+              icon={<Handshake className="w-5 h-5" />}
+              title="Ask the employer"
+              subtitle="Did you offer them a job? Nobody else can answer it"
+              rows={offerQueue.map((item) => ({
+                id: item.application.id,
+                who: organizationName(item.posting.businessId),
+                about: `${item.student.name} · ${item.posting.title}`,
+                days: item.days,
+              }))}
+              empty="Every finished placement has an answer."
+            />
+            <ChaseList
+              icon={<Compass className="w-5 h-5" />}
+              title="Ask the learner"
+              subtitle="Where are they now? The employer only knows its own half"
+              rows={followUps.map((item) => ({
+                id: item.application.id,
+                who: item.student.name,
+                about: item.posting.title,
+                days: item.days,
+              }))}
+              empty="Every finished placement has a follow-up."
+            />
+          </div>
+        </PageSection>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Funding — the thing the venture actually sells.                     */}
@@ -1006,5 +1156,61 @@ export default async function AdminPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/**
+ * One side of the chase: who to contact, about whom, and how long it has sat.
+ *
+ * A list rather than a figure, because the administrator working this screen is
+ * about to open their email. Sorted longest-wait-first by the queries that feed
+ * it — the oldest is both the most urgent and the least likely to be answered
+ * accurately, which is the argument for working it at all.
+ *
+ * Rendered even when empty, unlike the "needs you" zone on the employer's page.
+ * The difference is who is reading: an employer shown a permanent empty heading
+ * learns the heading means nothing, while an administrator checking whether the
+ * follow-up is happening needs "nothing outstanding" to be a visible answer
+ * rather than a missing card.
+ */
+function ChaseList({
+  icon,
+  title,
+  subtitle,
+  rows,
+  empty,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  rows: { id: string; who: string; about: string; days: number }[];
+  empty: string;
+}) {
+  return (
+    <Card>
+      <CardHeader level={3} icon={icon} title={title} subtitle={subtitle} />
+      {rows.length === 0 ? (
+        <div className="px-6 py-5">
+          <Empty>{empty}</Empty>
+        </div>
+      ) : (
+        <ul className="row-list divide-y divide-line">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="px-6 py-3 flex flex-wrap items-center justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-ink-950">{row.who}</p>
+                <p className="text-xs text-ink-500 mt-0.5">{row.about}</p>
+              </div>
+              <Badge tone={row.days > 60 ? "warn" : "neutral"}>
+                {row.days} {row.days === 1 ? "day" : "days"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
