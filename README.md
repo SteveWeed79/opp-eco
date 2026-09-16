@@ -350,22 +350,37 @@ to end up **working in their own region**. The lifecycle ended at credit granted
 so there was nowhere to put the answer either way.
 
 An `Outcome` is one follow-up observation about one learner, and optionally about
-the experience it followed. Six answers:
+the experience it followed. Four answers:
 
 | | Counts as |
 |---|---|
-| Hired by the host employer | Regional employment |
-| Employed in the region | Regional employment |
-| Employed outside the region | Employment, not retention |
+| Employed | Employment. Whether it is *regional* employment is derived from where |
 | Continued in education | Positive, not employment |
 | Entered training or an apprenticeship | Positive, not employment |
 | Still looking | A recorded result |
 
-**Employed in the region and employed elsewhere are separate values, not one
-"employed".** That distinction is the entire argument the venture rests on: a
-programme that reliably produces graduates who leave is a talent pipeline out of
-the county, and a board funding it should be able to see that. Folding them
-together would give a number that always looks good.
+**Whether they stayed is derived, not recorded.** The kind used to carry the
+place — `employed_by_host`, `employed_in_region`, `employed_elsewhere` — which
+made "in region" a judgement whoever picked from the list had to make, with no
+definition of region stored anywhere to make it against. Pittsburg is twenty
+miles from Joplin across a state line, and two colleges will draw that line
+differently. A comparison broken that way still renders as a clean chart.
+
+So an employment outcome carries the **county and state the work is in**, and
+`inRegion` derives the answer against the counties a `Market` declares. That
+distinction is the entire argument the venture rests on — a programme that
+reliably produces graduates who leave is a talent pipeline out of the county, and
+a board funding it should be able to see that — which is exactly why it should
+not depend on who filled in the form. One captured county also answers county,
+workforce-area and state roll-ups; a boolean answers none of them, and cannot be
+re-derived when the boundary you meant turns out to be wrong.
+
+Two cases the shape has to allow for. **A hire by the host needs no county**:
+`employedByHost` says so, and the host is by definition an employer in this
+market. And **the county is optional**, because a follow-up that established
+somebody is working without establishing where is a real half-answer, not a form
+to refuse — it counts as `placeUnknown`, separately from having left, on the same
+principle as the section below.
 
 **It is not a state machine, and that is the design.** There is no status, no
 version, and no update path — an outcome is an *observation*, so a learner
@@ -384,10 +399,13 @@ queue read as a programme that fails to place people, and a rate of zero over
 nothing measured would be worse — so the rate is blank until there is something
 to compute it from.
 
-The seed ships with the queue still half-worked, and with a learner who took a
-job in Kansas City, for the same reason the seeded college's brand colours
-collide twice: a measure that only ever reports good news on its own fixtures has
-not been tested against anything.
+The seed ships with the queue still half-worked, with a learner who took a job in
+Kansas City — Wyandotte County, the same state and not this market's, which is
+the case a rule that only checked the state would score as staying — and with one
+learner whose follow-up established that they are working and got no further. For
+the same reason the seeded college's brand colours collide twice: a measure that
+only ever reports good news on its own fixtures has not been tested against
+anything, and a figure no fixture produces is copy nobody ever reads.
 
 ### Who does it, and who sees it
 

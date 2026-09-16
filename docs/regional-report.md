@@ -16,13 +16,13 @@ deadline — what has to be captured now because it cannot be reconstructed late
 
 ## Cheap now, impossible later
 
-Four things get permanently more expensive every month they wait. Nothing else
-in this document is urgent.
+Four things get permanently more expensive every month they wait. One of them is
+now done. Nothing else in this document is urgent.
 
 | | Why it cannot wait |
 |---|---|
 | **The field instrument is standardised before the visits scale** | Towns reviewed with different questions are not comparable. The first nineteen visits cannot be re-walked |
-| **Outcomes capture the employment *county*, not an in-region boolean** | "In region" recorded as a tick is a judgement that cannot be re-derived when the boundary you meant turns out to be wrong |
+| ~~**Outcomes capture the employment *county*, not an in-region boolean**~~ — **done**, migration `0014_outcome_place.sql` | "In region" recorded as a tick is a judgement that cannot be re-derived when the boundary you meant turns out to be wrong. Captured from here on; the rows written before it keep what the recorder claimed, labelled as a claim rather than converted into a county nobody gave |
 | **The measurement interval for outcomes is fixed** (`Q23`) | You cannot phone somebody eighteen months later and ask where they were at three months. A late decision does not delay the report; it permanently shortens the series |
 | **Area totals are snapshotted each period** | Without them the retention schedule eventually anonymises the records the history was computed from, and takes the history with it |
 
@@ -144,6 +144,23 @@ clean chart.
 - Recomputable when boundaries change, which they do
 - One captured field answers town, county, workforce area, MSA and state
   roll-ups — which is how town/city/regional views come from a single question
+
+**This is built.** `Outcome` carries `employmentCounty`, `employmentState` and
+`employedByHost`; `Market` declares the `counties` and the `state` it is measured
+against; and `inRegion` derives the answer rather than reading one. Three notes
+on the shape it took:
+
+- **A hire by the host needs no county.** The host is an employer in this market,
+  so the strongest result the programme produces is also the cheapest to record.
+- **The county is optional, and its absence is its own figure.** A follow-up that
+  established somebody is working without establishing where is a real
+  half-answer. It counts as `placeUnknown` rather than as having left, so a gap
+  in the asking can never read as a bad result — the same principle as counting
+  unmeasured learners separately.
+- **The old rows kept their claim.** Nobody recorded a county for them and nobody
+  can be phoned two years later to ask, so `assertedInRegion` holds what the
+  recorder asserted and is used only when there is no captured place. No county
+  was invented in the backfill.
 
 Regions are predetermined, measurable, county-based boundaries defined at state
 level rather than per market. The natural candidate is the **board's own WIOA
@@ -323,7 +340,8 @@ written.
 
 Derived from everything above, in priority order:
 
-1. **Employment county** on `Outcome`, replacing the in-region boolean
+1. ~~**Employment county** on `Outcome`, replacing the in-region boolean~~ —
+   **done**
 2. **Counties and region definitions** as reference data, with effective dates
 3. **Area snapshots** per period, stamped with boundary set and instrument version
 4. **The field instrument**: town profile, dated findings with sources, playbook

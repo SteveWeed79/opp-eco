@@ -1915,6 +1915,29 @@ export const outcomes: Outcome[] = [
     source: "college",
     detail: "Enrolled in the bachelor's completion programme.",
   },
+  {
+    id: "out-6",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-omar",
+    applicationId: "app-24",
+    kind: "employed",
+    employedByHost: false,
+    // The half-answer, which is the commonest thing a follow-up call actually
+    // produces: they are working, and the officer did not get as far as where.
+    // Seeded deliberately so the administrator's console renders the
+    // place-unknown figure on a fresh checkout. A fixture set where every
+    // employment has a tidy county would leave the one number that exists to
+    // stop a gap being read as a departure showing zero forever, and nobody
+    // would ever see the copy that explains it.
+    employmentCounty: null,
+    employmentState: null,
+    assertedInRegion: null,
+    observedOn: daysAgo(6),
+    recordedOn: daysAgo(5),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Working full time. Did not say where — asking again next call.",
+  },
 ];
 
 // ---------------------------------------------------------------------------

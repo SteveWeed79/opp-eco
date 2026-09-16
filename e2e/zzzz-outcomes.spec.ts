@@ -33,10 +33,13 @@ test("the college records where a learner went, and the administrator sees it", 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  // "Still looking" is a real answer and the one a demo would leave out. It is
-  // also the one that proves the report counts a measured learner rather than
-  // an employed one.
-  await dialog.getByRole("radio", { name: /Employed in the region/ }).click();
+  // One "Employed", with the county recorded beside it — "employed in the
+  // region" stopped being a thing you could pick when the place became
+  // something captured rather than judged. Cherokee is the next county over and
+  // is one of this market's, which is what makes the detail below true.
+  await dialog.getByText("Employed", { exact: true }).first().click();
+  await dialog.getByLabel("County they work in").fill("Cherokee");
+  await dialog.getByLabel("State").fill("KS");
   await dialog
     .getByLabel("Detail")
     .fill("Working for a manufacturer in the next county.");

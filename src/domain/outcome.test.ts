@@ -64,6 +64,11 @@ function away(overrides: Partial<Outcome> = {}): Outcome {
   return outcome({ employmentCounty: "Wyandotte", employmentState: "KS", ...overrides });
 }
 
+/** Working, and nobody established where — the half-answer a phone call gives. */
+function nowhere(overrides: Partial<Outcome> = {}): Outcome {
+  return outcome({ employmentCounty: null, employmentState: null, ...overrides });
+}
+
 describe("the outcome vocabulary", () => {
   it("orders the strongest result first", () => {
     // The follow-up form is read top to bottom by someone who already knows the
@@ -347,6 +352,56 @@ describe("summarising outcomes", () => {
     expect(summary.regionalRate).toBe(0.5);
     expect(summary.employed).toBe(2);
     expect(summary.regional).toBe(1);
+  });
+
+  it("counts employment whose place was never captured, separately", () => {
+    // The figure this assertion exists for. A follow-up that established
+    // somebody is working without establishing where is a different fact from
+    // one that established they left, and the only place it can go without
+    // lying is its own count.
+    const summary = summarizeOutcomes([nowhere()], 0, region);
+    expect(summary.employed).toBe(1);
+    expect(summary.placeUnknown).toBe(1);
+    expect(summary.regional).toBe(0);
+  });
+
+  it("does not let a missing place count as having left", () => {
+    // Two learners, one of them stayed, one of them was never asked where. A
+    // rate of 0.5 here would be reporting a gap in the asking as a departure.
+    // It stays in the denominator because they were measured — what is unknown
+    // is the place, not whether anybody called.
+    const summary = summarizeOutcomes(
+      [
+        outcome({ id: "out-1", studentId: "stu-1" }),
+        nowhere({ id: "out-2", studentId: "stu-2" }),
+      ],
+      0,
+      region,
+    );
+    expect(summary.measured).toBe(2);
+    expect(summary.regional).toBe(1);
+    expect(summary.placeUnknown).toBe(1);
+    expect(summary.regionalRate).toBe(0.5);
+  });
+
+  it("treats a market it cannot resolve as a place unknown, not as a departure", () => {
+    // The administrator reads every market at once. A market that fails to
+    // resolve has no counties to judge against, and scoring that as leaving
+    // would turn a lookup miss into a retention failure.
+    const summary = summarizeOutcomes([outcome()], 0, () => null);
+    expect(summary.placeUnknown).toBe(1);
+    expect(summary.regional).toBe(0);
+  });
+
+  it("never counts a non-employment outcome as a place unknown", () => {
+    // `still_seeking` has no place because there is no job, which is not the
+    // same gap and must not inflate the figure that measures the gap.
+    const summary = summarizeOutcomes(
+      [nowhere({ kind: "still_seeking" }), nowhere({ id: "out-2", studentId: "stu-2", kind: "continued_education" })],
+      0,
+      region,
+    );
+    expect(summary.placeUnknown).toBe(0);
   });
 
   it("reports every kind, including the ones nobody scored", () => {
