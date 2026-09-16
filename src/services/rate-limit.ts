@@ -57,9 +57,35 @@ export interface RateLimit {
   windowMs: number;
 }
 
-/** Sign-on is the brute-force target; everything else is abuse prevention. */
+/**
+ * Sign-on is the brute-force target; everything else is abuse prevention.
+ *
+ * **`signIn` is per address, not per caller.** It used to be keyed on the
+ * session cookie, which is null for everybody who is not signed in — so every
+ * signed-out person on the platform shared one bucket of ten attempts a
+ * minute. Eleven people arriving at nine in the morning locked each other out,
+ * and the fix somebody reaches for in that situation is to raise the limit,
+ * which removes the protection instead of the fault. Keyed on the address, one
+ * person working through a password list slows down their own account and
+ * nobody else's.
+ *
+ * `signInGlobal` is what that leaves behind: a coarse backstop across every
+ * signed-out caller, set high enough that it is a spray detector rather than a
+ * queue. It is the limit a distributed attempt hits and a busy Monday does not.
+ *
+ * `signInLookup` covers resolving which door an address uses. That is a read
+ * rather than an attempt — it is the *first* thing everybody does, and putting
+ * it in the same bucket as a failed password made the sign-in page a
+ * self-inflicted denial of service.
+ *
+ * All of it is per instance. On more than one server these are advisory, which
+ * is stated in `security-and-data.md` rather than discovered: a shared store is
+ * the fix, and Redis is the usual shape of it.
+ */
 export const LIMITS = {
   signIn: { limit: 10, windowMs: 60_000 },
+  signInGlobal: { limit: 300, windowMs: 60_000 },
+  signInLookup: { limit: 60, windowMs: 60_000 },
   mutation: { limit: 30, windowMs: 60_000 },
   read: { limit: 300, windowMs: 60_000 },
 } satisfies Record<string, RateLimit>;

@@ -11,13 +11,16 @@
  */
 
 import type { AuditEvent } from "@/domain/types";
+import { withoutParticipantPII } from "@/services/notification-privacy";
 import * as seed from "./seed";
+import { addMembership } from "./session";
 import {
   ConcurrencyError,
   type NotificationIntent,
   type NotificationQueue,
   type QueuedNotification,
   type Store,
+  type PendingNotification,
   type UnitOfWork,
 } from "./store";
 
@@ -30,7 +33,14 @@ let auditSequence = 1000;
  * change has committed must be retryable, and a send that succeeds before a
  * rollback has told someone about work that did not happen.
  */
-export const pendingNotifications: NotificationIntent[] = [];
+export const pendingNotifications: PendingNotification[] = [];
+
+/** Injected so a test can queue a message and then age it. */
+export let queueClock: () => Date = () => new Date();
+
+export function setQueueClock(next: () => Date) {
+  queueClock = next;
+}
 
 /**
  * The array above, behind the queue contract.
@@ -42,14 +52,24 @@ export const memoryNotificationQueue: NotificationQueue = {
   async take() {
     return pendingNotifications
       .splice(0, pendingNotifications.length)
-      .map((intent) => ({ id: null, intent }));
+      .map((waiting) => ({ id: null, intent: waiting.intent, waiting }));
   },
-  async requeue(item: QueuedNotification) {
-    pendingNotifications.push(item.intent);
+  async requeue(item: QueuedNotification, error: string) {
+    // The original queued time survives a retry, deliberately. Resetting it
+    // would make a message that has failed for three days look like one that
+    // arrived a minute ago, which is exactly the message an operator most needs
+    // to see.
+    const previous = (item as { waiting?: PendingNotification }).waiting;
+    pendingNotifications.push({
+      intent: item.intent,
+      queuedAt: previous?.queuedAt ?? queueClock().toISOString(),
+      attempts: (previous?.attempts ?? 0) + 1,
+      lastError: error,
+    });
   },
   async pending(marketId: string | null) {
     return marketId
-      ? pendingNotifications.filter((n) => n.marketId === marketId)
+      ? pendingNotifications.filter((n) => n.intent.marketId === marketId)
       : [...pendingNotifications];
   },
 };
@@ -157,6 +177,15 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+
+  createInterviewSlot(slot: import("@/domain/types").InterviewSlot) {
+    if (seed.publishedSlots.some((existing) => existing.id === slot.id)) {
+      throw new Error(`Interview slot ${slot.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.publishedSlots.push(slot);
+    });
+  }
   saveInterviewSlot(slot: import("@/domain/types").InterviewSlot, expectedVersion: number) {
     const current = seed.slotOverrides.get(slot.id);
     const version = current?.version ?? 1;
@@ -198,6 +227,127 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createFundingSource(source: import("@/domain/types").FundingSource) {
+    if (seed.fundingSources.some((f) => f.id === source.id)) {
+      throw new Error(`Funding source ${source.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.fundingSources.push(source);
+    });
+  }
+
+  saveFundingSource(
+    source: import("@/domain/types").FundingSource,
+    expectedVersion: number,
+  ) {
+    const index = seed.fundingSources.findIndex((f) => f.id === source.id);
+    if (index === -1) throw new Error(`Unknown funding source ${source.id}`);
+    if (seed.fundingSources[index].version !== expectedVersion) {
+      // A board officer and an administrator adjusting one allocation is the
+      // likeliest conflict here, and the loser must not overwrite a
+      // supplemental award with a stale figure.
+      throw new ConcurrencyError("Funding source", source.id);
+    }
+    this.effects.push(() => {
+      seed.fundingSources[index] = { ...source, version: expectedVersion + 1 };
+    });
+  }
+
+  createFundingCommitment(commitment: import("@/domain/types").FundingCommitment) {
+    if (seed.fundingCommitments.some((c) => c.id === commitment.id)) {
+      throw new Error(`Funding commitment ${commitment.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.fundingCommitments.push(commitment);
+    });
+  }
+
+  saveFundingCommitment(
+    commitment: import("@/domain/types").FundingCommitment,
+    expectedVersion: number,
+  ) {
+    const index = seed.fundingCommitments.findIndex((c) => c.id === commitment.id);
+    if (index === -1) throw new Error(`Unknown funding commitment ${commitment.id}`);
+    if (seed.fundingCommitments[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Funding commitment", commitment.id);
+    }
+    this.effects.push(() => {
+      seed.fundingCommitments[index] = { ...commitment, version: expectedVersion + 1 };
+    });
+  }
+
+  purgeLearner(student: import("@/domain/types").Student, at: string) {
+    const index = seed.students.findIndex((s) => s.id === student.id);
+    if (index === -1) throw new Error(`Unknown student ${student.id}`);
+    const userIndex = seed.users.findIndex((u) => u.id === student.userId);
+    this.effects.push(() => {
+      seed.students[index] = { ...student, purgedOn: at };
+      // The identity lives on the user record, so the purge has to reach it.
+      // Both writes land in the same staged unit: a learner whose student row
+      // says purged while their user row still carries an email is the exact
+      // state this is meant to make impossible.
+      if (userIndex !== -1) {
+        seed.users[userIndex] = {
+          ...seed.users[userIndex],
+          name: student.name,
+          email: student.email,
+        };
+      }
+    });
+  }
+
+  changeUserEmail(userId: string, email: string) {
+    const index = seed.users.findIndex((u) => u.id === userId);
+    if (index === -1) throw new Error(`Unknown user ${userId}`);
+    this.effects.push(() => {
+      seed.users[index] = { ...seed.users[index], email };
+    });
+  }
+
+  addOrganizationMember(
+    user: import("@/domain/types").User,
+    membership: import("@/domain/types").Membership,
+  ) {
+    if (seed.users.some((u) => u.id === user.id)) {
+      throw new Error(`User ${user.id} already exists`);
+    }
+    // `users.email` is unique and case-insensitive in Postgres, so refusing
+    // here too keeps the two layers answering the same question. Without it the
+    // fixtures would happily hold two people on one address — the exact state
+    // that makes an audit entry stop naming anybody.
+    const address = user.email.trim().toLowerCase();
+    if (seed.users.some((u) => u.email.trim().toLowerCase() === address)) {
+      throw new Error(`Address ${user.email} already belongs to somebody`);
+    }
+    this.effects.push(() => {
+      seed.users.push(user);
+      addMembership(membership);
+    });
+  }
+
+  createConsent(consent: import("@/domain/types").ConsentRecord) {
+    if (seed.consents.some((c) => c.id === consent.id)) {
+      throw new Error(`Consent ${consent.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.consents.push(consent);
+    });
+  }
+
+  saveConsent(
+    consent: import("@/domain/types").ConsentRecord,
+    expectedVersion: number,
+  ) {
+    const index = seed.consents.findIndex((c) => c.id === consent.id);
+    if (index === -1) throw new Error(`Unknown consent ${consent.id}`);
+    if (seed.consents[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Consent", consent.id);
+    }
+    this.effects.push(() => {
+      seed.consents[index] = { ...consent, version: expectedVersion + 1 };
+    });
+  }
+
   createOutcome(outcome: import("@/domain/types").Outcome) {
     if (seed.outcomes.some((o) => o.id === outcome.id)) {
       throw new Error(`Outcome ${outcome.id} already exists`);
@@ -213,9 +363,24 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  /**
+   * Queued with participant PII stripped.
+   *
+   * The templates name a record rather than a person, so in practice there is
+   * nothing to strip. This is the backstop, and it sits here — at the
+   * `UnitOfWork`, which every write passes through — rather than at the
+   * renderer, because the Postgres queue persists the payload to a table. A
+   * guard at render time would leave the PII sitting in `notification_outbox`.
+   */
   enqueueNotification(intent: NotificationIntent) {
+    const safe = withoutParticipantPII(intent);
     this.effects.push(() => {
-      pendingNotifications.push(intent);
+      pendingNotifications.push({
+        intent: safe,
+        queuedAt: queueClock().toISOString(),
+        attempts: 0,
+        lastError: null,
+      });
     });
   }
 

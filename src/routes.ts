@@ -35,6 +35,15 @@ export function demoPath(path: string): string {
 }
 
 /** Where each role's own portal lives. */
+/**
+ * Where a signed-out person is sent under real sign-on.
+ *
+ * Inside `/demo` with the portals, because that is what it gates. The venture
+ * pages at `/` are public and stay public — a funder reading about the
+ * programme is not signing in to anything.
+ */
+export const SIGN_IN_PATH = demoPath("/sign-in");
+
 export const PORTAL_PATH: Record<ActorRole, string> = {
   admin: demoPath("/admin"),
   student: demoPath("/student"),

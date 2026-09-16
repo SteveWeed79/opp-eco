@@ -64,13 +64,160 @@ export interface Market {
   boardId: string | null;
   collegeIds: string[];
   launchedOn: string | null;
-  /** Board allocation for the program year, in whole dollars. */
-  subsidyBudget: number;
-  subsidyRatePerHour: number;
   programYear: string;
 }
 
-export type OrganizationKind = "business" | "college" | "board";
+/**
+ * Money, and where it came from.
+ *
+ * `Market` used to carry `subsidyBudget` and `subsidyRatePerHour` directly, and
+ * that was the whole funding model: one workforce board, one allocation, one
+ * hourly rate. It was also a number written in one place and read in five,
+ * which is the shape this codebase distrusts everywhere else — and it could not
+ * express the thing the venture actually sells, which is funding
+ * *coordination*: a board's wage subsidy, a foundation's grant toward the cost
+ * of internship credit, a college's fee waiver, and an employer's own
+ * contribution, layered on one placement.
+ *
+ * So the figure now lives on a `FundingSource` row and nowhere else. Every
+ * balance on every screen is derived from sources and the commitments against
+ * them, and changing an allocation is an audited write rather than an edit to
+ * a fixture.
+ */
+export type FundKind =
+  /** WIOA and equivalent. Eligibility-gated, and the only one that pays hourly today. */
+  | "workforce"
+  /** The CCLN foundation and other grantmakers. */
+  | "philanthropic"
+  /** A college's own scholarship or fee waiver. */
+  | "institutional"
+  /** The employer's own wage or project fee. */
+  | "employer";
+
+/**
+ * What a fund may be spent on.
+ *
+ * Deliberately separate from `FundKind`: a foundation can pay a wage or a
+ * transport cost, and a college can waive a fee or fund a stipend. Collapsing
+ * the two would mean a new kind of sponsor every time a new cost appears.
+ *
+ * `credit_cost` is the one that motivated this. The 177-student survey's top
+ * barrier to taking a placement is the tuition a student pays to receive credit
+ * for work a board is already subsidising, and the platform could not record
+ * the cost or the grant that covered it.
+ */
+export type FundPurpose =
+  | "wage_subsidy"
+  | "credit_cost"
+  | "transportation"
+  | "stipend"
+  | "employer_support";
+
+/**
+ * `exhausted` is derived state made explicit: a source with nothing left is not
+ * closed, because a release can put money back into it. `closed` is the sponsor
+ * saying the fund is finished, which no release reopens.
+ */
+export type FundingSourceStatus = "active" | "exhausted" | "closed";
+
+export interface FundingSource {
+  id: string;
+  marketId: string;
+  /** The board, the foundation, the college — whoever the money belongs to. */
+  sponsorOrgId: string;
+  kind: FundKind;
+  purpose: FundPurpose;
+  programYear: string;
+  /** What a board officer would call it on their own paperwork. */
+  name: string;
+  /**
+   * Whole dollars, and **expected to change**.
+   *
+   * A supplemental award arrives, a rescission takes some back, a foundation
+   * adds to the pot mid-year. That is ordinary program administration rather
+   * than a correction, so it runs through `adjustFundingSource` with a reason
+   * and lands in the audit log — the number moving is the normal case, and the
+   * record of why it moved is what makes it trustworthy.
+   */
+  allocated: number;
+  /**
+   * Set only where the fund pays by the hour, as a board's wage subsidy does.
+   *
+   * Also adjustable, and the reason commitments store their own rate: a board
+   * moving next year's cohort from $20 to $18 must not retroactively rewrite
+   * what it already committed at $20.
+   */
+  ratePerHour?: number;
+  status: FundingSourceStatus;
+  openedOn: string;
+  /**
+   * Optimistic concurrency. Two administrators adjusting one allocation is the
+   * likeliest write conflict here, and the loser must be told to reload rather
+   * than silently overwriting the winner's figure with a stale one.
+   */
+  version: number;
+}
+
+/**
+ * `released` returns the money and is not a deletion.
+ *
+ * A placement that never starts has its commitment released, and the row stays:
+ * a board asking "what did we commit and not spend" is asking a question a
+ * deleted row cannot answer.
+ */
+export type CommitmentStatus = "authorized" | "disbursed" | "released";
+
+/**
+ * One draw against one source.
+ *
+ * The ledger, and the only thing that counts as committed. The application's
+ * `fundingAuthorizedHours` and `fundingAuthorizedRate` remain beside it as a
+ * cache the transition guards read, for exactly the reason `hoursApproved` is a
+ * cache over time entries: a guard takes an `Application` and no repository.
+ * `funding.test.ts` pins the two against each other.
+ */
+export interface FundingCommitment {
+  id: string;
+  marketId: string;
+  fundingSourceId: string;
+  studentId: string;
+  /**
+   * The placement this pays for, when there is one.
+   *
+   * Null is a real case rather than missing data: a transport grant or a fee
+   * waiver can reach a learner who has not been placed yet, and refusing to
+   * record it until they are is how the barrier stays invisible.
+   */
+  applicationId: string | null;
+  /** Whole dollars, fixed at authorization. */
+  amount: number;
+  /** Hours this covers, where the fund pays hourly. */
+  hours?: number;
+  /**
+   * The rate this was committed at, copied from the source rather than read
+   * through it. A source's rate can change; what was already promised cannot.
+   */
+  ratePerHour?: number;
+  status: CommitmentStatus;
+  authorizedOn: string;
+  authorizedByUserId: string;
+  /** Why this was committed, or on release, why it was given back. */
+  note?: string;
+  version: number;
+}
+
+/**
+ * `nonprofit` is one value out of the several the vision names, added because
+ * there is now something concrete that needs it: a foundation sponsoring a fund.
+ *
+ * The rest of the wider network the venture describes — K-12 districts, training
+ * providers, economic development offices, chambers — are deliberately still
+ * absent. Each needs its own answer to what vetting means for it, since
+ * `canTransact` gates posting and mentorship on a check written for employers,
+ * and adding kinds nothing uses would be a migration that buys a longer enum.
+ * A foundation earns its value here by being the sponsor on a `FundingSource`.
+ */
+export type OrganizationKind = "business" | "college" | "board" | "nonprofit";
 
 export type OrganizationStatus =
   | "applied"
@@ -91,6 +238,24 @@ export interface Organization {
   contactName: string;
   contactEmail: string;
   appliedOn: string;
+  /**
+   * How this organization's people sign in.
+   *
+   * On the organization rather than the user because it is an institutional
+   * decision, not a personal preference: a workforce board does not let some of
+   * its officers federate and others pick a password, and the platform should
+   * not offer that.
+   */
+  identityMode: IdentityMode;
+  /**
+   * Work-address domains this organization's people must sign in from.
+   *
+   * Empty means any address already on a user record. Populated, it is the
+   * control that stops a public employee's account being bound to a personal
+   * mailbox — which is how a government identity quietly becomes something the
+   * agency cannot revoke.
+   */
+  emailDomains: string[];
   /** Colleges only: minimum student work hours required per credit awarded. */
   hoursPerCredit?: number;
 
@@ -158,6 +323,15 @@ export interface Student {
   eligibilityDeterminedOn: string | null;
   eligibilityExpiresOn: string | null;
   verifiedOn: string | null;
+  /**
+   * When this learner's direct identifiers were removed under the retention
+   * schedule, or null while they are still held.
+   *
+   * On the record rather than inferred from a sentinel name, because "is this
+   * purged" is a question reporting asks and a name comparison is the kind of
+   * check that silently starts matching a real person called the same thing.
+   */
+  purgedOn: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +671,235 @@ export interface CreditAward {
 }
 
 // ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+/**
+ * How an organization's people prove who they are.
+ *
+ * **There is no password anywhere in this model, and that is the point.** A
+ * credential this platform does not hold is a credential it cannot leak, and
+ * one set of users here are public employees: the data rules say to federate a
+ * government identity and never replicate it, so the schema gives it nowhere to
+ * land.
+ *
+ * `federated` is not "SSO is available" — it is "this organization's people may
+ * **only** arrive through their own identity provider". No adapter ships yet, so
+ * declaring it today means nobody from that organization can sign in through
+ * this platform at all. That is the correct failure: a workforce board whose
+ * IdP is not wired should be locked out, not quietly issued a platform-held
+ * identity for a public employee.
+ */
+/**
+ * How an organization's people prove who they are.
+ *
+ *  - `password` — an address and a password. Colleges, employers, and the
+ *    learners whose membership points at their college.
+ *  - `email_code` — a one-time code to a work address, no password anywhere.
+ *    Government organizations, and the platform's own administrators.
+ *  - `federated` — the agency's own identity provider. The destination for a
+ *    government organization, and refused at sign-in until an adapter exists.
+ *
+ * An institutional property rather than a per-person one: a college decides
+ * that its people use passwords, and a public agency decides that its officers
+ * do not. Nobody picks individually.
+ */
+export type IdentityMode = "password" | "email_code" | "federated";
+
+/**
+ * A signed-in session, held server-side.
+ *
+ * `id` is the SHA-256 of the token in the cookie, never the token itself. A
+ * dump of this table yields nothing anyone can present — which is the whole
+ * reason the session is a record here rather than a signed blob in the browser.
+ */
+export interface Session {
+  id: string;
+  userId: string;
+  createdAt: string;
+  /** Hard stop, regardless of activity. */
+  expiresAt: string;
+  /** Moved forward on each request, and compared against the idle window. */
+  lastSeenAt: string;
+  revokedAt: string | null;
+}
+
+/**
+ * A one-time code, issued to a work address and good for minutes.
+ *
+ * Keyed by user rather than given its own id: requesting a new code replaces
+ * the outstanding one, so a person who clicks twice cannot leave two live codes
+ * behind, and there is no way to accumulate guesses across several.
+ *
+ * The code itself is never stored — `codeHash` is. The platform can check a
+ * code and cannot reproduce one, which matters because an unconsumed code is a
+ * bearer token for somebody's account.
+ */
+/**
+ * What an emailed code is for.
+ *
+ * A code sent to prove an address is not a code sent to reset a password, and
+ * until this existed there was nothing in the row to tell them apart — so
+ * either could have been spent as the other by whoever got hold of it first.
+ */
+export type CodePurpose = "sign_in" | "password_reset";
+
+/**
+ * Somebody's password, as the database holds it.
+ *
+ * The hash is self-describing — `scrypt$N$r$p$salt$key` — so the cost can be
+ * raised later without a migration that locks everybody out. See
+ * `domain/password.ts`.
+ */
+export interface StoredPassword {
+  userId: string;
+  hash: string;
+  updatedAt: string;
+  /**
+   * Set when somebody other than the owner put this password here — an
+   * administrator restoring access to an account whose mailbox changed. They
+   * must choose their own before doing anything else, so a temporary credential
+   * cannot quietly become a permanent one.
+   */
+  mustChange: boolean;
+}
+
+export interface SignInCode {
+  userId: string;
+  purpose: CodePurpose;
+  codeHash: string;
+  createdAt: string;
+  expiresAt: string;
+  /** Guesses so far. A code is retired well before brute force is plausible. */
+  attempts: number;
+  consumedAt: string | null;
+}
+
+/**
+ * Somebody's enrolled authenticator.
+ *
+ * The secret is held in a form the server can compute with, unlike every other
+ * credential here — TOTP is shared, so there is no hash that would still let
+ * the server produce the same six digits the phone does. See
+ * `0011_second_factor.sql` for what follows from that.
+ */
+export interface TotpEnrolment {
+  userId: string;
+  /** Base32, as the authenticator app was given it. */
+  secret: string;
+  createdAt: string;
+  /** Null until they have proved they can read a code from it. */
+  confirmedAt: string | null;
+  /** The last counter accepted, so a code cannot be replayed inside its window. */
+  lastCounter: number | null;
+}
+
+/** One way back in from a lost phone. Single use, stored as a hash. */
+export interface RecoveryCode {
+  id: string;
+  userId: string;
+  codeHash: string;
+  createdAt: string;
+  usedAt: string | null;
+}
+
+/**
+ * Somebody between the two factors.
+ *
+ * Deliberately not a session: nothing resolves to an actor until both factors
+ * are in, so there is no half-authenticated row for a missing predicate to turn
+ * into a working login.
+ */
+export interface MfaChallenge {
+  id: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+  attempts: number;
+}
+
+// ---------------------------------------------------------------------------
+// Consent
+// ---------------------------------------------------------------------------
+
+/**
+ * What a consent covers.
+ *
+ * Separate scopes rather than one blanket agreement, because they are granted
+ * to different parties for different purposes and a learner can reasonably say
+ * yes to one and no to another. Someone happy for a college to verify their
+ * enrolment to an employer may not want their details going to a government
+ * agency for an eligibility determination, and a model with one flag cannot
+ * represent that refusal.
+ */
+export type ConsentScope =
+  /** FERPA: the institution disclosing an education record to an employer. */
+  | "education_record"
+  /** Sharing participant details with a workforce board for a determination. */
+  | "workforce_data"
+  /** Taking part in the programme at all. */
+  | "program_participation";
+
+/**
+ * Who gave it.
+ *
+ * **Recorded, not computed**, and that is the load-bearing decision. FERPA
+ * rights transfer to the learner at 18 *or* on enrolment at a postsecondary
+ * institution at any age — so for records a college holds about a dual-enrolled
+ * sixteen-year-old's college coursework, that learner consents for themselves,
+ * while records their high school holds stay the parent's until they turn 18.
+ * One placement can generate both.
+ *
+ * Deriving the right answer would need the school a learner *attends*, which
+ * this model does not have yet. It would also need a district's counsel and the
+ * partner college's registrar, who will have a settled local answer that
+ * overrides any general reasoning. So the platform records which it obtained
+ * and does not guess.
+ */
+export type ConsentGrantor = "learner" | "parent_guardian";
+
+/**
+ * `withdrawn` is a status rather than a deletion.
+ *
+ * A learner withdrawing consent is an event with a date that the institution
+ * which relied on it may have to account for. Deleting the row would leave the
+ * platform unable to say what was permitted when.
+ */
+export type ConsentStatus = "granted" | "withdrawn" | "expired";
+
+/**
+ * One consent, attached to the institution whose records it covers.
+ *
+ * `sourceOrgId` is the whole design. Consent is a property of the record's
+ * source institution, not of the learner and not of the platform — a college's
+ * consent does not authorise a high school's records, and a second institution
+ * joining a learner's story means a second consent rather than a wider one.
+ */
+export interface ConsentRecord {
+  id: string;
+  marketId: string;
+  studentId: string;
+  /** The institution whose records this covers. */
+  sourceOrgId: string;
+  scope: ConsentScope;
+  grantedBy: ConsentGrantor;
+  grantedOn: string;
+  /**
+   * When it lapses, or null for open-ended.
+   *
+   * Null is common and correct — most institutional consent forms run until
+   * withdrawn — but the column exists because a district that issues
+   * per-academic-year consent has no way to express that otherwise.
+   */
+  expiresOn: string | null;
+  status: ConsentStatus;
+  recordedByUserId: string;
+  /** What was signed, in the institution's own words. */
+  note?: string;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Outcomes
 // ---------------------------------------------------------------------------
 
@@ -603,7 +1006,16 @@ export interface AuditEvent {
     | "time_entry"
     | "mentorship_offer"
     | "mentorship_pairing"
-    | "outcome";
+    | "interview_slot"
+    | "outcome"
+    | "funding_source"
+    | "funding_commitment"
+    | "consent"
+    // An account: added to an organization, or moved to a new work address.
+    // Both are identity rather than work, and both are the answer to "who was
+    // this account when it signed that" — which is the question attribution
+    // gets asked a year later.
+    | "user";
   entityId: string;
   from: string | null;
   to: string;

@@ -1,8 +1,8 @@
 import {
-  CalendarPlus,
   CircleDollarSign,
   ClipboardList,
   Gavel,
+  HandCoins,
   Wallet,
 } from "lucide-react";
 import {
@@ -26,20 +26,20 @@ import {
 } from "@/components/ui";
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
-import { boardTransition } from "./actions";
+import { boardTransition, publishSlots } from "./actions";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
+import { PublishSlots } from "./PublishSlots";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
 import { DEMO_NOW } from "@/data/seed";
-import {
-  availableTransitions,
-  daysInStatus,
-  fundingCommitment,
-  isTerminal,
-} from "@/domain/workflow";
+import { availableTransitions, daysInStatus } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
+import { marketFunding } from "@/lib/queries";
+import { fundPurposeLabel } from "@/domain/funding";
+import { AdjustAllocation } from "./AdjustAllocation";
+import { adjustAllocation } from "./actions";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
@@ -64,11 +64,29 @@ export default async function BoardPage() {
   ]);
   const studentById = new Map(allStudents.map((s) => [s.id, s]));
   const postingById = new Map(allPostings.map((p) => [p.id, p]));
-  const committed = applications
-    .filter((a) => !isTerminal(a.status))
-    .reduce((sum, a) => sum + fundingCommitment(a), 0);
-  const remaining = market.subsidyBudget - committed;
-  const burnPct = Math.round((committed / market.subsidyBudget) * 100);
+  /**
+   * The fund, not the market.
+   *
+   * Every figure below used to come from `market.subsidyBudget`, a number
+   * written on the market and read in five places. It is now the balance of the
+   * market's wage-subsidy fund, and it is `committed` from the commitment
+   * ledger rather than re-summed from the applications — the two are no longer
+   * the same total, because a placement that ran and finished has *spent* its
+   * commitment where the old test counted it as freed.
+   */
+  const funding = await marketFunding(actor, market.id);
+  const wage = funding.wage;
+  const allocated = wage?.source.allocated ?? 0;
+  const committed = wage?.committed ?? 0;
+  const remaining = wage?.remaining ?? 0;
+  const ratePerHour = wage?.source.ratePerHour ?? 0;
+  // Guarded, because a market whose board is still in conversation has no fund
+  // at all and this used to divide by zero the moment one was opened.
+  const burnPct = allocated > 0 ? Math.round((committed / allocated) * 100) : 0;
+  /** Funds in this market that are somebody else's money — the coordination. */
+  const assistance = funding.balances.filter(
+    (b) => b.source.purpose !== "wage_subsidy",
+  );
 
   // Everything sitting on this board's desk
   const awaitingInterview = applications.filter(
@@ -103,13 +121,7 @@ export default async function BoardPage() {
         eyebrow="Local workforce board"
         title={board.name}
         subtitle={`${market.name} · ${market.programYear}`}
-        action={
-          <Button variant="dark">
-            <span className="flex items-center gap-1.5">
-              <CalendarPlus className="w-4 h-4" aria-hidden="true" /> Publish slots
-            </span>
-          </Button>
-        }
+        action={<PublishSlots action={publishSlots} />}
       />
 
       {/* ------------------------------------------------------------------ */}
@@ -126,23 +138,40 @@ export default async function BoardPage() {
                 {market.programYear} wage reimbursement allocation
               </h2>
               <p className="text-sm text-ink-500 mt-0.5">
-                Committed at ${market.subsidyRatePerHour}/hour across active placements
+                Committed at ${ratePerHour}/hour across active placements
               </p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-black text-ink-950 tabular">
+            <p
+              className={`text-3xl font-black tabular ${
+                remaining < 0 ? "text-crit-700" : "text-ink-950"
+              }`}
+            >
               <Money value={remaining} />
             </p>
             <p className="text-xs text-ink-500 mt-0.5">
-              uncommitted of <Money value={market.subsidyBudget} />
+              {remaining < 0 ? "overcommitted against" : "uncommitted of"}{" "}
+              <Money value={allocated} />
             </p>
+            {wage && (
+              <div className="mt-2 flex justify-end">
+                <AdjustAllocation
+                  sourceId={wage.source.id}
+                  fundName={wage.source.name}
+                  allocated={wage.source.allocated}
+                  ratePerHour={wage.source.ratePerHour}
+                  committed={wage.committed}
+                  action={adjustAllocation}
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="mt-5">
           <ProgressBar
             value={committed}
-            max={market.subsidyBudget}
+            max={allocated}
                       label="Subsidy allocation committed"
             tone={burnPct > 80 ? "crit" : burnPct > 60 ? "warn" : "brand"}
           />
@@ -151,12 +180,72 @@ export default async function BoardPage() {
               <Money value={committed} /> committed ({burnPct}%)
             </span>
             <span className="tabular">
-              ≈ {Math.floor(remaining / (market.subsidyRatePerHour * 210))} more full
+              ≈ {ratePerHour > 0 ? Math.max(0, Math.floor(remaining / (ratePerHour * 210))) : 0} more full
               placements
             </span>
           </div>
+          {wage?.overcommitted && (
+            <p className="mt-3 text-xs text-crit-700">
+              More is committed than this fund now holds. Nothing here is wrong —
+              an allocation was reduced after commitments were made, and the
+              shortfall is named rather than hidden.
+            </p>
+          )}
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* The other money in this market.                                     */}
+      {/*                                                                     */}
+      {/* Not the board's, and that is exactly why it is on the board's page.  */}
+      {/* A learner whose credit cost is covered by a foundation is a learner  */}
+      {/* who can take a placement this board is reimbursing, and until these  */}
+      {/* rows existed the two facts lived in different organizations' inboxes */}
+      {/* with nothing connecting them. This is the coordination the venture   */}
+      {/* says it provides, rendered.                                          */}
+      {/* ------------------------------------------------------------------ */}
+      {assistance.length > 0 && (
+        <Card>
+          <CardHeader
+            level={2}
+            icon={<HandCoins className="w-5 h-5" />}
+            title="Other funds supporting these placements"
+            subtitle="Not the board's money — what else is covering the costs around a placement it reimburses"
+          />
+          <ul className="row-list divide-y divide-line">
+            {assistance.map((balance) => (
+              <li
+                key={balance.source.id}
+                className="px-6 py-4 flex flex-wrap items-center justify-between gap-4"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-ink-950">
+                      {balance.source.name}
+                    </span>
+                    <Badge tone="neutral">
+                      {fundPurposeLabel(balance.source.purpose)}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {organizationName(balance.source.sponsorOrgId)} ·{" "}
+                    {balance.liveCommitments} learner
+                    {balance.liveCommitments === 1 ? "" : "s"} supported
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-ink-950 tabular">
+                    <Money value={balance.remaining} /> left
+                  </p>
+                  <p className="text-xs text-ink-500">
+                    of <Money value={balance.source.allocated} />
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat
@@ -215,7 +304,19 @@ export default async function BoardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <DwellBadge days={days} />
-                    <Button size="sm" variant="dark">
+                    {/* Disabled with a reason rather than live with no handler.
+                        Nudging a stalled pair is a real need and there is no
+                        messaging path to do it through — and the board reaching
+                        a learner directly would go around the college, which
+                        owns that relationship and holds the consent. Saying
+                        that is more useful than a button that swallows the
+                        click. */}
+                    <Button
+                      size="sm"
+                      variant="dark"
+                      disabled
+                      title="No messaging path yet. A nudge would go through the college, which owns the learner relationship."
+                    >
                       Reach out
                     </Button>
                   </div>
@@ -263,7 +364,7 @@ export default async function BoardPage() {
                     // The proposed commitment: what the board would authorize
                     // if it approved the posting's full hours at market rate.
                     const hours = application.fundingAuthorizedHours ?? postingTotalHours(posting);
-                    const rate = application.fundingAuthorizedRate ?? market.subsidyRatePerHour;
+                    const rate = application.fundingAuthorizedRate ?? ratePerHour;
                     const commitment = hours * rate;
                     // Ask the state machine whether this would actually go
                     // through, rather than re-deriving affordability here and
@@ -323,7 +424,7 @@ export default async function BoardPage() {
                             <Money value={commitment} />
                           </span>
                           <span className="block text-xs text-ink-500">
-                            {hours} hrs × ${market.subsidyRatePerHour}
+                            {hours} hrs × ${rate}
                           </span>
                         </Td>
                         {/* Bounded, and deliberately so.

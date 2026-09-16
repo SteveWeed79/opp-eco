@@ -53,6 +53,17 @@ export interface PolicyContext {
   employer: Organization | null;
   /** The workforce board for this market. */
   board: Organization | null;
+  /**
+   * What the board pays per hour here, from the market's wage-subsidy fund.
+   *
+   * Passed in rather than read off the market, which no longer carries a rate:
+   * the figure lives on the fund now, and a message quoting it must quote the
+   * one actually in force rather than a copy that drifted.
+   *
+   * Zero where a market has no wage fund yet. The messages that use it are all
+   * about a funded placement, which cannot exist in that market.
+   */
+  wageRatePerHour: number;
 }
 
 const isMicro = (c: PolicyContext) => c.application.track === "micro";
@@ -197,7 +208,6 @@ export function notificationsFor(
   const entries = POLICY[status] ?? [];
 
   const payload = {
-    studentName: context.student.name,
     postingTitle: context.posting.title,
     employerName: context.employer?.name ?? "the employer",
     collegeName: context.college?.name ?? "your college",
@@ -206,7 +216,7 @@ export function notificationsFor(
     applicationId: context.application.id,
     hours: context.application.fundingAuthorizedHours,
     rate: context.application.fundingAuthorizedRate,
-    ratePerHour: context.market.subsidyRatePerHour,
+    ratePerHour: context.wageRatePerHour,
     creditHours: context.posting.creditHours,
     deliverable: context.posting.deliverable,
   };
@@ -233,6 +243,22 @@ export function partiesNotifiedOn(status: ApplicationStatus): Party[] {
  * with no template renders nothing and lands in the outbox as undeliverable —
  * a silent hole in exactly the lifecycle this table exists to cover.
  */
+/**
+ * Which party each message kind is addressed to.
+ *
+ * Exported so a test can assert that every employer-facing message carries the
+ * FERPA redisclosure notice, rather than that assertion depending on a naming
+ * convention in the kind string.
+ */
+export function partyForKind(kind: string): Party | null {
+  for (const entries of Object.values(POLICY)) {
+    for (const entry of entries ?? []) {
+      if (entry.kind === kind) return entry.party;
+    }
+  }
+  return null;
+}
+
 export function policyKinds(): string[] {
   return Object.values(POLICY)
     .flat()

@@ -18,6 +18,8 @@ import {
   toApplication,
   toAuditEvent,
   toCreditAward,
+  toFundingCommitment,
+  toFundingSource,
   toMarket,
   toPosting,
   toStudent,
@@ -80,7 +82,7 @@ describe("dates", () => {
 });
 
 describe("entities", () => {
-  it("maps a market, including its colleges and its budget", () => {
+  it("maps a market, including its colleges", () => {
     const market = toMarket({
       id: "mkt-1",
       name: "Southeast Kansas",
@@ -90,15 +92,86 @@ describe("entities", () => {
       board_id: "org-board",
       college_ids: ["org-college"],
       launched_on: new Date("2026-01-15T00:00:00.000Z"),
-      subsidy_budget_cents: "24000000",
-      subsidy_rate_cents: 2000,
       program_year: "PY2026",
     });
 
-    expect(market.subsidyBudget).toBe(240_000);
-    expect(market.subsidyRatePerHour).toBe(20);
     expect(market.collegeIds).toEqual(["org-college"]);
     expect(market.counties).toEqual(["Crawford", "Labette"]);
+    expect(market.programYear).toBe("PY2026");
+  });
+
+  it("carries no money of its own — that lives on the funds", () => {
+    // The market used to hold `subsidyBudget` and `subsidyRatePerHour`. A figure
+    // written in one place and read in five is what this layer avoids
+    // everywhere else, and the allocation is now the balance of a funding
+    // source. Pinned so a well-meaning re-add is caught here rather than by two
+    // screens disagreeing.
+    const market = toMarket({ id: "mkt-1", board_id: null, launched_on: null });
+    expect("subsidyBudget" in market).toBe(false);
+    expect("subsidyRatePerHour" in market).toBe(false);
+  });
+
+  it("maps a funding source, keeping an absent rate absent", () => {
+    const wage = toFundingSource({
+      id: "fund-1",
+      market_id: "mkt-1",
+      sponsor_org_id: "org-board",
+      kind: "workforce",
+      purpose: "wage_subsidy",
+      program_year: "PY2026",
+      name: "PY2026 WIOA wage reimbursement",
+      allocated_cents: "24000000",
+      rate_cents: 2000,
+      status: "active",
+      opened_on: new Date("2026-01-15T00:00:00.000Z"),
+      version: 3,
+    });
+    expect(wage.allocated).toBe(240_000);
+    expect(wage.ratePerHour).toBe(20);
+    expect(wage.version).toBe(3);
+
+    // A fund that does not pay by the hour has no rate, and mapping that to 0
+    // would make "not hourly" and "free" the same value on a screen that
+    // multiplies by it.
+    const grant = toFundingSource({
+      id: "fund-2",
+      market_id: "mkt-1",
+      sponsor_org_id: "org-foundation",
+      kind: "philanthropic",
+      purpose: "credit_cost",
+      program_year: "PY2026",
+      name: "Internship credit assistance",
+      allocated_cents: "1800000",
+      rate_cents: null,
+      status: "active",
+      opened_on: new Date("2026-01-15T00:00:00.000Z"),
+      version: 1,
+    });
+    expect(grant.allocated).toBe(18_000);
+    expect(grant.ratePerHour).toBeUndefined();
+  });
+
+  it("maps a commitment, keeping a learner-level draw's null application", () => {
+    const commitment = toFundingCommitment({
+      id: "commit-1",
+      market_id: "mkt-1",
+      funding_source_id: "fund-2",
+      student_id: "stu-1",
+      application_id: null,
+      amount_cents: "105000",
+      hours: null,
+      rate_cents: null,
+      status: "authorized",
+      authorized_on: new Date("2026-02-01T00:00:00.000Z"),
+      authorized_by: "u-admin",
+      note: "Credit cost for the spring term.",
+      version: 1,
+    });
+    expect(commitment.amount).toBe(1_050);
+    // Null, not undefined: a grant reaching a learner who has not been placed
+    // is a real case rather than a field somebody forgot to fill in.
+    expect(commitment.applicationId).toBeNull();
+    expect(commitment.hours).toBeUndefined();
   });
 
   it("gives a market with no board a null rather than an empty string", () => {

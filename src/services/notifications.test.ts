@@ -38,10 +38,27 @@ describe("rendering", () => {
     expect(rendered.recipientEmail).toContain("@");
   });
 
-  it("names what happened and who it concerns", async () => {
-    const rendered = (await render(intent()))!;
-    expect(rendered.subject).toContain("Omar Haddad");
+  it("names what happened and which record, never who", async () => {
+    // This assertion was the other way round until TEGL 39-11 was read
+    // properly: a subject line is the least protected part of an email, and
+    // the guidance says never to email participant PII unencrypted. The
+    // reference sorts an inbox just as well and identifies nobody.
+    const rendered = (await render(intent({ payload: {
+      applicationId: "app-12",
+      postingTitle: "Web Developer Trainee",
+      startsAt: "2026-08-09T19:00:00Z",
+    } })))!;
+    expect(rendered.subject).toContain("APP-12");
+    expect(rendered.subject).not.toContain("Omar");
     expect(rendered.body).toContain("Web Developer Trainee");
+  });
+
+  it("strips a participant name a caller put in the payload anyway", async () => {
+    // The backstop. Templates no longer reach for a name, but one added next
+    // year must render without it rather than mailing it out.
+    const rendered = (await render(intent()))!;
+    expect(rendered.subject).not.toContain("Omar Haddad");
+    expect(rendered.body).not.toContain("Omar Haddad");
   });
 
   it("returns nothing for an unknown template rather than sending an empty message", async () => {

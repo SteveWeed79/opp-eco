@@ -107,7 +107,17 @@ ${
 }
 <tr><td style="padding:24px 28px 24px 28px;">
   <hr style="border:none;border-top:1px solid ${LINE};margin:0 0 12px 0;">
-  <p style="margin:0;font:400 12px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${MUTED};">
+${
+  // Set apart from the body on purpose. It is the same sentence every time
+  // rather than prose written for this situation, and a legal notice folded
+  // into the update reads as something the reader can skim past.
+  message.notice
+    ? `  <p style="margin:0 0 10px 0;font:400 12px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#334155;">
+    <strong>${escape(message.notice)}</strong>
+  </p>
+`
+    : ""
+}  <p style="margin:0;font:400 12px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${MUTED};">
     Demonstration prototype. Every organization, student, and figure is fictional &mdash;
     this is not a live program and nothing here can be applied for.
   </p>
@@ -132,6 +142,7 @@ function textBody(
     actionUrl && message.action ? `\n${message.action.label}: ${actionUrl}` : "",
     "",
     "—",
+    message.notice ? `${message.notice}\n` : "",
     "Demonstration prototype. Every organization, student, and figure is",
     "fictional — this is not a live program and nothing here can be applied for.",
   ];

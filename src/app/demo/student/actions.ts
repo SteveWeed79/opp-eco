@@ -16,6 +16,8 @@ import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { submitApplication } from "@/services/creation";
 import { drainPending } from "@/services/outbox";
+import { updateProfile } from "@/services/profile";
+import { PORTAL_PATH } from "@/routes";
 
 /**
  * Book a workforce board interview.
@@ -230,5 +232,62 @@ export async function applyToPosting(postingId: unknown): Promise<ActionResult> 
   revalidatePath("/student");
   revalidatePath("/business");
   revalidatePath("/admin");
+  return { ok: true };
+}
+
+/**
+ * Edit your own profile.
+ *
+ * The role is hardcoded here as everywhere, and `updateProfile` checks it
+ * again — a wrapper is a convenience, the service is the rule. What this adds
+ * is the shape check: a Server Action is a URL and every value arriving here
+ * came off the wire.
+ */
+export async function saveProfile(edit: unknown): Promise<ActionResult> {
+  const actor = await actorForPortal("student");
+
+  const limit = checkRateLimit(callerKey("saveProfile", actor.user.id), LIMITS.mutation);
+  if (!limit.ok) {
+    return {
+      ok: false,
+      error: `Too many changes at once. Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+  }
+
+  if (typeof edit !== "object" || edit === null) {
+    return { ok: false, error: "That form did not arrive intact." };
+  }
+
+  const fields = edit as Record<string, unknown>;
+  const strings = ["programOfStudy", "classStanding", "expectedGraduation"] as const;
+  for (const key of strings) {
+    if (typeof fields[key] !== "string") {
+      return { ok: false, error: "That form did not arrive intact." };
+    }
+  }
+  for (const key of ["skills", "interests"] as const) {
+    if (
+      !Array.isArray(fields[key]) ||
+      (fields[key] as unknown[]).some((tag) => typeof tag !== "string")
+    ) {
+      return { ok: false, error: "That form did not arrive intact." };
+    }
+  }
+
+  const result = await attemptWrite(() =>
+    updateProfile(actor, {
+      programOfStudy: fields.programOfStudy as string,
+      classStanding: fields.classStanding as string,
+      expectedGraduation: fields.expectedGraduation as string,
+      skills: fields.skills as string[],
+      interests: fields.interests as string[],
+      availableHoursPerWeek: Number(fields.availableHoursPerWeek),
+    }),
+  );
+
+  if (!result.ok) return { ok: false, error: result.error };
+  // Every portal that matches on skills reads this record, so every portal's
+  // view of it can go stale.
+  for (const path of Object.values(PORTAL_PATH)) revalidatePath(path);
   return { ok: true };
 }

@@ -114,6 +114,56 @@ describe("who may read an introduction", () => {
   });
 });
 
+describe("who may read a funding commitment", () => {
+  it("shows an employer the draws against placements it hosts", async () => {
+    // It is the party being reimbursed, so a payment it cannot see is a payment
+    // it cannot reconcile.
+    const theirs = await repositories.fundingCommitments.list(business);
+    const ownPostings = new Set(
+      seed.postings.filter((p) => p.businessId === APEX).map((p) => p.id),
+    );
+    const hosted = new Set(
+      seed.applications.filter((a) => ownPostings.has(a.postingId)).map((a) => a.id),
+    );
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((c) => c.applicationId && hosted.has(c.applicationId))).toBe(true);
+  });
+
+  it("shows a student only their own", async () => {
+    // A grant covering someone's tuition is a fact about their own finances
+    // before it is a line in a board's report.
+    const self = seed.studentForUser(student.user.id)!;
+    const theirs = await repositories.fundingCommitments.list(student);
+    expect(theirs.every((c) => c.studentId === self.id)).toBe(true);
+  });
+
+  it("shows the board its market's", async () => {
+    const theirs = await repositories.fundingCommitments.list(board);
+    expect(theirs.length).toBeGreaterThan(0);
+    expect(theirs.every((c) => c.marketId === board.membership.marketId)).toBe(true);
+  });
+});
+
+describe("who may read a fund", () => {
+  it("shows every fund in the market to everyone in it", async () => {
+    // Deliberately not narrowed to the sponsor. A student working out whether
+    // they can afford the credit and an employer working out whether hosting is
+    // viable are asking the same question, and a funding model visible only to
+    // its sponsor would reproduce the gap this venture exists to close.
+    for (const actor of [business, college, board, student]) {
+      const funds = await repositories.fundingSources.list(actor);
+      expect(funds.length).toBeGreaterThan(0);
+      expect(funds.every((f) => f.marketId === actor.membership.marketId)).toBe(true);
+    }
+  });
+
+  it("shows an administrator every market's", async () => {
+    const mine = await repositories.fundingSources.list(college);
+    const all = await repositories.fundingSources.list(admin);
+    expect(all.length).toBeGreaterThan(mine.length);
+  });
+});
+
 describe("who may read a follow-up outcome", () => {
   it("shows the college the ones in its market", async () => {
     const theirs = await repositories.outcomes.list(college);

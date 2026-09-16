@@ -13,9 +13,42 @@ import { NextResponse, type NextRequest } from "next/server";
  * in the future.
  */
 
+/**
+ * The header carrying a request's identifier, in and out.
+ *
+ * Named for the convention every platform and log aggregator already uses, so
+ * an id minted upstream is kept rather than replaced — two ids for one request
+ * is worse than none, because each looks authoritative in a different system.
+ */
+export const REQUEST_ID_HEADER = "x-request-id";
+
+/**
+ * Short, and not a UUID.
+ *
+ * It exists to be read down a phone line and typed into a search box by
+ * somebody describing a page that did not load. Thirty-six characters with
+ * hyphens is a number people transcribe wrongly; eight unambiguous ones is not.
+ * It is not a secret and guards nothing — correlation only.
+ */
+const ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+export function newRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (b) => ID_ALPHABET[b % ID_ALPHABET.length]).join("");
+}
+
+/** Reject anything that is not plausibly an id, so a header cannot inject. */
+export function sanitiseRequestId(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return /^[A-Za-z0-9._-]{1,64}$/.test(trimmed) ? trimmed : null;
+}
+
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const isDev = process.env.NODE_ENV === "development";
+  const requestId =
+    sanitiseRequestId(request.headers.get(REQUEST_ID_HEADER)) ?? newRequestId();
 
   const csp = [
     `default-src 'self'`,
@@ -39,10 +72,16 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set(REQUEST_ID_HEADER, requestId);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   response.headers.set("Content-Security-Policy", csp);
+
+  // On the way out as well as in. Without it the id exists only in the log,
+  // which is exactly backwards: the person who needs to quote it is the one
+  // looking at the response.
+  response.headers.set(REQUEST_ID_HEADER, requestId);
 
   // Never let a browser guess a content type. An uploaded file served with the
   // wrong type is how a resume becomes a script.

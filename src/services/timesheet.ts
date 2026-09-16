@@ -189,7 +189,9 @@ export async function logHours(
         recipientOrganizationId: posting.businessId,
         kind: "hours.submitted",
         payload: {
-          studentName: student.name,
+          // No learner name: the supervisor opens the queue to see whose week
+          // this is, and the week itself is enough to find it.
+          applicationId: entry.applicationId,
           postingTitle: posting.title,
           hours,
           weekStarting,

@@ -11,7 +11,7 @@
 import { describe, it, expect } from "vitest";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- plain JS operator script, which cannot import TypeScript
-import { seedInto, TABLES } from "../../../scripts/seed.mjs";
+import { seedInto, RUNTIME_TABLES, TABLES } from "../../../scripts/seed.mjs";
 
 interface Recorded {
   text: string;
@@ -112,21 +112,96 @@ describe("coverage", () => {
     // A fixture that stops being seeded leaves an empty table nobody notices
     // until a portal renders blank.
     const written = new Set(statements.map((s) => target(s.text)));
-    const expected = TABLES.filter(
-      // The outbox is produced by the running application, not by fixtures.
-      (t: string) => t !== "notification_outbox",
-    );
+    // The exclusions come from the seed script itself rather than from a copy
+    // kept here. A second list is a list that goes stale, and this one did:
+    // four credential tables were added to the truncation and this test failed
+    // on tables it was never going to be right about.
+    const runtime = new Set(RUNTIME_TABLES);
+    const expected = TABLES.filter((t: string) => !runtime.has(t));
     expect([...expected].filter((t) => !written.has(t))).toEqual([]);
   });
 
   it("converts money to cents on the way in", () => {
+    // The allocation moved off the market and onto its wage-subsidy fund, which
+    // is where the conversion now has to happen. $240,000 is 24,000,000 cents;
+    // writing dollars here would read back as $2,400 through `rows.ts`.
+    const wageFund = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO funding_sources") &&
+        s.params.includes("wage_subsidy") &&
+        s.params.includes("mkt-pittsburg"),
+    )!;
+    expect(wageFund.params).toContain(24_000_000);
+    expect(wageFund.params).toContain(2_000);
+  });
+
+  it("leaves a market carrying no money of its own", () => {
+    // Pinned so a well-meaning re-add is caught here rather than by two screens
+    // disagreeing about the same allocation.
     const marketInsert = statements.find((s) =>
       s.text.startsWith("INSERT INTO markets"),
     )!;
-    // $240,000 of allocation is 24,000,000 cents. Writing dollars here would
-    // read back as $2,400 through `rows.ts`.
-    expect(marketInsert.params).toContain(24_000_000);
-    expect(marketInsert.params).toContain(2_000);
+    expect(marketInsert.text).not.toContain("subsidy_budget_cents");
+    expect(marketInsert.text).not.toContain("subsidy_rate_cents");
+  });
+
+  it("seeds no uploaded file", () => {
+    // The truncation clears the table, so it has to be listed; seeding it would
+    // put somebody's document in the repository.
+    expect(
+      statements.filter((s) => s.text.startsWith("INSERT INTO uploaded_files")),
+    ).toEqual([]);
+  });
+
+  it("seeds no credential of any kind", () => {
+    // Worth asserting rather than assuming. A fixture session or password would
+    // be a working credential anyone could read out of this repository and
+    // present — and a seeded password is one that every checkout knows and
+    // every deployment starts life with.
+    const credentials = [
+      "sessions",
+      "sign_in_codes",
+      "user_passwords",
+      "user_totp",
+      "user_recovery_codes",
+      "mfa_challenges",
+    ];
+    const written = statements.filter((s) =>
+      credentials.some((table) => s.text.startsWith(`INSERT INTO ${table}`)),
+    );
+    expect(written).toEqual([]);
+  });
+
+  it("records how each organization signs in", () => {
+    // The board seeds onto codes rather than `federated`: it still holds no
+    // password for a public employee — and no authenticator seed either, since
+    // the factor is the agency's own mailbox — and it no longer locks the
+    // agency out of a pilot for want of an SSO adapter.
+    const board = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO organizations") && s.params.includes("board"),
+    )!;
+    expect(board.params).toContain("email_code");
+    expect(board.params).not.toContain("password");
+
+    // Colleges and employers get passwords, and their learners inherit it.
+    const college = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO organizations") && s.params.includes("college"),
+    )!;
+    expect(college.params).toContain("password");
+  });
+
+  it("writes no rate on a fund that is not paid by the hour", () => {
+    // The schema refuses one, and a rate on a grant is a number nothing would
+    // ever multiply.
+    const grant = statements.find(
+      (s) =>
+        s.text.startsWith("INSERT INTO funding_sources") &&
+        s.params.includes("credit_cost"),
+    )!;
+    // Position 8 is rate_cents in the insert's column list.
+    expect(grant.params[8]).toBeNull();
   });
 
   it("attributes a verified student, which the schema requires", () => {

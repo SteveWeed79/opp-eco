@@ -345,6 +345,35 @@ describe("retrieval authorization", () => {
     scan: "clean",
   };
 
+  it("refuses every file about a purged learner, to everyone", async () => {
+    // The purge deletes the files too, but that runs after the record commits
+    // and can be interrupted. This is the check that does not depend on the
+    // delete having happened — and it applies to the administrator who ordered
+    // the purge, because anonymising a record and then reading the resume it
+    // came with is not a purge.
+    const seed = await import("@/data/seed");
+    const learner = seed.students.find((s) => !s.purgedOn)!;
+    const before = { ...learner };
+    const at = seed.students.findIndex((s) => s.id === learner.id);
+    seed.students[at] = { ...learner, purgedOn: "2030-01-01" };
+
+    try {
+      const file = { ...clean, studentId: learner.id };
+      for (const role of ["admin", "college", "student"] as const) {
+        expect(
+          await canRetrieve(contextFor(role), file, {
+            key: "k",
+            studentId: learner.id,
+          }),
+          // "not found", not "forbidden": for a purged record that is the
+          // truthful answer, and it is also the one that says nothing.
+        ).toEqual({ ok: false, reason: "not_found" });
+      }
+    } finally {
+      seed.students[at] = before;
+    }
+  });
+
   it("refuses an unscanned file to everyone, including an administrator", async () => {
     const pending = { ...clean, scan: "pending" as const };
     const result = await canRetrieve(contextFor("admin"), pending, { key: "k", studentId: "stu-omar" });

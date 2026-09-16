@@ -132,10 +132,10 @@ describe("a student logs a week", () => {
 
   it("tells the supervising employer, not the whole market", async () => {
     await log();
-    const sent = pendingNotifications.filter((n) => n.kind === "hours.submitted");
+    const sent = pendingNotifications.filter((n) => n.intent.kind === "hours.submitted");
 
     expect(sent).toHaveLength(1);
-    expect(sent[0].recipientOrganizationId).toBe("org-apex");
+    expect(sent[0].intent.recipientOrganizationId).toBe("org-apex");
   });
 
   it("refuses the same week twice", async () => {
@@ -328,9 +328,9 @@ describe("the supervisor reviews it", () => {
 
     await reviewHours(business(), { entryId: logged.value.id, decision: "approve" });
 
-    const sent = pendingNotifications.filter((n) => n.kind === "hours.approved");
+    const sent = pendingNotifications.filter((n) => n.intent.kind === "hours.approved");
     expect(sent).toHaveLength(1);
-    expect(sent[0].recipientUserId).toBe("u-omar");
+    expect(sent[0].intent.recipientUserId).toBe("u-omar");
   });
 });
 

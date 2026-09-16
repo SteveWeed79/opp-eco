@@ -39,6 +39,7 @@ function student(overrides: Partial<Student> = {}): Student {
     id: "stu-1",
     marketId: MARKET,
     userId: "u-1",
+    purgedOn: null,
     collegeId: "org-college",
     name: "Test Student",
     email: "s@example.test",
@@ -77,6 +78,8 @@ function posting(overrides: Partial<Posting> = {}): Posting {
 
 function organization(overrides: Partial<Organization> = {}): Organization {
   return {
+    identityMode: "email_code",
+    emailDomains: [],
     id: "org-1",
     marketId: MARKET,
     kind: "business",

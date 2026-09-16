@@ -14,6 +14,7 @@
 import type { ActorContext, Organization } from "@/domain/types";
 import { repositories } from "@/data/backend";
 import { systemContext } from "@/auth/system";
+import { anonymousFallbackAllowed } from "@/auth/config";
 import { themeFor, themeVariables } from "./theme";
 
 /** Everything the shell needs, already serialisable. */
@@ -52,6 +53,12 @@ export async function resolvePartnerTheme(
  * `/student` is themed the same way a signed-in visit is. Without that the
  * demonstration would only show theming to someone who signed in first, which
  * is the one thing most visitors never do.
+ *
+ * That fallback is gated on the same switch as the session one. It reads
+ * records as the system context to answer a question nobody authenticated
+ * asked, and it puts a named partner institution into the masthead of a
+ * response to an anonymous request — harmless in a demo of invented colleges,
+ * and a disclosure the moment the colleges are real.
  */
 async function educationOrganizationFor(
   actor: ActorContext | null,
@@ -75,6 +82,8 @@ async function educationOrganizationFor(
   // on the route, so this value is unused for them; returning the demo
   // college keeps signed-out browsing themed.
   if (actor) return null;
+
+  if (!anonymousFallbackAllowed()) return null;
 
   const demoStudent = (await repositories.students.list(system))[0];
   return demoStudent

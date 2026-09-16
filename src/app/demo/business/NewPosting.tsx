@@ -30,19 +30,35 @@ export function NewPosting({
   county,
   skillVocabulary,
   hoursPerCredit,
+  startingTrack = "standard",
+  label = "Post an opportunity",
+  size = "md",
 }: {
   county: string;
   /** Skills already in use in this market, so tags converge instead of sprawl. */
   skillVocabulary: string[];
   hoursPerCredit: number;
+  /**
+   * Which track the form opens on.
+   *
+   * The micro-internship explainer had its own "Post a project" button that did
+   * nothing, six hundred lines below a working "Post an opportunity" that could
+   * already produce exactly that. Two controls for one capability is how one of
+   * them ends up unwired — so there is one component, opened where the reader
+   * is, on the track they were just reading about. The choice is still theirs
+   * to change inside the form.
+   */
+  startingTrack?: Track;
+  label?: string;
+  size?: "sm" | "md";
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button variant="primary" onClick={() => setOpen(true)}>
+      <Button variant="primary" size={size} onClick={() => setOpen(true)}>
         <span className="flex items-center gap-1.5">
-          <Plus className="w-4 h-4" aria-hidden="true" /> Post an opportunity
+          <Plus className="w-4 h-4" aria-hidden="true" /> {label}
         </span>
       </Button>
       {open && (
@@ -50,6 +66,7 @@ export function NewPosting({
           county={county}
           skillVocabulary={skillVocabulary}
           hoursPerCredit={hoursPerCredit}
+          startingTrack={startingTrack}
           onClose={() => setOpen(false)}
         />
       )}
@@ -62,14 +79,16 @@ function PostingForm({
   county,
   skillVocabulary,
   hoursPerCredit,
+  startingTrack,
   onClose,
 }: {
   county: string;
   skillVocabulary: string[];
   hoursPerCredit: number;
+  startingTrack: Track;
   onClose: () => void;
 }) {
-  const [track, setTrack] = useState<Track>("standard");
+  const [track, setTrack] = useState<Track>(startingTrack);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [skillsRequired, setSkillsRequired] = useState<string[]>([]);

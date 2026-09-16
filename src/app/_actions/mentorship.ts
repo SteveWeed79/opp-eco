@@ -129,8 +129,10 @@ function notificationsFor(
       recipientOrganizationId: offer.businessId,
       kind: "mentorship.introduced.employer",
       payload: {
-        studentName: student.name,
-        programOfStudy: student.programOfStudy,
+        // Neither the student's name nor their programme. A mentorship
+        // introduction is the message most likely to be forwarded — it is a
+        // warm handover — and it is addressed to an organization contact who
+        // may have no account here at all.
         mentorName: offer.mentorName,
         formatLabel,
         collegeName: names.collegeName ?? "The college",

@@ -3,6 +3,7 @@
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { recordFollowUp } from "@/app/_actions/outcome";
+import { addConsent, revokeConsent } from "@/app/_actions/privacy";
 
 /**
  * College-side transitions: submitting for credit, granting it, denying it,
@@ -76,4 +77,29 @@ export async function collegeRecordOutcome(
   detail?: unknown,
 ): Promise<ActionResult> {
   return recordFollowUp("college", studentId, applicationId, kind, observedOn, detail);
+}
+
+/**
+ * Record that a learner agreed to a disclosure of this college's records.
+ *
+ * The college rather than any role that happens to be signed in: consent is a
+ * property of the institution whose records it covers, and `canRecordConsent`
+ * checks the caller against that institution rather than against a role list.
+ */
+export async function collegeRecordConsent(
+  studentId: unknown,
+  sourceOrgId: unknown,
+  scope: unknown,
+  grantedBy: unknown,
+  note?: unknown,
+): Promise<ActionResult> {
+  return addConsent("college", studentId, sourceOrgId, scope, grantedBy, note);
+}
+
+/** A learner changes their mind. The row stays; the status changes. */
+export async function collegeWithdrawConsent(
+  consentId: unknown,
+  reason: unknown,
+): Promise<ActionResult> {
+  return revokeConsent("college", consentId, reason);
 }

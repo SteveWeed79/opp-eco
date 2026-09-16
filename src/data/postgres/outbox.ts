@@ -22,6 +22,7 @@
 import type {
   NotificationIntent,
   NotificationQueue,
+  PendingNotification,
   QueuedNotification,
 } from "../store";
 import type { SqlClient } from "./client";
@@ -33,6 +34,25 @@ interface OutboxRow {
   recipient_organization_id: string | null;
   kind: string;
   payload: Record<string, unknown> | string | null;
+  /** Only selected for the pending view, which is the one that reports age. */
+  created_at?: Date | string;
+  attempts?: number;
+  last_error?: string | null;
+}
+
+function stamp(value: Date | string | undefined): string {
+  if (value instanceof Date) return value.toISOString();
+  return value ?? "";
+}
+
+/** A waiting row, with the columns the table has always carried and nobody read. */
+function toPending(row: OutboxRow): PendingNotification {
+  return {
+    intent: toIntent(row),
+    queuedAt: stamp(row.created_at),
+    attempts: Number(row.attempts ?? 0),
+    lastError: row.last_error ?? null,
+  };
 }
 
 /**
@@ -58,6 +78,15 @@ function toIntent(row: OutboxRow): NotificationIntent {
 }
 
 const COLUMNS = `id, market_id, recipient_user_id, recipient_organization_id, kind, payload`;
+
+/**
+ * What the pending view needs on top.
+ *
+ * Separate from `COLUMNS` because the claim path does not want them: `take`
+ * returns rows it is about to dispatch, and how long they waited is not its
+ * business. The pending view is the one an operator reads.
+ */
+const PENDING_COLUMNS = `${COLUMNS}, created_at, attempts, last_error`;
 
 export function postgresNotificationQueue(db: SqlClient): NotificationQueue {
   return {
@@ -87,17 +116,17 @@ export function postgresNotificationQueue(db: SqlClient): NotificationQueue {
     async pending(marketId: string | null) {
       const rows = marketId
         ? await db.query<OutboxRow>(
-            `SELECT ${COLUMNS} FROM notification_outbox
+            `SELECT ${PENDING_COLUMNS} FROM notification_outbox
               WHERE dispatched_at IS NULL AND market_id = $1
               ORDER BY created_at DESC, id DESC`,
             [marketId],
           )
         : await db.query<OutboxRow>(
-            `SELECT ${COLUMNS} FROM notification_outbox
+            `SELECT ${PENDING_COLUMNS} FROM notification_outbox
               WHERE dispatched_at IS NULL
               ORDER BY created_at DESC, id DESC`,
           );
-      return rows.map(toIntent);
+      return rows.map(toPending);
     },
   };
 }

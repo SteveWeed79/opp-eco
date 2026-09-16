@@ -15,8 +15,11 @@
 import type {
   ActorContext,
   Application,
+  ConsentRecord,
   AuditEvent,
   CreditAward,
+  FundingCommitment,
+  FundingSource,
   InterviewSlot,
   Market,
   MentorshipOffer,
@@ -150,6 +153,57 @@ export interface CreditAwardRepository {
  * day an employer can record the hire it made, which is the open question the
  * domain names (Q23).
  */
+/**
+ * Funds and the draws against them.
+ *
+ * Read by everyone in the market, which is unusual here and deliberate. A
+ * student deciding whether they can afford the credit, an employer deciding
+ * whether hosting is viable, and a college advising both are all asking the
+ * same question — is there money for this — and a funding model whose answer
+ * is visible only to the sponsor would reproduce the exact gap this venture
+ * exists to close.
+ *
+ * What is narrowed is *spending*, not reading: `canSpendFrom` decides that, and
+ * the write paths check it again.
+ */
+export interface FundingSourceRepository {
+  list(actor: ActorContext): Promise<FundingSource[]>;
+  find(actor: ActorContext, id: string): Promise<FundingSource | null>;
+  forMarket(actor: ActorContext, marketId: string): Promise<FundingSource[]>;
+}
+
+/**
+ * Commitments, narrowed by whose money and whose learner it is.
+ *
+ * An employer sees the draws against placements it hosts — it is the party
+ * being reimbursed, so a commitment it cannot see is a payment it cannot
+ * reconcile. A student sees their own, because a grant covering their tuition
+ * is a fact about their own finances. Everyone else sees the market's.
+ */
+export interface FundingCommitmentRepository {
+  list(actor: ActorContext): Promise<FundingCommitment[]>;
+  find(actor: ActorContext, id: string): Promise<FundingCommitment | null>;
+  forSource(actor: ActorContext, sourceId: string): Promise<FundingCommitment[]>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<FundingCommitment[]>;
+  forStudent(actor: ActorContext, studentId: string): Promise<FundingCommitment[]>;
+}
+
+/**
+ * Consents, narrowed to the parties with standing.
+ *
+ * A learner sees their own, which is not a courtesy: a record asserting that
+ * someone agreed to something is the record they are most entitled to check.
+ * The institution that recorded it sees it because it is the one that will have
+ * to produce the form. **An employer sees none** — it is the beneficiary of the
+ * disclosure, not a party to the agreement, and what it gets from consent is a
+ * wider view of the learner rather than sight of the paperwork.
+ */
+export interface ConsentRepository {
+  list(actor: ActorContext): Promise<ConsentRecord[]>;
+  find(actor: ActorContext, id: string): Promise<ConsentRecord | null>;
+  forStudent(actor: ActorContext, studentId: string): Promise<ConsentRecord[]>;
+}
+
 export interface OutcomeRepository {
   list(actor: ActorContext): Promise<Outcome[]>;
   forStudent(actor: ActorContext, studentId: string): Promise<Outcome[]>;
@@ -175,6 +229,9 @@ export interface Repositories {
   interviewSlots: InterviewSlotRepository;
   timeEntries: TimeEntryRepository;
   creditAwards: CreditAwardRepository;
+  fundingSources: FundingSourceRepository;
+  fundingCommitments: FundingCommitmentRepository;
+  consents: ConsentRepository;
   outcomes: OutcomeRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;

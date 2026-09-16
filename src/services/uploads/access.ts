@@ -47,6 +47,13 @@ export async function canRetrieve(
   // reimplemented.
   if (!student) return { ok: false, reason: "not_found" };
 
+  // A purged learner's files are closed to everyone, the administrator who
+  // ordered the purge included. The purge deletes them too, but that happens
+  // after the record commits and could be interrupted; this is the check that
+  // does not depend on the delete having succeeded. It reads as "not found"
+  // because for a purged record that is the truthful answer.
+  if (student.purgedOn) return { ok: false, reason: "not_found" };
+
   switch (actor.membership.role) {
     case "admin":
       return { ok: true };

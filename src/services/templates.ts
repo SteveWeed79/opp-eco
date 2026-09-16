@@ -12,8 +12,14 @@
  *     makes the reader work out their own next step, which is how queues
  *     stall. "Your application moved to shortlisted" is worse than "the
  *     employer wants to talk — confirm you are still interested".
- *  2. **Say who it is about.** These people carry dozens of placements. A
- *     subject line without a name and a role is unsortable.
+ *  2. **Say which record it is about — never who.** These people carry dozens
+ *     of placements, so a message with nothing to sort on is useless. That
+ *     used to be solved by putting the learner's name in the subject line, and
+ *     it is the rule this file reversed: TEGL 39-11 tells anyone handling WIOA
+ *     participant PII never to email it unencrypted, and a subject line is the
+ *     least protected part of an email — logged by every relay, shown on a lock
+ *     screen, quoted whole in every reply. A reference sorts just as well and
+ *     identifies nobody. The name is one click away, behind sign-on.
  *  3. **Never imply money that has not been authorized.** A student reading
  *     "$20/hour" before the board has cleared them will plan around it.
  */
@@ -26,6 +32,40 @@ export interface Message {
   body: string;
   /** Where the recipient should go. Rendered as a button in the HTML part. */
   action?: { label: string; path: string };
+  /**
+   * A standing legal notice, set apart from the message itself.
+   *
+   * Separate from `body` because it is not prose anybody wrote for this
+   * situation — it is the same sentence every time, and the renderer sets it in
+   * smaller type below the rule so it reads as a footer rather than as part of
+   * the update.
+   */
+  notice?: string;
+}
+
+/**
+ * The redisclosure notice, on every message to an employer about a learner.
+ *
+ * FERPA asks the institution sharing an education record to tell the recipient
+ * that it is covered and may not be passed on without consent. The platform is
+ * what makes that sharing easy — an employer forwarding a candidate to a
+ * colleague at another company has created a problem that traces back to this
+ * product — so the platform is what carries the notice.
+ */
+export const FERPA_NOTICE =
+  "This message concerns a student's education record. It is protected under FERPA " +
+  "and may not be shared outside your organization without the student's written consent.";
+
+/**
+ * A record reference a person can sort and search on, identifying nobody.
+ *
+ * `app-12` becomes `APP-12`. Opaque by construction, which is the same shape
+ * the data rules ask for when a workforce board needs to match a participant in
+ * its own system: they match on their key, and this side holds a reference.
+ */
+function ref(payload: Record<string, unknown>): string {
+  const id = payload.applicationId;
+  return typeof id === "string" && id.length > 0 ? id.toUpperCase() : "this record";
 }
 
 type Template = (payload: Record<string, unknown>) => Message;
@@ -72,9 +112,10 @@ export const TEMPLATES: Record<string, Template> = {
   "application.submitted": (p) => ({
     subject: `New applicant for ${str(p.postingTitle)}`,
     body:
-      `${str(p.studentName)} applied for ${str(p.postingTitle)}. ` +
+      `A candidate applied for ${str(p.postingTitle)} (${ref(p)}). ` +
       `Reviewing promptly is the single biggest thing you can do to keep a candidate engaged — most withdrawals happen while waiting for a first response.`,
     action: { label: "Review the candidate", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
 
   // --- The employer is interested ------------------------------------------
@@ -104,18 +145,19 @@ export const TEMPLATES: Record<string, Template> = {
     };
   },
   "mutual_interest.employer": (p) => ({
-    subject: `${str(p.studentName)} confirmed interest in ${str(p.postingTitle)}`,
+    subject: `Candidate confirmed interest — ${str(p.postingTitle)}`,
     body:
       p.track === "micro"
-        ? `${str(p.studentName)} is ready to start ${str(p.postingTitle)}. Assign the project when you are.`
-        : `${str(p.studentName)} is now booking an eligibility interview with ${str(p.boardName)}. ` +
+        ? `Your candidate is ready to start ${str(p.postingTitle)}. Assign the project when you are.`
+        : `Your candidate is now booking an eligibility interview with ${str(p.boardName)}. ` +
           `Once the board clears them and authorizes funding, the placement can start and your wage cost is reimbursed.`,
     action: { label: "View the pipeline", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "mutual_interest.board": (p) => ({
-    subject: `Clearance needed: ${str(p.studentName)}`,
+    subject: `Clearance needed — ${ref(p)}`,
     body:
-      `${str(p.studentName)} reached mutual interest with ${str(p.employerName)} for ${str(p.postingTitle)} ` +
+      `An applicant reached mutual interest with ${str(p.employerName)} for ${str(p.postingTitle)} ` +
       `and needs an eligibility determination for this placement. ` +
       `Clearance is per applicant per job, so this is a fresh determination even if you have seen this student before.`,
     action: { label: "Open the board queue", path: PORTAL_PATH.board },
@@ -131,18 +173,19 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "See the details", path: PORTAL_PATH.student },
   }),
   "interview.booked.board": (p) => ({
-    subject: `Interview booked: ${str(p.studentName)}`,
+    subject: `Interview booked — ${ref(p)}`,
     body:
-      `${str(p.studentName)} booked a clearance interview for ${str(p.postingTitle)} at ${str(p.employerName)}, ` +
+      `An applicant booked a clearance interview for ${str(p.postingTitle)} at ${str(p.employerName)}, ` +
       `on ${when(p.startsAt)}. Nothing else is needed until then.`,
     action: { label: "Open the board queue", path: PORTAL_PATH.board },
   }),
   "interview.booked.employer": (p) => ({
     subject: `Your candidate booked their board interview`,
     body:
-      `${str(p.studentName)}'s clearance interview for ${str(p.postingTitle)} is ${when(p.startsAt)}. ` +
+      `Your candidate's clearance interview for ${str(p.postingTitle)} is ${when(p.startsAt)}. ` +
       `Once the board authorizes funding, the placement can start.`,
     action: { label: "View the pipeline", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
 
   // --- Clearance -----------------------------------------------------------
@@ -154,11 +197,12 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "View your applications", path: PORTAL_PATH.student },
   }),
   "clearance.granted.employer": (p) => ({
-    subject: `${str(p.studentName)} cleared for ${str(p.postingTitle)}`,
+    subject: `Candidate cleared — ${str(p.postingTitle)}`,
     body:
-      `${str(p.boardName)} cleared ${str(p.studentName)} for this placement. ` +
+      `${str(p.boardName)} cleared your candidate for this placement. ` +
       `Funding authorization is the next step; you will hear the hour cap once it is set.`,
     action: { label: "View the pipeline", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "clearance.declined.student": (p) => ({
     subject: `Funding decision for ${str(p.postingTitle)}`,
@@ -168,20 +212,22 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "View your applications", path: PORTAL_PATH.student },
   }),
   "clearance.declined.employer": (p) => ({
-    subject: `No board funding for ${str(p.studentName)}`,
+    subject: `No board funding — ${str(p.postingTitle)}`,
     body:
       `${str(p.boardName)} will not be reimbursing wages for this placement. ` +
       `You can still start it unsubsidised — the credit and the supervision requirements are unchanged, only the reimbursement is.`,
     action: { label: "View the pipeline", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
 
   // --- Funding -------------------------------------------------------------
   "funding.authorized": (p) => ({
-    subject: `Funding approved for ${str(p.studentName)}`,
+    subject: `Funding approved — ${str(p.postingTitle)}`,
     body:
       `${str(p.boardName)} authorized up to ${num(p.hours) ?? "the posted"} hours at $${num(p.rate) ?? num(p.ratePerHour)}/hour for ${str(p.postingTitle)}. ` +
       `You can start the placement and log hours against it. This is a cap, not a payment — anything unused returns to the allocation.`,
     action: { label: "Start the placement", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "funding.authorized.student": (p) => ({
     subject: `Your placement is funded`,
@@ -200,9 +246,9 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "Log hours", path: PORTAL_PATH.student },
   }),
   "placement.started.college": (p) => ({
-    subject: `Placement started: ${str(p.studentName)}`,
+    subject: `Placement started — ${ref(p)}`,
     body:
-      `${str(p.studentName)} started ${str(p.postingTitle)} at ${str(p.employerName)}. ` +
+      `A student started ${str(p.postingTitle)} at ${str(p.employerName)}. ` +
       `Nothing is needed from you until the work is complete and they submit for credit.`,
     action: { label: "Open the college portal", path: PORTAL_PATH.college },
   }),
@@ -214,7 +260,7 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "Submit for credit", path: PORTAL_PATH.student },
   }),
   "placement.completed.college": (p) => ({
-    subject: `${str(p.studentName)} completed ${str(p.postingTitle)}`,
+    subject: `Placement completed — ${str(p.postingTitle)}`,
     body:
       `The placement at ${str(p.employerName)} is finished. ` +
       `A credit decision is due once the student submits it.`,
@@ -223,9 +269,9 @@ export const TEMPLATES: Record<string, Template> = {
 
   // --- Credit --------------------------------------------------------------
   "credit.pending.college": (p) => ({
-    subject: `Credit decision waiting: ${str(p.studentName)}`,
+    subject: `Credit decision waiting — ${ref(p)}`,
     body:
-      `${str(p.studentName)} submitted ${str(p.postingTitle)} for credit. ` +
+      `A student submitted ${str(p.postingTitle)} for credit. ` +
       `This is the last step of the whole process — a student who completed the work and never received the credit has had the worst possible experience of this program.`,
     action: { label: "Review the credit queue", path: PORTAL_PATH.college },
   }),
@@ -237,11 +283,12 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "View your credits", path: PORTAL_PATH.student },
   }),
   "credit.granted.employer": (p) => ({
-    subject: `${str(p.studentName)} earned credit for their placement`,
+    subject: `Your intern earned credit for their placement`,
     body:
       `${str(p.collegeName)} granted academic credit for ${str(p.postingTitle)}. ` +
       `That is the outcome this program exists to produce — thank you for hosting it.`,
     action: { label: "Post another opportunity", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "credit.denied.student": (p) => ({
     subject: `Credit decision for ${str(p.postingTitle)}`,
@@ -260,9 +307,10 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "See other opportunities", path: PORTAL_PATH.student },
   }),
   "application.withdrawn.employer": (p) => ({
-    subject: `${str(p.studentName)} withdrew from ${str(p.postingTitle)}`,
+    subject: `A candidate withdrew from ${str(p.postingTitle)}`,
     body: `They are no longer a candidate for this posting. Your other applicants are unaffected.`,
     action: { label: "View the pipeline", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "placement.terminated.student": (p) => ({
     subject: `${str(p.postingTitle)} has ended`,
@@ -272,14 +320,14 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "View your applications", path: PORTAL_PATH.student },
   }),
   "placement.terminated.college": (p) => ({
-    subject: `Placement ended early: ${str(p.studentName)}`,
+    subject: `Placement ended early — ${ref(p)}`,
     body:
       `${str(p.postingTitle)} at ${str(p.employerName)} ended before completion. ` +
       `The student may need advising about what their approved hours count toward.`,
     action: { label: "Open the college portal", path: PORTAL_PATH.college },
   }),
   "placement.terminated.board": (p) => ({
-    subject: `Release funding: ${str(p.studentName)}`,
+    subject: `Release funding — ${ref(p)}`,
     body:
       `${str(p.postingTitle)} ended early, so the authorized hours will not be used in full. ` +
       `The unspent commitment can return to this program year's allocation.`,
@@ -316,12 +364,13 @@ export const TEMPLATES: Record<string, Template> = {
   // what they are allowed to ask for. A student who gets a name with no idea
   // what to say with it does not send the email.
   "mentorship.introduced.employer": (p) => ({
-    subject: `${str(p.studentName)} would like to take you up on your offer`,
+    subject: `A student would like to take you up on your offer`,
     body:
-      `${str(p.collegeName)} has introduced ${str(p.studentName)}, ${str(p.programOfStudy)}, for ${str(p.formatLabel).toLowerCase()} with ${str(p.mentorName)}. ` +
+      `${str(p.collegeName)} has introduced a student for ${str(p.formatLabel).toLowerCase()} with ${str(p.mentorName)}. ` +
       `They will be in touch directly. Nothing here needs approving and nothing is being claimed against your time beyond what you offered — ` +
       `if now is not the moment, say so and the college will find another mentor rather than leaving the student waiting.`,
     action: { label: "See your introductions", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
 
   "mentorship.introduced.student": (p) => ({
@@ -339,12 +388,13 @@ export const TEMPLATES: Record<string, Template> = {
   // who has to open a portal to find out what they are approving will approve
   // it unread, and an approval nobody looked at is not a validation.
   "hours.submitted": (p) => ({
-    subject: `${str(p.studentName)} logged ${num(p.hours) ?? "some"} hours — week of ${week(p.weekStarting)}`,
+    subject: `${num(p.hours) ?? "Some"} hours to review — week of ${week(p.weekStarting)}`,
     body:
-      `${str(p.studentName)} submitted ${num(p.hours) ?? "some"} hours for ${str(p.postingTitle)}, week beginning ${week(p.weekStarting)}. ` +
+      `Your intern submitted ${num(p.hours) ?? "some"} hours for ${str(p.postingTitle)}, week beginning ${week(p.weekStarting)}. ` +
       `Approving confirms they worked those hours. It is what the workforce board reimburses against and what the college counts toward credit, ` +
       `so please send it back if anything looks wrong rather than approving to clear the queue.`,
     action: { label: "Review the week", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
   }),
   "hours.approved": (p) => ({
     subject: `${num(p.hours) ?? "Your"} hours approved — week of ${week(p.weekStarting)}`,

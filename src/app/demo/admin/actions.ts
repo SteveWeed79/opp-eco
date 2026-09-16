@@ -1,5 +1,8 @@
 "use server";
 
+import { awardFunds, changeAllocation } from "@/app/_actions/funding";
+import { purgeLearner } from "@/app/_actions/privacy";
+import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { overrideInput, validate } from "@/services/validation";
@@ -61,4 +64,72 @@ export async function adminCloseIntroduction(
   note: unknown,
 ): Promise<ActionResult> {
   return closeIntroduction("admin", pairingId, to, note);
+}
+
+/**
+ * Commit money from a fund, as the administrator.
+ *
+ * The administrator can spend any fund in any market — which is not an override
+ * in the state-machine sense, and worth saying plainly. `canSpendFrom` grants
+ * it because the operator runs the foundation whose fund it usually is, and
+ * because a market whose sponsor has not acted is exactly what an operator
+ * exists to unstick. Every other caller is narrowed to funds their own
+ * organization sponsors.
+ */
+export async function adminAwardFunds(
+  sourceId: string,
+  studentId: string,
+  applicationId: string | null,
+  amount: number,
+  note: string,
+): Promise<ActionResult> {
+  return awardFunds("admin", sourceId, studentId, applicationId, amount, note);
+}
+
+/** Change what any fund holds. Same ownership rule, same audit trail. */
+export async function adminAdjustAllocation(
+  sourceId: string,
+  allocated: unknown,
+  ratePerHour: unknown,
+  reason: string,
+): Promise<ActionResult> {
+  return changeAllocation("admin", sourceId, allocated, ratePerHour, reason);
+}
+
+/**
+ * Remove a learner's identifiers under the retention schedule.
+ *
+ * The administrator alone, which is the opposite of who records consent and
+ * deliberately so. Consent is an institution's own paperwork about its own
+ * records; a purge is the platform discharging a statutory obligation across
+ * every institution in a market, and it cannot be undone.
+ */
+export async function adminPurgeLearner(
+  studentId: unknown,
+  reason: unknown,
+): Promise<ActionResult> {
+  return purgeLearner("admin", studentId, reason);
+}
+
+/**
+ * Who can get into an organization, and under what address.
+ *
+ * Wrapped here with the role implied by the file rather than accepted, like
+ * every other action in this portal: a Server Action is a URL, and one that
+ * took its own role as an argument would be a way to claim one.
+ */
+export async function addPerson(
+  organizationId: unknown,
+  name: unknown,
+  email: unknown,
+): Promise<ActionResult> {
+  return addMember(organizationId, name, email);
+}
+
+export async function moveWorkAddress(
+  currentEmail: unknown,
+  newEmail: unknown,
+  reason: unknown,
+): Promise<ActionResult> {
+  return changeAddress(currentEmail, newEmail, reason);
 }
