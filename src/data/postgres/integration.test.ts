@@ -236,6 +236,7 @@ withDatabase("parity with the in-memory layer", () => {
       awaitingReview: await repos.timeEntries.awaitingReview(actor),
       creditAwards: await repos.creditAwards.list(actor),
       outcomes: await repos.outcomes.list(actor),
+      hostOffers: await repos.hostOffers.list(actor),
       consents: await repos.consents.list(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
@@ -346,6 +347,9 @@ withDatabase("parity with the in-memory layer", () => {
       expect(byId(await postgres.outcomes.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.outcomes.forStudent(actor, student.id)),
       );
+      expect(byId(await postgres.hostOffers.forStudent(actor, student.id))).toEqual(
+        byId(await memoryRepositories.hostOffers.forStudent(actor, student.id)),
+      );
       expect(byId(await postgres.consents.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.consents.forStudent(actor, student.id)),
       );
@@ -370,6 +374,12 @@ withDatabase("parity with the in-memory layer", () => {
         byId(await postgres.outcomes.forApplication(actor, application.id)),
       ).toEqual(
         byId(await memoryRepositories.outcomes.forApplication(actor, application.id)),
+      );
+      // The one accessor here that returns a single record or null rather than
+      // a list, so `byId` would hide a disagreement about which of the two it
+      // was. Compared directly for that reason.
+      expect(await postgres.hostOffers.forApplication(actor, application.id)).toEqual(
+        await memoryRepositories.hostOffers.forApplication(actor, application.id),
       );
       expect(
         byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
@@ -441,6 +451,50 @@ withDatabase("parity with the in-memory layer", () => {
     const once = await postgres.postings.list(actor);
     const twice = await postgres.postings.list(actor);
     expect(once.map((p) => p.id)).toEqual(twice.map((p) => p.id));
+  });
+
+  it("shows an employer its own host answers and nobody else's", async () => {
+    // The parity assertions above compare the two layers against each other,
+    // which two empty lists satisfy perfectly. This one pins that the employer
+    // narrowing returns something and leaves something out, so a scoping rule
+    // that quietly matched nothing could not pass as agreement.
+    const postgres = pg();
+    const actor = contextFor("business");
+    const own = actor.membership.organizationId;
+
+    for (const repos of [postgres, memoryRepositories]) {
+      const rows = await repos.hostOffers.list(actor);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((o) => o.businessId === own)).toBe(true);
+    }
+
+    // And there is genuinely a row belonging to somebody else to be excluded,
+    // or the assertion above proves nothing.
+    const all = await postgres.hostOffers.list(contextFor("admin"));
+    expect(all.some((o) => o.businessId !== own)).toBe(true);
+  });
+
+  it("strips the employer's note for the learner and the board, and keeps the answer", async () => {
+    const postgres = pg();
+    const seeded = await postgres.hostOffers.list(contextFor("admin"));
+    const withNote = seeded.filter((o) => o.note);
+    expect(withNote.length).toBeGreaterThan(0);
+
+    for (const role of ["student", "board"] as const) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.hostOffers.list(contextFor(role));
+        expect(rows.every((o) => o.note === undefined)).toBe(true);
+        // The answer is not a secret from either of them. A learner knows
+        // whether they were offered a job.
+        expect(rows.every((o) => Boolean(o.answer))).toBe(true);
+      }
+    }
+
+    // The college and the employer, who work from it, still get the note.
+    for (const role of ["college", "business"] as const) {
+      const rows = await postgres.hostOffers.list(contextFor(role));
+      expect(rows.some((o) => o.note)).toBe(true);
+    }
   });
 
   it("refuses another market's records, whoever asks", async () => {

@@ -77,6 +77,7 @@ export const TABLES = [
   "sign_in_codes",
   "notification_outbox",
   "audit_events",
+  "host_offers",
   "outcomes",
   "consents",
   "funding_commitments",
@@ -515,6 +516,28 @@ export async function seedInto(tx) {
     );
   }
 
+  // The host's answer points at a market, an application, the employer, the
+  // learner and whoever recorded it. All five are already in.
+  for (const offer of seed.hostOffers) {
+    await insert(
+      `INSERT INTO host_offers (id, market_id, application_id, business_id,
+         student_id, answer, recorded_by, recorded_on, source, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        offer.id,
+        offer.marketId,
+        offer.applicationId,
+        offer.businessId,
+        offer.studentId,
+        offer.answer,
+        offer.recordedByUserId,
+        offer.recordedOn,
+        offer.source,
+        offer.note ?? null,
+      ],
+    );
+  }
+
   for (const event of seed.auditEvents) {
     await insert(
       `INSERT INTO audit_events (market_id, occurred_at, actor_user_id, actor_role,
@@ -572,6 +595,7 @@ try {
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
+       (SELECT count(*) FROM host_offers)        AS host_offers,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
        (SELECT count(*) FROM funding_commitments) AS funding_commitments,

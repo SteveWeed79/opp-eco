@@ -251,6 +251,29 @@ export const recordOutcomeInput = z.object({
 });
 
 /**
+ * What the host did at the end of a placement.
+ *
+ * Three fields, and two of them are the whole request: which placement, and
+ * what happened. Everything else about the record — the employer, the learner,
+ * the market, the role that answered — is derived server-side from the
+ * placement and the acting membership, so there is nothing here a caller could
+ * use to file somebody else's hiring decision.
+ *
+ * `source` is deliberately absent for the same reason it is absent from
+ * `recordOutcomeInput`, and it matters more here: a caller who could name the
+ * source could file their own guess as an employer's firsthand answer, which
+ * is precisely the claim this record exists to be trusted about.
+ */
+export const recordHostOfferInput = z.object({
+  applicationId: id,
+  answer: z.enum(["accepted", "declined", "none"]),
+  // Never required. An employer who answered without explaining has still
+  // answered, and demanding a sentence as the price of a click is how a
+  // one-click question becomes a form nobody finishes.
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+/**
  * A week of logged hours.
  *
  * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered

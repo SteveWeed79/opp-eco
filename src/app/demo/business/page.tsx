@@ -4,6 +4,7 @@ import {
   Clock,
   FileText,
   HandHeart,
+  Handshake,
   HelpCircle,
   Users,
   Zap,
@@ -45,8 +46,14 @@ import { reviewQueue, unreviewedWeeksByApplication } from "@/services/timesheet"
 import { ApproveHours } from "./ApproveHours";
 import { availableTransitions, fundingCommitment, isTerminal } from "@/domain/workflow";
 import { postingTotalHours, type MentorshipPairing } from "@/domain/types";
-import { marketFunding } from "@/lib/queries";
-import { businessCloseIntroduction, businessTransition } from "./actions";
+import { hostOfferQueue, marketFunding } from "@/lib/queries";
+import {
+  answerPlacementOffer,
+  businessCloseIntroduction,
+  businessTransition,
+} from "./actions";
+import { AnswerOffer } from "@/components/AnswerOffer";
+import { HOST_OFFER_ANSWERS } from "@/domain/offer";
 import { NewPosting } from "./NewPosting";
 import { IntroductionOutcome } from "@/components/IntroductionOutcome";
 import { OfferMentorship } from "./OfferMentorship";
@@ -55,9 +62,10 @@ import { opportunityPath } from "@/routes";
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
   const { organizationName } = await nameLookups(actor);
-  const [unreviewedWeeks, hoursQueue] = await Promise.all([
+  const [unreviewedWeeks, hoursQueue, offerQueue] = await Promise.all([
     unreviewedWeeksByApplication(actor),
     reviewQueue(actor),
+    hostOfferQueue(actor),
   ]);
   const org = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
@@ -265,7 +273,7 @@ export default async function BusinessPage() {
       {/* "needs you" heading teaches an employer that the heading means      */}
       {/* nothing, which is exactly the habit that loses the queue.           */}
       {/* ------------------------------------------------------------------ */}
-      {(needsHelp.length > 0 || hoursQueue.length > 0) && (
+      {(needsHelp.length > 0 || hoursQueue.length > 0 || offerQueue.length > 0) && (
         <PageSection
           title="Needs you today"
           description="A student cannot be paid, earn credit, or close out a placement until you clear these."
@@ -355,6 +363,53 @@ export default async function BusinessPage() {
             ))}
           </ul>
         </ToneCard>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* What happened at the end                                            */}
+      {/*                                                                     */}
+      {/* Last in this zone, because it blocks nobody's pay or credit — and   */}
+      {/* in it anyway, because it is the only question in the product that   */}
+      {/* nobody but this employer can answer, and the queue it feeds is      */}
+      {/* somebody ringing round if it goes unanswered.                       */}
+      {/* ------------------------------------------------------------------ */}
+      {offerQueue.length > 0 && (
+        <Card>
+          <CardHeader
+            level={3}
+            icon={<Handshake className="w-5 h-5" />}
+            title="Did you keep them on?"
+            subtitle="One question per finished placement. Thirty seconds, and it is the number this whole programme is judged by"
+          />
+          <ul className="row-list divide-y divide-line">
+            {offerQueue.map(({ application, student, posting, days }) => (
+              <li
+                key={application.id}
+                className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-ink-950">
+                    {student.name}
+                    <span className="font-normal text-ink-500">
+                      {" · "}
+                      {posting.title}
+                    </span>
+                  </p>
+                  <p className="text-xs text-ink-500 mt-0.5 tabular">
+                    Finished {days} {days === 1 ? "day" : "days"} ago
+                  </p>
+                </div>
+                <AnswerOffer
+                  applicationId={application.id}
+                  studentName={student.name}
+                  placementTitle={posting.title}
+                  choices={HOST_OFFER_ANSWERS}
+                  action={answerPlacementOffer}
+                />
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
         </PageSection>

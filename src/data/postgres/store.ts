@@ -30,6 +30,7 @@ import type {
   MentorshipPairing,
   Membership,
   Organization,
+  HostOffer,
   Outcome,
   Posting,
   Student,
@@ -573,6 +574,19 @@ class PostgresUnitOfWork implements UnitOfWork {
         ${outcome.observedOn}, ${outcome.recordedOn},
         ${outcome.recordedByUserId}, ${outcome.source},
         ${outcome.detail ?? null}
+      )`);
+  }
+
+  createHostOffer(offer: HostOffer) {
+    this.add(sql`
+      INSERT INTO host_offers (
+        id, market_id, application_id, business_id, student_id,
+        answer, recorded_by, recorded_on, source, note
+      ) VALUES (
+        ${offer.id}, ${offer.marketId}, ${offer.applicationId},
+        ${offer.businessId}, ${offer.studentId}, ${offer.answer},
+        ${offer.recordedByUserId}, ${offer.recordedOn}, ${offer.source},
+        ${offer.note ?? null}
       )`);
   }
 

@@ -13,6 +13,8 @@
 import type {
   ActorContext,
   Application,
+  HostOffer,
+  HostOfferAnswer,
   InterviewSlot,
   MentorshipOffer,
   MentorshipOfferStatus,
@@ -26,6 +28,7 @@ import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
 import { INTRODUCERS, placesLeft } from "@/domain/mentorship";
 import { canRecordOutcome, followUpBlockReason } from "@/domain/outcome";
+import { canRecordHostOffer, isHire, offerBlockReason } from "@/domain/offer";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -622,6 +625,187 @@ export async function recordOutcome(
   });
 
   return { ok: true, created: outcome };
+}
+
+// ---------------------------------------------------------------------------
+// What the host did
+// ---------------------------------------------------------------------------
+
+export interface RecordHostOfferInput {
+  applicationId: string;
+  answer: HostOfferAnswer;
+  /** Why, when there was no offer. Never required — see `HostOffer.note`. */
+  note?: string;
+}
+
+/**
+ * Record what the employer did at the end of a placement.
+ *
+ * The cheapest high-value write in the product: one answer, from the only party
+ * that knows it, on a screen it already visits. Everything else about the
+ * record is derived here rather than accepted from the caller — the employer,
+ * the learner, the market and the role all come from the placement and the
+ * acting membership, so the request carries an application id and an answer and
+ * nothing that could be used to file somebody else's decision.
+ *
+ * **An accepted offer also writes the outcome**, in the same transaction, and
+ * that is the point of doing this at all. "Did you keep them?" is the strongest
+ * result the programme produces and the employer answering it should not leave
+ * a college to record the same fact again a month later. The employer never
+ * touches a county — it has no standing to say where a learner it did not hire
+ * went — but a hire by the host needs none: the county comes from the
+ * employer's own registered county, which is a fact about the employer rather
+ * than a claim about the learner.
+ */
+export async function recordHostOffer(
+  actor: ActorContext,
+  input: RecordHostOfferInput,
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<HostOffer>> {
+  if (!canRecordHostOffer(actor.membership.role)) {
+    return {
+      ok: false,
+      error: "Only the host employer or an administrator can answer this.",
+      code: "forbidden",
+    };
+  }
+
+  // Scoped read: an employer's application scope is its own postings, so a
+  // placement it did not host resolves to null here rather than to a refusal.
+  // That is the isolation, and the checks below are the second lock.
+  const application = await repositories.applications.find(actor, input.applicationId);
+  if (!application) {
+    return { ok: false, error: "Placement not found.", code: "not_found" };
+  }
+
+  const blocked = offerBlockReason(application);
+  if (blocked) return { ok: false, error: blocked, code: "forbidden" };
+
+  const posting = await repositories.postings.find(actor, application.postingId);
+  if (!posting) {
+    return { ok: false, error: "Placement not found.", code: "not_found" };
+  }
+  if (
+    actor.membership.role === "business" &&
+    posting.businessId !== actor.membership.organizationId
+  ) {
+    // Unreachable through the scoped reads above. Stated anyway: an employer
+    // answering for a placement it did not host would be filing a hiring
+    // decision in another company's name.
+    return {
+      ok: false,
+      error: "That placement was hosted by a different employer.",
+      code: "forbidden",
+    };
+  }
+
+  const already = await repositories.hostOffers.forApplication(actor, application.id);
+  if (already) {
+    return {
+      ok: false,
+      error: "This placement already has an answer.",
+      code: "duplicate",
+    };
+  }
+
+  const student = await repositories.students.find(actor, application.studentId);
+  if (!student) {
+    return { ok: false, error: "Learner not found.", code: "not_found" };
+  }
+
+  const at = deps.now();
+  const note = input.note?.trim();
+  const offer: HostOffer = {
+    id: deps.id("hoff"),
+    marketId: application.marketId,
+    applicationId: application.id,
+    businessId: posting.businessId,
+    studentId: application.studentId,
+    answer: input.answer,
+    recordedByUserId: actor.user.id,
+    recordedOn: at.toISOString(),
+    // Frozen from the acting membership and never taken from the caller, for
+    // the reason `Outcome.source` gives: a caller who could name the source
+    // could file their own guess as an employer's firsthand answer.
+    source: actor.membership.role,
+    note: note ? note : undefined,
+  };
+
+  /**
+   * The outcome a hire implies, written with the offer or not at all.
+   *
+   * Skipped when the college has already recorded a follow-up against this
+   * placement on the same day for the same kind — that is the duplicate
+   * `recordOutcome` refuses, and hitting it here would fail the whole
+   * transaction and lose the employer's answer along with it. The answer is
+   * the thing being asked for; the outcome is a convenience on top of it.
+   */
+  let outcome: Outcome | null = null;
+  if (isHire(offer.answer)) {
+    const existing = await repositories.outcomes.forApplication(actor, application.id);
+    const observedOn = at.toISOString();
+    const duplicate = existing.some(
+      (o) => o.kind === "employed" && o.observedOn === observedOn,
+    );
+    if (!duplicate) {
+      const organization = await repositories.organizations.find(
+        actor,
+        posting.businessId,
+      );
+      const market = await repositories.markets.find(actor, application.marketId);
+      outcome = {
+        id: deps.id("out"),
+        marketId: application.marketId,
+        studentId: application.studentId,
+        applicationId: application.id,
+        kind: "employed",
+        employedByHost: true,
+        // The employer's own county, not a guess about the learner. Null when
+        // the organization has none recorded, which lands as `placeUnknown`
+        // rather than as an invented place — `inRegion` answers true from
+        // `employedByHost` either way, and the county is what lets the report
+        // roll the hire up by county as well.
+        employmentCounty: organization?.county ?? null,
+        employmentState: organization?.county ? (market?.state ?? null) : null,
+        assertedInRegion: null,
+        observedOn,
+        recordedOn: observedOn,
+        recordedByUserId: actor.user.id,
+        source: actor.membership.role,
+      };
+    }
+  }
+
+  await deps.store.transaction((uow) => {
+    uow.createHostOffer(offer);
+    uow.appendAuditEvent({
+      marketId: offer.marketId,
+      at: offer.recordedOn,
+      actorUserId: actor.user.id,
+      actorRole: actor.membership.role,
+      entityType: "host_offer",
+      entityId: offer.id,
+      from: null,
+      to: offer.answer,
+      viaOverride: false,
+    });
+    if (outcome) {
+      uow.createOutcome(outcome);
+      uow.appendAuditEvent({
+        marketId: outcome.marketId,
+        at: outcome.recordedOn,
+        actorUserId: actor.user.id,
+        actorRole: actor.membership.role,
+        entityType: "outcome",
+        entityId: outcome.id,
+        from: null,
+        to: outcome.kind,
+        viaOverride: false,
+      });
+    }
+  });
+
+  return { ok: true, created: offer };
 }
 
 // ---------------------------------------------------------------------------

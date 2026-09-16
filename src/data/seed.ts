@@ -24,6 +24,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  HostOffer,
   Outcome,
   Posting,
   Student,
@@ -1937,6 +1938,76 @@ export const outcomes: Outcome[] = [
     recordedByUserId: "u-ellen",
     source: "college",
     detail: "Working full time. Did not say where — asking again next call.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// What the hosts did — the one fact only the employer knows
+// ---------------------------------------------------------------------------
+
+/**
+ * Three answered and the rest outstanding, which is what a real programme looks
+ * like a month after a cohort ends.
+ *
+ * Each of the three answers is a different one, because a fixture set where
+ * every employer hired is not a fixture set that tests a conversion figure. And
+ * they are deliberately not aligned with "good" and "bad": Apex made Priya no
+ * offer and she is working in Crawford County anyway, which is the case that
+ * stops anybody reading "no offer" as a failed placement.
+ *
+ * One is firsthand and two were chased. Neither Cherokee Steel nor the grain
+ * co-op has anybody with an account here, so the administrator rang them and
+ * wrote down what they said — `source` is what keeps that distinguishable from
+ * an employer who replied on its own, and a report that could not tell them
+ * apart could not tell a working process from a hand-worked one.
+ *
+ * What is missing matters as much. Several finished placements have no row at
+ * all, which is the administrator's queue on a fresh checkout and the reason a
+ * conversion rate is computed over the three that answered rather than over
+ * everything that ended. **One of those is the demo employer's own**, left
+ * deliberately: an employer who opens this portal has a placement waiting on
+ * them, because a feature that only ever renders an empty queue on a fresh
+ * checkout is a feature nobody sees.
+ */
+export const hostOffers: HostOffer[] = [
+  {
+    id: "hoff-1",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-26",
+    businessId: "org-apex",
+    studentId: "stu-derek",
+    answer: "accepted",
+    recordedByUserId: "u-dana",
+    recordedOn: daysAgo(22),
+    source: "business",
+  },
+  {
+    // The middle answer, and the only one nobody else could have given. Jordan
+    // had a local offer in hand and took a job in Kansas City instead — which
+    // `out-4` records the other half of. An area losing people who were offered
+    // work has a different problem from one with no work to offer.
+    id: "hoff-2",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-19",
+    businessId: "org-cherokee",
+    studentId: "stu-jordan",
+    answer: "declined",
+    recordedByUserId: "u-admin",
+    recordedOn: daysAgo(6),
+    source: "admin",
+    note: "Offered him a maintenance tech role at the start of June. He had already taken something in Kansas City.",
+  },
+  {
+    id: "hoff-3",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-21",
+    businessId: "org-heartland",
+    studentId: "stu-luis",
+    answer: "none",
+    recordedByUserId: "u-admin",
+    recordedOn: daysAgo(11),
+    source: "admin",
+    note: "Seasonal role, and they do not carry it through the winter. Would host again in the spring.",
   },
 ];
 

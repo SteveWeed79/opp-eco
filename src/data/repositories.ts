@@ -25,6 +25,7 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  HostOffer,
   Outcome,
   Posting,
   Student,
@@ -210,6 +211,26 @@ export interface OutcomeRepository {
   forApplication(actor: ActorContext, applicationId: string): Promise<Outcome[]>;
 }
 
+/**
+ * What each host said at the end of a placement.
+ *
+ * Narrowed differently from outcomes, because the parties differ. **The
+ * employer reads its own** — it is the author, and a statement it cannot read
+ * back is one it cannot correct. The college and the administrator read their
+ * market's, because they work the queue of placements nobody has answered for.
+ *
+ * The learner reads their own with the note stripped, and the board its
+ * market's on the same terms. Neither is being kept from the answer: a learner
+ * knows whether they were offered a job, and a board's interest is the count.
+ * What both are kept from is the employer's candid sentence about why it did
+ * not keep a named person. See `redactHostOffer`.
+ */
+export interface HostOfferRepository {
+  list(actor: ActorContext): Promise<HostOffer[]>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<HostOffer | null>;
+  forStudent(actor: ActorContext, studentId: string): Promise<HostOffer[]>;
+}
+
 export interface AuditEventRepository {
   list(actor: ActorContext, filter?: { entityId?: string }): Promise<AuditEvent[]>;
 }
@@ -233,6 +254,7 @@ export interface Repositories {
   fundingCommitments: FundingCommitmentRepository;
   consents: ConsentRepository;
   outcomes: OutcomeRepository;
+  hostOffers: HostOfferRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;
 }

@@ -357,6 +357,22 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createHostOffer(offer: import("@/domain/types").HostOffer) {
+    if (seed.hostOffers.some((o) => o.id === offer.id)) {
+      throw new Error(`Host offer ${offer.id} already exists`);
+    }
+    // The uniqueness that matters is one answer per placement, which is the
+    // constraint Postgres carries. Checked here too, or the two backends
+    // disagree about whether a second answer is an error or a silent duplicate
+    // — and the in-memory one is what the whole demo and e2e suite run on.
+    if (seed.hostOffers.some((o) => o.applicationId === offer.applicationId)) {
+      throw new Error(`Placement ${offer.applicationId} already has an answer`);
+    }
+    this.effects.push(() => {
+      seed.hostOffers.push(offer);
+    });
+  }
+
   appendAuditEvent(event: Omit<AuditEvent, "id">) {
     this.effects.push(() => {
       seed.auditEvents.unshift({ ...event, id: `evt-${++auditSequence}` });

@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import { sql, joinSql } from "./client";
 import {
   applicationScope,
+  hostOfferScope,
   marketScope,
   outcomeScope,
   postingOwnershipScope,
@@ -132,6 +133,48 @@ describe("student scope", () => {
 
   it("lets a college see its market's roster", () => {
     expect(studentScope(college).text).toBe("students.market_id = $1");
+  });
+});
+
+describe("host offer scope", () => {
+  it("lets an employer read its own, which outcome scope refuses outright", () => {
+    // The asymmetry this record exists to create. An employer may not read
+    // where somebody else's intern ended up, but it is the author here, and a
+    // statement it cannot read back is one it cannot correct.
+    const scope = hostOfferScope(business);
+    expect(scope.text).not.toBe("FALSE");
+    expect(scope.text).toContain("host_offers.business_id = $2");
+    expect(scope.params[1]).toBe(business.membership.organizationId);
+  });
+
+  it("still narrows an employer by market as well as by itself", () => {
+    // Belt and braces, and not redundant: the organization id is the client's
+    // to be wrong about long before it is the database's.
+    expect(hostOfferScope(business).text).toContain("host_offers.market_id = $1");
+  });
+
+  it("restricts a learner to their own", () => {
+    const scope = hostOfferScope(student);
+    expect(scope.text).toContain("host_offers.market_id = $1");
+    expect(scope.text).toContain("SELECT id FROM students WHERE user_id = $2");
+    expect(scope.params[1]).toBe(student.user.id);
+  });
+
+  it("gives the college and the board their market", () => {
+    // Both read the answer; the note is stripped on the way out for the board
+    // and the learner, which is a projection rather than a filter.
+    expect(hostOfferScope(college).text).toBe("host_offers.market_id = $1");
+    expect(hostOfferScope(board).text).toBe("host_offers.market_id = $1");
+  });
+
+  it("leaves an administrator unrestricted", () => {
+    expect(hostOfferScope(admin).text).toBe("TRUE");
+  });
+
+  it("always emits at least one predicate for a non-admin", () => {
+    for (const actor of [business, college, board, student]) {
+      expect(hostOfferScope(actor).text).not.toBe("TRUE");
+    }
   });
 });
 

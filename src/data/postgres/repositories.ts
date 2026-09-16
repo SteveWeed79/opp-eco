@@ -26,6 +26,7 @@
 import type {
   ActorContext,
   Application,
+  HostOffer,
   MentorshipOffer,
   Organization,
   Outcome,
@@ -35,6 +36,7 @@ import type {
 } from "@/domain/types";
 import {
   disclosureFor,
+  redactHostOffer,
   redactOutcome,
   redactStudent,
   redactTimeEntry,
@@ -47,6 +49,7 @@ import {
   consentScope,
   fundingCommitmentScope,
   marketScope,
+  hostOfferScope,
   outcomeScope,
   mentorshipPairingScope,
   ownMarketScope,
@@ -63,6 +66,7 @@ import {
   toConsentRecord,
   toFundingCommitment,
   toFundingSource,
+  toHostOffer,
   toMentorshipPairing,
   toOutcome,
   toOrganization,
@@ -230,6 +234,17 @@ export function postgresRepositories(db: SqlClient): Repositories {
       toOutcome,
     );
     return actor.membership.role === "board" ? rows.map(redactOutcome) : rows;
+  }
+
+  async function hostOffersWhere(actor: ActorContext, extra: Sql): Promise<HostOffer[]> {
+    const where = joinSql([hostOfferScope(actor), extra], " AND ");
+    const rows = await all(
+      sql`SELECT * FROM host_offers WHERE ${where}
+          ORDER BY host_offers.recorded_on DESC, host_offers.id COLLATE "C"`,
+      toHostOffer,
+    );
+    const { role } = actor.membership;
+    return role === "board" || role === "student" ? rows.map(redactHostOffer) : rows;
   }
 
   async function timeEntriesWhere(
@@ -575,6 +590,19 @@ export function postgresRepositories(db: SqlClient): Repositories {
         outcomesWhere(actor, sql`outcomes.student_id = ${studentId}`),
       forApplication: (actor, applicationId) =>
         outcomesWhere(actor, sql`outcomes.application_id = ${applicationId}`),
+    },
+
+    hostOffers: {
+      list: (actor) => hostOffersWhere(actor, sql`TRUE`),
+      forApplication: async (actor, applicationId) => {
+        const rows = await hostOffersWhere(
+          actor,
+          sql`host_offers.application_id = ${applicationId}`,
+        );
+        return rows[0] ?? null;
+      },
+      forStudent: (actor, studentId) =>
+        hostOffersWhere(actor, sql`host_offers.student_id = ${studentId}`),
     },
 
     auditEvents: {

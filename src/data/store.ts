@@ -23,6 +23,7 @@ import type {
   MentorshipPairing,
   Membership,
   Organization,
+  HostOffer,
   Outcome,
   Posting,
   Student,
@@ -265,6 +266,17 @@ export interface UnitOfWork {
   createConsent(consent: ConsentRecord): void;
   saveConsent(consent: ConsentRecord, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;
+  /**
+   * Record what the host did at the end of a placement.
+   *
+   * Create-only like `createOutcome`, but for the opposite reason. An outcome
+   * is create-only because a second follow-up is a second observation and the
+   * history is the evidence. This is create-only because there is exactly one
+   * answer per placement — the unique index says so — and an employer changing
+   * its mind is rare enough to be an administrator's job rather than a write
+   * path anybody can reach.
+   */
+  createHostOffer(offer: HostOffer): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;
 }

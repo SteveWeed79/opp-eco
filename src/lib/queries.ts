@@ -46,6 +46,11 @@ import {
   summarizeOutcomes,
   type OutcomeSummary,
 } from "@/domain/outcome";
+import {
+  offerAwaitsAnswer,
+  summarizeHostOffers,
+  type HostOfferSummary,
+} from "@/domain/offer";
 
 export interface StalledItem {
   application: Application;
@@ -471,6 +476,75 @@ export async function followUpQueue(
   return resolved
     .filter((item): item is FollowUpItem => item !== null)
     .sort((a, b) => b.days - a.days);
+}
+
+export interface HostOfferItem {
+  application: Application;
+  student: Student;
+  posting: Posting;
+  /** How long the placement has been finished with nobody asked. */
+  days: number;
+}
+
+/**
+ * Finished placements nobody has answered the offer question for.
+ *
+ * The employer's own list when an employer asks, and the market's when the
+ * administrator does — one function, because the narrowing is the repository's
+ * job and duplicating it in a query is how the two drift.
+ *
+ * No `canRead` guard, unlike `followUpQueue`. That one refuses an employer
+ * outright because an employer reads no outcomes at all, so subtracting one
+ * list from another would report work already done as outstanding. Here every
+ * role reads host answers, narrowed to what concerns them, so the subtraction
+ * is sound for all of them — and for the employer it is the point.
+ */
+export async function hostOfferQueue(
+  actor: ActorContext,
+): Promise<HostOfferItem[]> {
+  const [applications, offers] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.hostOffers.list(actor),
+  ]);
+
+  const candidates = applications.filter((a) => offerAwaitsAnswer(a, offers));
+
+  const resolved = await Promise.all(
+    candidates.map(async (application) => {
+      const [student, posting] = await Promise.all([
+        repositories.students.find(actor, application.studentId),
+        repositories.postings.find(actor, application.postingId),
+      ]);
+      if (!student || !posting) return null;
+      return {
+        application,
+        student,
+        posting,
+        days: daysSinceExit(application, DEMO_NOW),
+      };
+    }),
+  );
+
+  return resolved
+    .filter((item): item is HostOfferItem => item !== null)
+    .sort((a, b) => b.days - a.days);
+}
+
+/**
+ * What the hosts said, and how much of it nobody has been asked for.
+ *
+ * Both numbers, for the reason `outcomeReport` returns both: a hire rate over
+ * three answered placements and a hire rate over three answered out of eleven
+ * finished are different claims, and only one of them is the programme's.
+ */
+export async function hostOfferReport(
+  actor: ActorContext,
+): Promise<HostOfferSummary> {
+  const [applications, offers] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.hostOffers.list(actor),
+  ]);
+  return summarizeHostOffers(applications, offers);
 }
 
 /**

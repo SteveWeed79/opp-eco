@@ -39,6 +39,7 @@ import type {
   FundingSource,
   MentorshipPairing,
   Organization,
+  HostOffer,
   Outcome,
   Posting,
   Student,
@@ -381,6 +382,25 @@ export function toOutcome(row: Row): Outcome {
     recordedByUserId: text(row.recorded_by),
     source: text(row.source) as Outcome["source"],
     detail: optionalText(row.detail),
+  };
+}
+
+export function toHostOffer(row: Row): HostOffer {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    applicationId: text(row.application_id),
+    businessId: text(row.business_id),
+    studentId: text(row.student_id),
+    answer: text(row.answer) as HostOffer["answer"],
+    recordedByUserId: text(row.recorded_by),
+    recordedOn: timestamp(row.recorded_on),
+    source: text(row.source) as HostOffer["source"],
+    // `optionalText` rather than `nullableText`: the domain declares the note
+    // optional, because an employer who answered without explaining has still
+    // answered. That is not the same shape as `Outcome.applicationId`, where
+    // null is a real case the type has to name.
+    note: optionalText(row.note),
   };
 }
 

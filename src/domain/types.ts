@@ -598,6 +598,70 @@ export interface MatchFactor {
 }
 
 // ---------------------------------------------------------------------------
+// What the host decided
+// ---------------------------------------------------------------------------
+
+/**
+ * What the employer who supervised a placement did at the end of it.
+ *
+ * Three answers rather than two, and the middle one is the reason this exists.
+ * "We offered and they turned it down" and "we made no offer" are opposite
+ * findings about a town: the first says the work is there and something else
+ * pulled the learner away, the second says the work is not there. A programme
+ * trying to answer why rural graduates leave needs to tell those apart, and
+ * collapsed into one "did not convert" they are indistinguishable — not just
+ * hard to separate, but unrecoverable, because separating them later means
+ * asking an employer again about a placement that ended a year ago.
+ */
+export type HostOfferAnswer = "accepted" | "declined" | "none";
+
+/**
+ * The host's answer about one finished placement.
+ *
+ * Its own record rather than columns on `Application`, following
+ * `MentorshipPairing`: this is a thing one party said on one date, and who said
+ * it is part of what it means. An application is a mutable entity that five
+ * roles move between states; this is a statement, and statements do not get
+ * edited by whoever touches the row next.
+ *
+ * **No row means nobody has answered**, which is the whole reason it is a
+ * record rather than a nullable column on the application. A three-valued
+ * column makes the absence of an answer look like a fourth answer sitting in
+ * the same field as the real ones, and the one thing that must never happen
+ * here is silence being read as "no offer" — an employer who has not replied is
+ * not an employer who declined to hire, and a retention figure that confused
+ * the two would understate the programme by the size of its own admin backlog.
+ * Absence is work to chase, exactly as a missing `Outcome` is.
+ */
+export interface HostOffer {
+  id: string;
+  marketId: string;
+  applicationId: string;
+  /**
+   * The employer, denormalised, so the scoping rule can narrow a row to its
+   * owner without a join — the same reason `MentorshipPairing` carries it.
+   */
+  businessId: string;
+  studentId: string;
+  answer: HostOfferAnswer;
+  recordedByUserId: string;
+  recordedOn: string;
+  /**
+   * The role that gave the answer, frozen when it was recorded, for the reason
+   * `Outcome.source` gives at length. Here it separates the employer answering
+   * for itself from an administrator writing down what an employer said on the
+   * phone — both are the employer's answer, and only one of them is firsthand.
+   */
+  source: ActorRole;
+  /**
+   * Why, when there was no offer, or why they turned it down. Optional and
+   * deliberately not required: a required note is how a one-click answer turns
+   * into a form, and an employer who abandons the form tells you nothing at all.
+   */
+  note?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Board interviews and funding
 // ---------------------------------------------------------------------------
 
@@ -1082,6 +1146,11 @@ export interface AuditEvent {
     | "mentorship_pairing"
     | "interview_slot"
     | "outcome"
+    // What the host did at the end of a placement. Audited like an outcome and
+    // for the same reason: it is a figure a board will be shown, so who entered
+    // it and when has to be answerable a year later — particularly when the
+    // answer was transcribed by an administrator rather than given firsthand.
+    | "host_offer"
     | "funding_source"
     | "funding_commitment"
     | "consent"
