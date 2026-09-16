@@ -486,15 +486,21 @@ export async function outcomeReport(
 ): Promise<OutcomeSummary> {
   // Same refusal as the queue, and for the same reason: a zeroed report and a
   // report the caller may not have are different answers.
-  if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0);
+  const none = () => null;
+  if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0, none);
 
-  const [applications, outcomes] = await Promise.all([
+  const [applications, outcomes, markets] = await Promise.all([
     repositories.applications.list(actor),
     repositories.outcomes.list(actor),
+    // Read through the actor's own scope, so a college resolves its own market
+    // and an administrator resolves all of them — which is exactly the
+    // difference that makes the lookup necessary.
+    repositories.markets.list(actor),
   ]);
 
+  const byId = new Map(markets.map((m) => [m.id, m]));
   const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes)).length;
-  return summarizeOutcomes(outcomes, unmeasured);
+  return summarizeOutcomes(outcomes, unmeasured, (id) => byId.get(id) ?? null);
 }
 
 /** Every finished experience, measured or not. The denominator behind the rate. */

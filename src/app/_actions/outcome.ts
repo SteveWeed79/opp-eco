@@ -34,6 +34,9 @@ import { PORTAL_PATH } from "@/routes";
  */
 const AFFECTED = [PORTAL_PATH.college, PORTAL_PATH.admin];
 
+const blank = (value: unknown) =>
+  value === "" || value === null || value === undefined ? undefined : value;
+
 export async function recordFollowUp(
   role: ActorRole,
   studentId: unknown,
@@ -41,6 +44,9 @@ export async function recordFollowUp(
   kind: unknown,
   observedOn: unknown,
   detail: unknown,
+  employedByHost?: unknown,
+  employmentCounty?: unknown,
+  employmentState?: unknown,
 ): Promise<ActionResult> {
   const input = validate(recordOutcomeInput, {
     studentId,
@@ -50,7 +56,12 @@ export async function recordFollowUp(
     applicationId: applicationId === "" || applicationId === undefined ? null : applicationId,
     kind,
     observedOn,
-    detail: detail === "" || detail === null ? undefined : detail,
+    detail: blank(detail),
+    // A form posts "" for a county nobody filled in, which is the ordinary case
+    // for a follow-up that established somebody is working and not where.
+    employedByHost: employedByHost === undefined ? undefined : Boolean(employedByHost),
+    employmentCounty: blank(employmentCounty),
+    employmentState: blank(employmentState),
   });
   if (!input.ok) return { ok: false, error: input.error };
 

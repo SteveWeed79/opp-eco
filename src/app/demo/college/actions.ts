@@ -75,8 +75,21 @@ export async function collegeRecordOutcome(
   kind: unknown,
   observedOn: unknown,
   detail?: unknown,
+  employedByHost?: unknown,
+  employmentCounty?: unknown,
+  employmentState?: unknown,
 ): Promise<ActionResult> {
-  return recordFollowUp("college", studentId, applicationId, kind, observedOn, detail);
+  return recordFollowUp(
+    "college",
+    studentId,
+    applicationId,
+    kind,
+    observedOn,
+    detail,
+    employedByHost,
+    employmentCounty,
+    employmentState,
+  );
 }
 
 /**

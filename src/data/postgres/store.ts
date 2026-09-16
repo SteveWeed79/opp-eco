@@ -562,10 +562,14 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       INSERT INTO outcomes (
         id, market_id, student_id, application_id, kind,
+        employed_by_host, employment_county, employment_state,
+        asserted_in_region,
         observed_on, recorded_on, recorded_by, source, detail
       ) VALUES (
         ${outcome.id}, ${outcome.marketId}, ${outcome.studentId},
         ${outcome.applicationId}, ${outcome.kind},
+        ${outcome.employedByHost}, ${outcome.employmentCounty},
+        ${outcome.employmentState}, ${outcome.assertedInRegion},
         ${outcome.observedOn}, ${outcome.recordedOn},
         ${outcome.recordedByUserId}, ${outcome.source},
         ${outcome.detail ?? null}

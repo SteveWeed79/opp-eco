@@ -36,6 +36,9 @@ export function RecordOutcome({
   applicationId,
   studentName,
   placementTitle,
+  hostName,
+  regionCounties,
+  regionState,
   choices,
   action,
 }: {
@@ -43,6 +46,11 @@ export function RecordOutcome({
   applicationId: string;
   studentName: string;
   placementTitle: string;
+  /** The employer who supervised the placement, so "did they keep them?" can be asked by name. */
+  hostName: string;
+  /** The counties this market covers — offered first, because most answers are one of them. */
+  regionCounties: string[];
+  regionState: string;
   choices: OutcomeChoice[];
   action: (
     studentId: string,
@@ -50,6 +58,9 @@ export function RecordOutcome({
     kind: string,
     observedOn: string,
     detail?: string,
+    employedByHost?: boolean,
+    employmentCounty?: string,
+    employmentState?: string,
   ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [open, setOpen] = useState(false);
@@ -60,6 +71,9 @@ export function RecordOutcome({
   // quarter.
   const [observedOn, setObservedOn] = useState(() => today());
   const [detail, setDetail] = useState("");
+  const [byHost, setByHost] = useState(false);
+  const [county, setCounty] = useState("");
+  const [state, setState] = useState(regionState);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
 
@@ -68,7 +82,12 @@ export function RecordOutcome({
     setKind(null);
     setObservedOn(today());
     setDetail("");
+    setByHost(false);
+    setCounty("");
+    setState(regionState);
   }
+
+  const employed = kind === "employed";
 
   function confirm() {
     if (!kind) return;
@@ -79,6 +98,12 @@ export function RecordOutcome({
         kind,
         new Date(`${observedOn}T12:00:00`).toISOString(),
         detail.trim() || undefined,
+        employed ? byHost : undefined,
+        // A hire by the host needs no county — the host is in this market — and
+        // a follow-up that established somebody is working without establishing
+        // where is a real half-answer rather than a form to refuse.
+        employed && !byHost && county.trim() ? county.trim() : undefined,
+        employed && !byHost && county.trim() ? state.trim() : undefined,
       );
       if (result.ok) {
         close();
@@ -118,6 +143,56 @@ export function RecordOutcome({
           onChange={setKind}
           options={choices}
         />
+
+        {employed && (
+          <div className="mt-4 space-y-4 rounded-card border border-line bg-paper-50 px-4 py-4">
+            <label className="flex items-start gap-3 text-sm text-ink-800">
+              <input
+                type="checkbox"
+                checked={byHost}
+                onChange={(event) => setByHost(event.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-semibold">{hostName} kept them on.</span>{" "}
+                The strongest result this programme produces — and it needs no
+                county, because the host is an employer in this market.
+              </span>
+            </label>
+
+            {!byHost && (
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr] items-start">
+                <TextField
+                  label="County they work in"
+                  value={county}
+                  list="region-counties"
+                  onChange={(event) => setCounty(event.target.value)}
+                  hint={`Anywhere — not just ${regionState}. Whether it counts as staying is worked out from this, not chosen here.`}
+                />
+                <TextField
+                  label="State"
+                  value={state}
+                  maxLength={2}
+                  onChange={(event) => setState(event.target.value.toUpperCase())}
+                  hint="Two letters."
+                />
+                <datalist id="region-counties">
+                  {regionCounties.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+            )}
+
+            {!byHost && !county.trim() && (
+              <p className="text-xs text-ink-500">
+                Leave the county blank if you only know they are working. It is
+                recorded as employment with the place unknown, and counted
+                separately rather than as having left.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 items-start">
           <TextField

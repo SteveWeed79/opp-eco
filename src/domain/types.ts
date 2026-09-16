@@ -59,7 +59,28 @@ export interface Market {
   id: string;
   name: string;
   city: string;
+  /**
+   * The counties this market covers — and, with `state`, the definition of
+   * "in region" that every retention figure is measured against.
+   *
+   * Predetermined boundaries rather than a judgement: an officer recording
+   * where a learner went to work names a county, and whether that counts as
+   * staying is derived here rather than decided by whoever typed it. Two
+   * colleges drawing that line differently is how a comparison breaks in a way
+   * that still renders as a clean chart.
+   *
+   * These become state-level reference data with effective dates once regions
+   * are redesignated — a market's counties are the same shape either way.
+   */
   counties: string[];
+  /**
+   * The state those counties are in, as a two-letter code.
+   *
+   * Load-bearing, not decoration. Kansas and Missouri both have a Jackson
+   * County, and Pittsburg is twenty miles from Joplin across the state line —
+   * so a county name alone cannot answer whether somebody stayed.
+   */
+  state: string;
   stage: MarketStage;
   boardId: string | null;
   collegeIds: string[];
@@ -912,11 +933,19 @@ export interface ConsentRecord {
  * end up working in their own region, and until now nothing could record that
  * either way.
  *
- * `employed_in_region` versus `employed_elsewhere` is the distinction the whole
- * argument rests on, so it is a first-class value rather than a note on a
- * general "employed". A programme that reliably produces graduates who leave is
- * a talent pipeline out of the county, and a board funding it deserves to be
- * able to see that.
+ * Whether the learner stayed is still the distinction the whole argument rests
+ * on — a programme that reliably produces graduates who leave is a talent
+ * pipeline out of the county, and a board funding it deserves to see that. But
+ * it is **derived from where they went**, not chosen here.
+ *
+ * This enum used to carry `employed_by_host`, `employed_in_region` and
+ * `employed_elsewhere`, which answered three questions at once: what happened,
+ * who employs them, and where. Welding the place into the outcome type made
+ * "in region" a judgement the recorder made with no definition of region — and
+ * two colleges will draw that line differently. `Outcome` now captures the
+ * county and state, and `inRegion` derives the answer against the market's own
+ * counties. One captured place also answers county, workforce-area and state
+ * roll-ups, which a boolean never could.
  *
  * `still_seeking` is a recorded fact, not an absence. A learner who was asked
  * and is still looking is different evidence from a learner nobody followed up
@@ -925,9 +954,7 @@ export interface ConsentRecord {
  * absence: it has no row.**
  */
 export type OutcomeKind =
-  | "employed_by_host"
-  | "employed_in_region"
-  | "employed_elsewhere"
+  | "employed"
   | "continued_education"
   | "entered_training"
   | "still_seeking";
@@ -954,6 +981,53 @@ export interface Outcome {
    */
   applicationId: string | null;
   kind: OutcomeKind;
+  /**
+   * Whether the employer who supervised the placement took them on.
+   *
+   * Its own field rather than a kind, because it answers a different question
+   * from the other two: `employed` says what happened, the county says where,
+   * and this says who. A hire by the host is the strongest result the programme
+   * can produce and the one an employer can attest to first-hand — but it was
+   * never a *place*, and folding it into the same enum as "in region" is what
+   * made that enum unable to answer either question cleanly.
+   *
+   * False for everything that is not employment.
+   */
+  employedByHost: boolean;
+  /**
+   * Where they went to work — the county and the two-letter state.
+   *
+   * Captured rather than judged. Whether this counts as staying is derived
+   * against the market's own counties, so two colleges cannot draw the line
+   * differently, and a boundary that turns out to be wrong can be re-derived
+   * from the same rows instead of re-asked of people nobody can reach.
+   *
+   * Name and state rather than a FIPS code, deliberately: both are unambiguous
+   * — Kansas and Missouri each have a Jackson County, so the state is what
+   * disambiguates — and a name joins to FIPS later from a real reference
+   * dataset. Inventing five-digit codes from memory would put a wrong one in
+   * the column that everything else is going to key on.
+   *
+   * Null together, never singly, and null for any outcome that is not
+   * employment. Null on an employment outcome means the place was not captured
+   * — which is a real state for rows that predate this field.
+   */
+  employmentCounty: string | null;
+  employmentState: string | null;
+  /**
+   * The in-region judgement carried over from the rows that only had one.
+   *
+   * Before the county was captured, `employed_in_region` and
+   * `employed_elsewhere` were the whole answer, and those rows are real
+   * history. This preserves what was asserted without pretending to a precision
+   * they never had: their place is unknown and stays unknown, but what the
+   * recorder claimed is not thrown away.
+   *
+   * Null on every row written since. `inRegion` prefers the captured place and
+   * falls back to this, which is why both can coexist without either being a
+   * lie.
+   */
+  assertedInRegion: boolean | null;
   /**
    * The date the outcome was true as of — **not** the day someone typed it in.
    *

@@ -469,6 +469,19 @@ export interface RecordOutcomeInput {
   /** Null when the learner was reached some way other than a placement. */
   applicationId: string | null;
   kind: OutcomeKind;
+  /** Did the employer who supervised the placement take them on? */
+  employedByHost?: boolean;
+  /**
+   * Where they went to work — county and two-letter state.
+   *
+   * Only meaningful on an employment outcome, and optional even there: a
+   * follow-up that establishes somebody is working without establishing where
+   * is a real and common half-answer, and refusing it would mean recording
+   * nothing at all. It surfaces as `placeUnknown` in the summary rather than
+   * being quietly scored as having left.
+   */
+  employmentCounty?: string;
+  employmentState?: string;
   /** ISO date the outcome was true as of, not the day it is being entered. */
   observedOn: string;
   detail?: string;
@@ -553,12 +566,36 @@ export async function recordOutcome(
   }
 
   const detail = input.detail?.trim();
+  /**
+   * Where they went, normalised, and only where it means something.
+   *
+   * Trimmed and upper-cased on the state so that "ks" and " KS " are one
+   * value — a comparison that is case-sensitive about a state code is a
+   * retention figure that silently drops rows.
+   */
+  const place =
+    input.kind === "employed" && input.employmentCounty && input.employmentState
+      ? {
+          county: input.employmentCounty.trim(),
+          state: input.employmentState.trim().toUpperCase(),
+        }
+      : null;
   const outcome: Outcome = {
     id: deps.id("out"),
     marketId: student.marketId,
     studentId: student.id,
     applicationId: application?.id ?? null,
     kind: input.kind,
+    // A place belongs to an employment outcome and to nothing else. Dropping it
+    // here rather than refusing keeps a caller from having to know that rule,
+    // and stops a stray county arriving on "still looking" and being counted.
+    employedByHost: input.kind === "employed" ? (input.employedByHost ?? false) : false,
+    employmentCounty: place?.county ?? null,
+    employmentState: place?.state ?? null,
+    // Null on everything written from here. `assertedInRegion` carries the
+    // judgement from rows that predate the captured county, and nothing new
+    // should ever be asserting what it can now derive.
+    assertedInRegion: null,
     observedOn: observedOn.toISOString(),
     recordedOn: at.toISOString(),
     recordedByUserId: actor.user.id,

@@ -713,6 +713,9 @@ export default async function CollegePage() {
                     applicationId={application.id}
                     studentName={student.name}
                     placementTitle={posting.title}
+                    hostName={organizationName(posting.businessId)}
+                    regionCounties={market.counties}
+                    regionState={market.state}
                     choices={OUTCOME_KINDS.map((kind) => ({
                       value: kind.value,
                       label: kind.label,

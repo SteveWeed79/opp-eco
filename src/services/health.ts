@@ -52,7 +52,7 @@ export interface HealthReport {
  * deployment they are not. `migrations.test.ts` asserts this matches the last
  * file on disk, so the constant cannot drift without the suite saying so.
  */
-export const EXPECTED_MIGRATION = "0013_passwords.sql";
+export const EXPECTED_MIGRATION = "0014_outcome_place.sql";
 
 /** The worst of several verdicts, which is what an overall status means. */
 export function worstOf(statuses: HealthStatus[]): HealthStatus {

@@ -25,6 +25,7 @@ import type {
   ActorRole,
   Application,
   ApplicationStatus,
+  Market,
   Outcome,
   OutcomeKind,
 } from "./types";
@@ -40,7 +41,8 @@ import type {
  * `meta` is the reporting line — what this value means when it reaches a board
  * or a funder — because the whole hazard of an outcome taxonomy is a well-meant
  * officer filing "she got a job in Joplin" under the value that makes the
- * quarter look good.
+ * quarter look good. That hazard is now largely designed out: the officer names
+ * the county and the platform decides what it counts as.
  */
 export const OUTCOME_KINDS: {
   value: OutcomeKind;
@@ -49,25 +51,11 @@ export const OUTCOME_KINDS: {
   description: string;
 }[] = [
   {
-    value: "employed_by_host",
-    label: "Hired by the host employer",
-    meta: "Counts as regional employment",
+    value: "employed",
+    label: "Employed",
+    meta: "Where they went decides whether it counts as retention",
     description:
-      "The employer who supervised the placement took them on. The strongest result this programme can produce, and the one an employer is asked to confirm.",
-  },
-  {
-    value: "employed_in_region",
-    label: "Employed in the region",
-    meta: "Counts as regional employment",
-    description:
-      "Working for a different employer inside the market's counties. A different employer is not a worse result — the point is that the talent stayed.",
-  },
-  {
-    value: "employed_elsewhere",
-    label: "Employed outside the region",
-    meta: "Employment, but not retention",
-    description:
-      "Working, and gone. Recorded plainly rather than folded into a general employment figure: a programme that reliably produces graduates who leave is a pipeline out of the county, and the board funding it should be able to see that.",
+      "Working. Whether that counts as the talent staying is derived from the county recorded against it, not chosen here — which is what stops one college counting a job in Joplin as regional and another not.",
   },
   {
     value: "continued_education",
@@ -98,22 +86,59 @@ export function outcomeKindLabel(kind: OutcomeKind): string {
   return KIND_LABELS.get(kind) ?? kind;
 }
 
-/**
- * The two values that mean "the talent stayed", which is the venture's own
- * measure and the one number a funder asks for at the end of year three.
- *
- * `employed_by_host` is regional by construction: the host is an employer in
- * this market, so a hire by them is a hire in the region. Stating it here
- * rather than at each call site is what stops one report counting it and
- * another not.
- */
-export function isRegionalEmployment(kind: OutcomeKind): boolean {
-  return kind === "employed_by_host" || kind === "employed_in_region";
-}
-
 /** Employment anywhere — regional or not. Separate, because both get reported. */
 export function isEmployment(kind: OutcomeKind): boolean {
-  return isRegionalEmployment(kind) || kind === "employed_elsewhere";
+  return kind === "employed";
+}
+
+/**
+ * Whether a captured place is inside a market's region.
+ *
+ * Both parts compared, and the state is the load-bearing one: Kansas and
+ * Missouri each have a Jackson County, and Pittsburg is twenty miles from
+ * Joplin across the line. A county-name match alone would score a job in
+ * Missouri as staying.
+ */
+export function placeInRegion(
+  county: string,
+  state: string,
+  market: Pick<Market, "counties" | "state">,
+): boolean {
+  if (state.trim().toUpperCase() !== market.state.trim().toUpperCase()) return false;
+  const named = county.trim().toLowerCase();
+  return market.counties.some((c) => c.trim().toLowerCase() === named);
+}
+
+/**
+ * Did the talent stay — the venture's own measure, and the one number a funder
+ * asks for at the end of year three.
+ *
+ * **Derived, never stored.** The recorder names a county; this decides what it
+ * counts as, against boundaries the market declares. That is the difference
+ * between a figure two colleges compute the same way and one they do not.
+ *
+ * Three answers rather than two, and the third is the honest one:
+ *
+ *  - `true` / `false` where a place was captured, or where a pre-county row
+ *    carried an explicit judgement that is still worth honouring
+ *  - **`null` where nobody knows** — an employment outcome with no place on it.
+ *    Not folded into `false`, because "we did not capture where they went" and
+ *    "they left" are different facts and a rate that confuses them understates
+ *    retention by exactly the size of the gap in the follow-up process
+ *
+ * A hire by the host employer is regional by construction — the host is an
+ * employer in this market — so it needs no county to be answered.
+ */
+export function inRegion(
+  outcome: Outcome,
+  market: Pick<Market, "counties" | "state">,
+): boolean | null {
+  if (!isEmployment(outcome.kind)) return null;
+  if (outcome.employedByHost) return true;
+  if (outcome.employmentCounty && outcome.employmentState) {
+    return placeInRegion(outcome.employmentCounty, outcome.employmentState, market);
+  }
+  return outcome.assertedInRegion;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +314,14 @@ export interface OutcomeSummary {
   employed: number;
   regional: number;
   /**
+   * Employment outcomes carrying no place at all.
+   *
+   * Its own number because it is a process failure rather than a result: it
+   * means somebody recorded a job and not where it was. Rolling it into
+   * "not regional" would make an incomplete follow-up look like talent leaving.
+   */
+  placeUnknown: number;
+  /**
    * Regional employment as a share of *measured* learners, or null when nothing
    * has been measured.
    *
@@ -310,9 +343,26 @@ export interface OutcomeSummary {
  * `observedOn` decides it, with `recordedOn` breaking ties, since two
  * observations of the same date differ only by which was entered later.
  */
+/**
+ * The region an outcome is measured against, looked up by market.
+ *
+ * A lookup rather than one market, because the administrator reads every market
+ * at once and a learner who stayed in Ellis County stayed with respect to the
+ * Hays market and nowhere else. Summarising a cross-market set against a single
+ * region would score most of it as having left.
+ *
+ * Returning null for a market that cannot be resolved is deliberate: the
+ * outcome then has no region to be judged against, which lands in
+ * `placeUnknown` rather than silently counting as leaving.
+ */
+export type RegionLookup = (
+  marketId: string,
+) => Pick<Market, "counties" | "state"> | null;
+
 export function summarizeOutcomes(
   outcomes: Outcome[],
   unmeasured: number,
+  regionFor: RegionLookup,
 ): OutcomeSummary {
   const latest = new Map<string, Outcome>();
   for (const outcome of outcomes) {
@@ -329,8 +379,19 @@ export function summarizeOutcomes(
     count: current.filter((o) => o.kind === value).length,
   }));
 
+  const stayed = (o: Outcome): boolean | null => {
+    const region = regionFor(o.marketId);
+    return region ? inRegion(o, region) : null;
+  };
+
   const employed = current.filter((o) => isEmployment(o.kind)).length;
-  const regional = current.filter((o) => isRegionalEmployment(o.kind)).length;
+  const regional = current.filter((o) => stayed(o) === true).length;
+  // Employment whose place was never captured. Counted and reported rather
+  // than silently scored as leaving, because the two are different facts and
+  // folding them together understates retention by the size of the gap.
+  const placeUnknown = current.filter(
+    (o) => isEmployment(o.kind) && stayed(o) === null,
+  ).length;
 
   return {
     measured: current.length,
@@ -338,6 +399,7 @@ export function summarizeOutcomes(
     byKind,
     employed,
     regional,
+    placeUnknown,
     regionalRate: current.length === 0 ? null : regional / current.length,
   };
 }

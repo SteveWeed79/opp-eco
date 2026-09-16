@@ -218,13 +218,30 @@ export const recordOutcomeInput = z.object({
   studentId: id,
   applicationId: id.nullable(),
   kind: z.enum([
-    "employed_by_host",
-    "employed_in_region",
-    "employed_elsewhere",
+    "employed",
     "continued_education",
     "entered_training",
     "still_seeking",
   ]),
+  employedByHost: z.boolean().optional(),
+  /**
+   * Where they went to work.
+   *
+   * Bounded and lightly shaped here; whether the county is one the market
+   * actually covers is not validated at all, deliberately. A learner can take
+   * a job anywhere, and the point of capturing the place is that the platform
+   * decides what it counts as rather than refusing what it did not expect.
+   *
+   * The state is two letters because that is what makes a county name
+   * unambiguous — Kansas and Missouri each have a Jackson County.
+   */
+  employmentCounty: z.string().trim().min(1).max(80).optional(),
+  employmentState: z
+    .string()
+    .trim()
+    .length(2, "Use the two-letter state code")
+    .regex(/^[A-Za-z]{2}$/, "Use the two-letter state code")
+    .optional(),
   observedOn: z.string().min(1).max(40),
   // Optional, unlike the note closing an introduction. A college that knows
   // only "she is working locally" should be able to say so — demanding the

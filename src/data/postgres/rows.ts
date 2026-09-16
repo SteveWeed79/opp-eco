@@ -170,6 +170,7 @@ export function toMarket(row: Row): import("@/domain/types").Market {
     name: text(row.name),
     city: text(row.city),
     counties: list(row.counties),
+    state: text(row.state),
     stage: text(row.stage) as MarketStage,
     boardId: row.board_id === null || row.board_id === undefined ? null : text(row.board_id),
     collegeIds: list(row.college_ids),
@@ -359,6 +360,16 @@ export function toOutcome(row: Row): Outcome {
     id: text(row.id),
     marketId: text(row.market_id),
     studentId: text(row.student_id),
+    employedByHost: Boolean(row.employed_by_host),
+    // Nullable together. The column pair is constrained so that a place is
+    // both parts or neither, and reading them the same way keeps the in-memory
+    // layer and this one answering the same question.
+    employmentCounty: nullableText(row.employment_county),
+    employmentState: nullableText(row.employment_state),
+    assertedInRegion:
+      row.asserted_in_region === null || row.asserted_in_region === undefined
+        ? null
+        : Boolean(row.asserted_in_region),
     // `nullableText` rather than `optionalText`: the domain declares this
     // `string | null` because a learner with no application is a real case, not
     // a field somebody forgot to fill in, and `undefined` would say the

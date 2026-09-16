@@ -53,7 +53,9 @@ describe("who may record an outcome", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -82,7 +84,8 @@ describe("who may record an outcome", () => {
     const result = await recordOutcome(actor(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
@@ -96,7 +99,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: running.studentId,
       applicationId: running.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
@@ -122,7 +126,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: new Date(Date.now() + 86_400_000).toISOString(),
     });
     expect(result.ok).toBe(false);
@@ -135,7 +140,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: other.id,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
@@ -149,7 +155,8 @@ describe("what it refuses", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_by_host",
+        kind: "employed",
+        employedByHost: true,
         observedOn,
       }),
     );
@@ -158,7 +165,8 @@ describe("what it refuses", () => {
     const second = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn,
     });
     expect(second.ok).toBe(false);
@@ -170,7 +178,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: "not a date",
     });
     expect(result.ok).toBe(false);
@@ -186,7 +195,9 @@ describe("what it writes", () => {
       await recordOutcome(admin(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -204,7 +215,8 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_by_host",
+        kind: "employed",
+        employedByHost: true,
         observedOn: yesterday(),
       }),
     );
@@ -219,7 +231,9 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_elsewhere",
+        kind: "employed",
+        employmentCounty: "Wyandotte",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -229,7 +243,7 @@ describe("what it writes", () => {
     const event = seed.auditEvents.find((e) => e.entityId === result.created.id);
     expect(event).toBeDefined();
     expect(event!.entityType).toBe("outcome");
-    expect(event!.to).toBe("employed_elsewhere");
+    expect(event!.to).toBe("employed");
     expect(event!.viaOverride).toBe(false);
   });
 
@@ -281,7 +295,9 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );

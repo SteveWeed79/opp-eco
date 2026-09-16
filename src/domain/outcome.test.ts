@@ -11,7 +11,8 @@ import {
   followUpBlockReason,
   hasExited,
   isEmployment,
-  isRegionalEmployment,
+  inRegion,
+  placeInRegion,
   outcomeKindLabel,
   summarizeOutcomes,
 } from "./outcome";
@@ -41,7 +42,11 @@ function outcome(overrides: Partial<Outcome> = {}): Outcome {
     marketId: "mkt-1",
     studentId: "stu-1",
     applicationId: "app-1",
-    kind: "employed_in_region",
+    kind: "employed",
+    employedByHost: false,
+    employmentCounty: "Crawford",
+    employmentState: "KS",
+    assertedInRegion: null,
     observedOn: "2026-05-15T00:00:00.000Z",
     recordedOn: "2026-05-15T00:00:00.000Z",
     recordedByUserId: "u-college",
@@ -50,12 +55,21 @@ function outcome(overrides: Partial<Outcome> = {}): Outcome {
   };
 }
 
+/** The market every outcome here is measured against. */
+const MARKET = { counties: ["Crawford", "Cherokee"], state: "KS" };
+const region = () => MARKET;
+
+/** An outcome somewhere outside the region — a real job, and gone. */
+function away(overrides: Partial<Outcome> = {}): Outcome {
+  return outcome({ employmentCounty: "Wyandotte", employmentState: "KS", ...overrides });
+}
+
 describe("the outcome vocabulary", () => {
   it("orders the strongest result first", () => {
     // The follow-up form is read top to bottom by someone who already knows the
     // answer, so the values are ordered by what they mean rather than
     // alphabetically.
-    expect(OUTCOME_KINDS[0].value).toBe("employed_by_host");
+    expect(OUTCOME_KINDS[0].value).toBe("employed");
     expect(OUTCOME_KINDS[OUTCOME_KINDS.length - 1].value).toBe("still_seeking");
   });
 
@@ -83,25 +97,76 @@ describe("the outcome vocabulary", () => {
 });
 
 describe("what counts as the venture's own measure", () => {
-  it("counts a hire by the host employer as regional", () => {
-    // The host is an employer in this market, so a hire by them is a hire in
-    // the region. Two reports disagreeing about that is the bug this pins.
-    expect(isRegionalEmployment("employed_by_host")).toBe(true);
-    expect(isRegionalEmployment("employed_in_region")).toBe(true);
+  it("is derived from where they went, not from which value was picked", () => {
+    // The whole point of the change. An officer names a county; whether it
+    // counts as staying is decided here, against boundaries the market
+    // declares — so two colleges cannot answer it differently.
+    expect(inRegion(outcome(), MARKET)).toBe(true);
+    expect(inRegion(away(), MARKET)).toBe(false);
   });
 
-  it("does not count a job outside the region as regional", () => {
-    expect(isRegionalEmployment("employed_elsewhere")).toBe(false);
-    expect(isEmployment("employed_elsewhere")).toBe(true);
+  it("counts a hire by the host employer as regional without needing a county", () => {
+    // The host is an employer in this market, so a hire by them is a hire in
+    // the region by construction.
+    const hired = outcome({
+      employedByHost: true,
+      employmentCounty: null,
+      employmentState: null,
+    });
+    expect(inRegion(hired, MARKET)).toBe(true);
+  });
+
+  it("does not let a county name cross a state line", () => {
+    // Kansas and Missouri each have a Jackson County, and Pittsburg is twenty
+    // miles from Joplin. Matching on the name alone would score a job in
+    // Missouri as staying — which is the exact failure this change exists to
+    // remove, arriving by a different door.
+    const market = { counties: ["Jackson"], state: "KS" };
+    expect(placeInRegion("Jackson", "KS", market)).toBe(true);
+    expect(placeInRegion("Jackson", "MO", market)).toBe(false);
+  });
+
+  it("is case- and whitespace-insensitive about both parts", () => {
+    // A retention figure that drops rows because somebody typed "ks" is a
+    // retention figure that is quietly wrong.
+    expect(placeInRegion("  crawford ", "ks", MARKET)).toBe(true);
+  });
+
+  it("answers null when employment carries no place at all", () => {
+    // Not false. "We did not capture where they went" and "they left" are
+    // different facts, and folding the first into the second understates
+    // retention by the size of the gap in the follow-up process.
+    const vague = outcome({ employmentCounty: null, employmentState: null });
+    expect(inRegion(vague, MARKET)).toBeNull();
+  });
+
+  it("honours the judgement on rows recorded before the county existed", () => {
+    // Those rows are real history. Their place is unknown and stays unknown,
+    // but what the recorder claimed is not thrown away.
+    const legacy = outcome({
+      employmentCounty: null,
+      employmentState: null,
+      assertedInRegion: true,
+    });
+    expect(inRegion(legacy, MARKET)).toBe(true);
+    expect(inRegion({ ...legacy, assertedInRegion: false }, MARKET)).toBe(false);
+  });
+
+  it("prefers a captured place over an inherited assertion", () => {
+    // If both are somehow present, the place is the evidence and the assertion
+    // is somebody's summary of it.
+    const both = away({ assertedInRegion: true });
+    expect(inRegion(both, MARKET)).toBe(false);
   });
 
   it("does not count education or training as employment", () => {
     for (const kind of ["continued_education", "entered_training", "still_seeking"] as const) {
       expect(isEmployment(kind)).toBe(false);
-      expect(isRegionalEmployment(kind)).toBe(false);
+      expect(inRegion(outcome({ kind }), MARKET)).toBeNull();
     }
   });
 });
+
 
 describe("who may record one", () => {
   it("is the college and the administrator", () => {
@@ -223,9 +288,10 @@ describe("summarising outcomes", () => {
     const summary = summarizeOutcomes(
       [
         outcome({ id: "out-1", kind: "still_seeking", observedOn: "2026-03-01T00:00:00.000Z" }),
-        outcome({ id: "out-2", kind: "employed_in_region", observedOn: "2026-05-01T00:00:00.000Z" }),
+        outcome({ id: "out-2", observedOn: "2026-05-01T00:00:00.000Z" }),
       ],
       0,
+      region,
     );
     expect(summary.measured).toBe(1);
     expect(summary.regional).toBe(1);
@@ -234,30 +300,33 @@ describe("summarising outcomes", () => {
   it("takes the most recent observation, because the question is where they are now", () => {
     const summary = summarizeOutcomes(
       [
-        outcome({ id: "out-1", kind: "employed_in_region", observedOn: "2026-05-01T00:00:00.000Z" }),
-        outcome({ id: "out-2", kind: "employed_elsewhere", observedOn: "2026-03-01T00:00:00.000Z" }),
+        outcome({ id: "out-1", observedOn: "2026-05-01T00:00:00.000Z" }),
+        away({ id: "out-2", observedOn: "2026-03-01T00:00:00.000Z" }),
       ],
       0,
+      region,
     );
     expect(summary.regional).toBe(1);
-    expect(summary.byKind.find((k) => k.kind === "employed_elsewhere")?.count).toBe(0);
+    expect(summary.regional).toBe(1);
+    expect(summary.placeUnknown).toBe(0);
   });
 
   it("breaks a same-date tie by which was entered later", () => {
     const summary = summarizeOutcomes(
       [
         outcome({ id: "out-1", kind: "still_seeking", observedOn: "2026-05-01T00:00:00.000Z", recordedOn: "2026-05-02T00:00:00.000Z" }),
-        outcome({ id: "out-2", kind: "employed_by_host", observedOn: "2026-05-01T00:00:00.000Z", recordedOn: "2026-05-09T00:00:00.000Z" }),
+        outcome({ id: "out-2", employedByHost: true, observedOn: "2026-05-01T00:00:00.000Z", recordedOn: "2026-05-09T00:00:00.000Z" }),
       ],
       0,
+      region,
     );
-    expect(summary.byKind.find((k) => k.kind === "employed_by_host")?.count).toBe(1);
+    expect(summary.byKind.find((k) => k.kind === "employed")?.count).toBe(1);
   });
 
   it("reports no rate at all when nothing has been measured", () => {
     // Zero would report a follow-up nobody has done as a bad result. The
     // unmeasured count is what says the queue is unworked.
-    const summary = summarizeOutcomes([], 7);
+    const summary = summarizeOutcomes([], 7, region);
     expect(summary.regionalRate).toBeNull();
     expect(summary.measured).toBe(0);
     expect(summary.unmeasured).toBe(7);
@@ -268,10 +337,11 @@ describe("summarising outcomes", () => {
     // programme that does not place people.
     const summary = summarizeOutcomes(
       [
-        outcome({ id: "out-1", studentId: "stu-1", kind: "employed_by_host" }),
-        outcome({ id: "out-2", studentId: "stu-2", kind: "employed_elsewhere" }),
+        outcome({ id: "out-1", studentId: "stu-1", employedByHost: true }),
+        away({ id: "out-2", studentId: "stu-2" }),
       ],
       6,
+      region,
     );
     expect(summary.measured).toBe(2);
     expect(summary.regionalRate).toBe(0.5);
@@ -282,7 +352,7 @@ describe("summarising outcomes", () => {
   it("reports every kind, including the ones nobody scored", () => {
     // A chart that omits empty categories silently changes shape between
     // markets, which is how two screenshots of the same report disagree.
-    const summary = summarizeOutcomes([outcome()], 0);
+    const summary = summarizeOutcomes([outcome()], 0, region);
     expect(summary.byKind).toHaveLength(OUTCOME_KINDS.length);
   });
 });

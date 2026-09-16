@@ -109,14 +109,15 @@ export async function seedInto(tx) {
    */
   for (const market of seed.markets) {
     await insert(
-      `INSERT INTO markets (id, name, city, counties, stage, board_id, launched_on,
-         program_year)
-       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6)`,
+      `INSERT INTO markets (id, name, city, counties, state, stage, board_id,
+         launched_on, program_year)
+       VALUES ($1,$2,$3,$4,$5,'configuring',NULL,$6,$7)`,
       [
         market.id,
         market.name,
         market.city,
         market.counties,
+        market.state,
         market.launchedOn,
         market.programYear,
       ],
@@ -491,14 +492,20 @@ export async function seedInto(tx) {
   for (const outcome of seed.outcomes) {
     await insert(
       `INSERT INTO outcomes (id, market_id, student_id, application_id, kind,
-         observed_on, recorded_on, recorded_by, source, detail)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+         employed_by_host, employment_county, employment_state,
+         asserted_in_region, observed_on, recorded_on, recorded_by, source,
+         detail)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         outcome.id,
         outcome.marketId,
         outcome.studentId,
         outcome.applicationId ?? null,
         outcome.kind,
+        outcome.employedByHost,
+        outcome.employmentCounty,
+        outcome.employmentState,
+        outcome.assertedInRegion,
         outcome.observedOn,
         outcome.recordedOn,
         outcome.recordedByUserId,

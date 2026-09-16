@@ -67,16 +67,10 @@ import { AwardFunds, type FundableLearner } from "@/components/AwardFunds";
 import { AdjustAllocation } from "@/app/demo/board/AdjustAllocation";
 import { adminAdjustAllocation, adminAwardFunds, adminPurgeLearner } from "./actions";
 import type { ApplicationStatus } from "@/domain/types";
-import { isRegionalEmployment, OUTCOME_KINDS } from "@/domain/outcome";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { adminIntroduceStudent } from "./actions";
 import { PORTAL_PATH } from "@/routes";
 
-/**
- * The two kinds that mean the talent stayed, resolved from the domain rather
- * than listed here — a second copy is the one that goes stale the day a kind
- * is added.
- */
 /** Placements far enough along that a cost has actually been incurred. */
 const FUNDABLE_STATUSES = new Set<ApplicationStatus>([
   "placement_active",
@@ -84,10 +78,6 @@ const FUNDABLE_STATUSES = new Set<ApplicationStatus>([
   "credit_pending",
   "credit_granted",
 ]);
-
-const REGIONAL_KINDS = new Set(
-  OUTCOME_KINDS.map((k) => k.value).filter(isRegionalEmployment),
-);
 
 const STAGE_ORDER: MarketStage[] = [
   "prospecting",
@@ -608,6 +598,14 @@ export default async function AdminPage() {
                 hint="Finished placements with no follow-up"
                 tone={outcomes.unmeasured > outcomes.measured ? "warn" : "neutral"}
               />
+              {outcomes.placeUnknown > 0 && (
+                <Stat
+                  label="Working, place unknown"
+                  value={String(outcomes.placeUnknown)}
+                  hint="Recorded as employed with no county — not counted either way"
+                  tone="warn"
+                />
+              )}
             </div>
 
             {outcomes.measured === 0 ? (
@@ -629,7 +627,7 @@ export default async function AdminPage() {
                       value={kind.count}
                       max={outcomes.measured || 1}
                       label={`${kind.label} outcomes`}
-                      tone={REGIONAL_KINDS.has(kind.kind) ? "good" : "brand"}
+                      tone="brand"
                     />
                   </div>
                 ))}
