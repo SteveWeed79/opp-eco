@@ -905,6 +905,81 @@ withDatabase("changing a work address", () => {
   });
 });
 
+withDatabase("adding somebody to an organization", () => {
+  it("lands the account and the membership together, or not at all", async () => {
+    await reseed();
+    const store = postgresStore(client);
+    await store.transaction((uow) => {
+      uow.addOrganizationMember(
+        { id: "u-ray", name: "Ray Okonkwo", email: "rokonkwo@sekwp.example.org" },
+        {
+          id: "mem-ray",
+          userId: "u-ray",
+          organizationId: "org-sekwp",
+          marketId: "mkt-pittsburg",
+          role: "board",
+        },
+      );
+    });
+
+    const [row] = await client.query<{ name: string; role: string }>(
+      `SELECT u.name, m.role FROM users u
+         JOIN memberships m ON m.user_id = u.id
+        WHERE u.id = $1`,
+      ["u-ray"],
+    );
+    expect(row.name).toBe("Ray Okonkwo");
+    expect(row.role).toBe("board");
+  });
+
+  it("rolls the account back when the membership is refused", async () => {
+    // The reason this is one operation. `admin_is_cross_market` refuses a board
+    // membership with no market, and a user row left behind by that refusal is
+    // an account nobody can sign into and nobody can see — which is exactly the
+    // half-landed state the pairing exists to prevent.
+    await reseed();
+    const store = postgresStore(client);
+    await expect(
+      store.transaction((uow) => {
+        uow.addOrganizationMember(
+          { id: "u-orphan", name: "Nobody", email: "nobody@sekwp.example.org" },
+          {
+            id: "mem-orphan",
+            userId: "u-orphan",
+            organizationId: "org-sekwp",
+            marketId: null,
+            role: "board",
+          },
+        );
+      }),
+    ).rejects.toBeTruthy();
+
+    const rows = await client.query("SELECT id FROM users WHERE id = $1", ["u-orphan"]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("refuses a second account on one address", async () => {
+    // `users.email` is citext and unique, so the database is what stops two
+    // people sharing a login rather than a check somebody has to remember.
+    await reseed();
+    const store = postgresStore(client);
+    await expect(
+      store.transaction((uow) => {
+        uow.addOrganizationMember(
+          { id: "u-dupe", name: "Someone Else", email: "MDELGADO@SEKWP.EXAMPLE.ORG" },
+          {
+            id: "mem-dupe",
+            userId: "u-dupe",
+            organizationId: "org-sekwp",
+            marketId: "mkt-pittsburg",
+            role: "board",
+          },
+        );
+      }),
+    ).rejects.toBeTruthy();
+  });
+});
+
 withDatabase("the auth store", () => {
   const COLLEGE_USER = "u-ellen";
   const ADMIN_USER = "u-admin";

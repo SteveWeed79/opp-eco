@@ -21,11 +21,13 @@ import type {
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
+  Membership,
   Organization,
   Outcome,
   Posting,
   Student,
   TimeEntry,
+  User,
 } from "@/domain/types";
 
 /** A notification queued inside the transaction and dispatched after commit. */
@@ -244,6 +246,22 @@ export interface UnitOfWork {
    * and it is where the reason, the domain check and the audit entry live.
    */
   changeUserEmail(userId: string, email: string): void;
+  /**
+   * Give an organization another person, with their own account.
+   *
+   * One operation rather than two, for the reason `purgeLearner` is one: a user
+   * with no membership cannot sign in and cannot be scoped, and a membership
+   * with no user is a dangling reference. Half of this landing is a row nobody
+   * can use and nobody can see.
+   *
+   * **One account is one person.** That is the whole of how attribution works
+   * here — a board officer's eligibility determination is attributable because
+   * `actorUserId` names them, and it stops being attributable the moment an
+   * office shares a login. Nothing in the schema can enforce that; an address
+   * is an address. So it is a rule this operation exists to make easy to
+   * follow: adding a colleague is adding an account, never sharing one.
+   */
+  addOrganizationMember(user: User, membership: Membership): void;
   createConsent(consent: ConsentRecord): void;
   saveConsent(consent: ConsentRecord, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;

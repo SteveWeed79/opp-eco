@@ -13,6 +13,7 @@
 import type { AuditEvent } from "@/domain/types";
 import { withoutParticipantPII } from "@/services/notification-privacy";
 import * as seed from "./seed";
+import { addMembership } from "./session";
 import {
   ConcurrencyError,
   type NotificationIntent,
@@ -300,6 +301,27 @@ class MemoryUnitOfWork implements UnitOfWork {
     if (index === -1) throw new Error(`Unknown user ${userId}`);
     this.effects.push(() => {
       seed.users[index] = { ...seed.users[index], email };
+    });
+  }
+
+  addOrganizationMember(
+    user: import("@/domain/types").User,
+    membership: import("@/domain/types").Membership,
+  ) {
+    if (seed.users.some((u) => u.id === user.id)) {
+      throw new Error(`User ${user.id} already exists`);
+    }
+    // `users.email` is unique and case-insensitive in Postgres, so refusing
+    // here too keeps the two layers answering the same question. Without it the
+    // fixtures would happily hold two people on one address — the exact state
+    // that makes an audit entry stop naming anybody.
+    const address = user.email.trim().toLowerCase();
+    if (seed.users.some((u) => u.email.trim().toLowerCase() === address)) {
+      throw new Error(`Address ${user.email} already belongs to somebody`);
+    }
+    this.effects.push(() => {
+      seed.users.push(user);
+      addMembership(membership);
     });
   }
 

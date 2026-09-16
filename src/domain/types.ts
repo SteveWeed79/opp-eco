@@ -1010,7 +1010,12 @@ export interface AuditEvent {
     | "outcome"
     | "funding_source"
     | "funding_commitment"
-    | "consent";
+    | "consent"
+    // An account: added to an organization, or moved to a new work address.
+    // Both are identity rather than work, and both are the answer to "who was
+    // this account when it signed that" — which is the question attribution
+    // gets asked a year later.
+    | "user";
   entityId: string;
   from: string | null;
   to: string;

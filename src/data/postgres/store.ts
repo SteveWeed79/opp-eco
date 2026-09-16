@@ -28,11 +28,13 @@ import type {
   InterviewSlot,
   MentorshipOffer,
   MentorshipPairing,
+  Membership,
   Organization,
   Outcome,
   Posting,
   Student,
   TimeEntry,
+  User,
 } from "@/domain/types";
 import {
   ConcurrencyError,
@@ -427,6 +429,18 @@ class PostgresUnitOfWork implements UnitOfWork {
 
   changeUserEmail(userId: string, email: string) {
     this.add(sql`UPDATE users SET email = ${email} WHERE id = ${userId}`);
+  }
+
+  addOrganizationMember(user: User, membership: Membership) {
+    this.add(sql`
+      INSERT INTO users (id, name, email)
+      VALUES (${user.id}, ${user.name}, ${user.email})`);
+    this.add(sql`
+      INSERT INTO memberships (id, user_id, organization_id, market_id, role)
+      VALUES (
+        ${membership.id}, ${membership.userId}, ${membership.organizationId},
+        ${membership.marketId}, ${membership.role}
+      )`);
   }
 
   // -- Consent --------------------------------------------------------------
