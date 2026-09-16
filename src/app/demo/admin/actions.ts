@@ -5,6 +5,7 @@ import { purgeLearner } from "@/app/_actions/privacy";
 import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
+import { nudgeForFollowUp } from "@/app/_actions/outreach";
 import { overrideInput, validate } from "@/services/validation";
 
 /**
@@ -132,4 +133,20 @@ export async function moveWorkAddress(
   reason: unknown,
 ): Promise<ActionResult> {
   return changeAddress(currentEmail, newEmail, reason);
+}
+
+/**
+ * Ask an employer what it did, or a learner where they went.
+ *
+ * The button on each row of the chase queue. A standing template rather than a
+ * compose box — `services/outreach.ts` has the argument, and the short version
+ * is that a free-text field here is the one place a person's own prose would
+ * leave the building, where the rule that no message names the learner cannot
+ * be enforced on it.
+ */
+export async function adminNudgeFollowUp(
+  applicationId: unknown,
+  audience: unknown,
+): Promise<ActionResult> {
+  return nudgeForFollowUp(applicationId, audience);
 }

@@ -502,13 +502,47 @@ difference cannot tell a working process from a hand-worked one.
 
 Reading **inverts the outcome rule where it matters**. An employer reads no
 outcomes at all; it reads its own answers here, because it is the author, and a
-statement somebody cannot read back is one they cannot correct. The learner and
-the board get the answer with the note stripped by `redactHostOffer`. Neither is
-kept from what happened — a learner knows perfectly well whether they were
+statement somebody cannot read back is one they cannot correct.
+
+**Everybody else gets the answer with the note stripped** by `redactHostOffer` —
+the learner, the board, and the college too, which works the same cases. Nobody
+is kept from what happened: a learner knows perfectly well whether they were
 offered a job, and hiding it from the person it happened to would be theatre.
-What both are kept from is the employer's candid sentence about why it did not
+What they are kept from is the employer's candid sentence about why it did not
 keep a named person, which is the most useful line in the record for a town
 review and the most damaging one for its subject.
+
+The college is on the narrow side of that line deliberately. Widening access
+later costs nothing and un-disclosing is impossible, so the default is the
+smallest audience that can act on it — and an employer writing candidly about
+why it did not keep somebody is doing it on the understanding that it is not
+being circulated. **The note is never mailed anywhere**, which is the other half
+of the same rule; see below.
+
+### Working the queue
+
+Each row of the chase queue has a button that sends the party a short standing
+message: the employer is asked what it did, the learner is asked where they
+went. Both are templates, and there is deliberately **no compose box**.
+
+A free-text field there would be the only place in this product where a
+person's own prose leaves the building, and the rule every template obeys — no
+message names the learner it is about — cannot be enforced on a sentence
+somebody typed. `withoutParticipantPII` strips payload *keys*; a name inside a
+string is not a key. A nudge that says nothing needs no checking, and the
+conversation that follows happens in a reply, between two people, outside a
+system that would otherwise have to store it.
+
+The employer's note is not quoted in either message. It is readable by its
+author and the administrator and nobody else, and a product that mails it onward
+has undone that with one button.
+
+**A nudge is audited, and that entry is the only record it happened.** Nothing
+about the placement is different afterwards, so without it there is no way to
+answer "has anybody actually asked them?" — which is the question the queue
+exists to make answerable. Sending twice is allowed and untracked: a second
+nudge three weeks later is the normal way this works, and an "already asked"
+flag would turn the ordinary next action into one the screen fights.
 
 ## What leaves the building
 

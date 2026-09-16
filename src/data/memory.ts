@@ -210,7 +210,12 @@ function visibleHostOffers(actor: ActorContext): HostOffer[] {
     const self = seed.students.find((st) => st.userId === actor.user.id);
     return self ? rows.filter((o) => o.studentId === self.id).map(redactHostOffer) : [];
   }
-  if (role === "board") return rows.map(redactHostOffer);
+  // The note reaches the administrator and its author, and nobody else — not
+  // even the college, which works the same cases. Narrow by default because
+  // widening later costs nothing and un-disclosing is impossible, and because
+  // an employer writing candidly about why it did not keep somebody is doing it
+  // on the understanding that it is not being circulated.
+  if (role !== "admin") return rows.map(redactHostOffer);
   return rows;
 }
 

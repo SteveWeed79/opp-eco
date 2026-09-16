@@ -167,3 +167,28 @@ test("a learner records their own, and the college's queue reflects it", async (
     expect(await collegeQueue.count()).toBe(before - 1);
   }).toPass({ timeout: 5000 });
 });
+
+test("a nudge leaves the building, and names nobody on the way", async ({ page }) => {
+  // The effect, not the toast: a queued message with a body an operator can
+  // read. The outbox is where "delivered" is defined, so it is where this is
+  // checked rather than at the button that caused it.
+  await page.goto("/demo/admin");
+  const before = await page.getByRole("button", { name: "Send a nudge" }).count();
+  expect(before).toBeGreaterThan(0);
+
+  // The learner named on the row this nudge is about, so the assertion below
+  // is about a real name rather than a name nobody ever had.
+  const row = rowsUnder(page, "Ask the learner").first();
+  const learner = (await row.innerText()).split("\n")[0].trim();
+  expect(learner.length).toBeGreaterThan(0);
+
+  await row.getByRole("button", { name: "Send a nudge" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /Sent\./ })).toBeVisible();
+
+  await page.goto("/admin/outbox");
+  const outbox = page.locator("body");
+  await expect(outbox).toContainText("Where did you land?");
+  // The rule every template obeys, checked on the thing actually queued rather
+  // than on the template that produced it.
+  await expect(outbox).not.toContainText(learner);
+});

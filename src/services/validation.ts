@@ -274,6 +274,18 @@ export const recordHostOfferInput = z.object({
 });
 
 /**
+ * A nudge from the chase queue.
+ *
+ * Two fields, and there is deliberately no third. The message itself is a
+ * template — see `outreach.ts` for why a compose box is the one thing this
+ * particular action must not have.
+ */
+export const sendNudgeInput = z.object({
+  applicationId: id,
+  audience: z.enum(["employer", "learner"]),
+});
+
+/**
  * A week of logged hours.
  *
  * The hour bound is `MAX_HOURS_PER_WEEK` and exists to catch a fat-fingered

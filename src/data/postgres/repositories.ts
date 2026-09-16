@@ -243,8 +243,11 @@ export function postgresRepositories(db: SqlClient): Repositories {
           ORDER BY host_offers.recorded_on DESC, host_offers.id COLLATE "C"`,
       toHostOffer,
     );
+    // Everybody but the administrator and the employer who wrote it. See
+    // `visibleHostOffers` for why the college is on the wrong side of that line
+    // despite working the same cases.
     const { role } = actor.membership;
-    return role === "board" || role === "student" ? rows.map(redactHostOffer) : rows;
+    return role === "admin" || role === "business" ? rows : rows.map(redactHostOffer);
   }
 
   async function timeEntriesWhere(

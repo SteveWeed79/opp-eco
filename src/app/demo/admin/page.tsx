@@ -32,6 +32,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { HOST_OFFER_ANSWERS } from "@/domain/offer";
+import { NudgeButton } from "@/components/NudgeButton";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { organizationMachine } from "@/domain/lifecycle";
@@ -70,7 +71,12 @@ import { RETENTION_SCHEDULE } from "@/domain/retention";
 import { PurgeLearner } from "@/components/PurgeLearner";
 import { AwardFunds, type FundableLearner } from "@/components/AwardFunds";
 import { AdjustAllocation } from "@/app/demo/board/AdjustAllocation";
-import { adminAdjustAllocation, adminAwardFunds, adminPurgeLearner } from "./actions";
+import {
+  adminAdjustAllocation,
+  adminAwardFunds,
+  adminNudgeFollowUp,
+  adminPurgeLearner,
+} from "./actions";
 import type { ApplicationStatus } from "@/domain/types";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { adminIntroduceStudent } from "./actions";
@@ -771,6 +777,8 @@ export default async function AdminPage() {
               icon={<Handshake className="w-5 h-5" />}
               title="Ask the employer"
               subtitle="Did you offer them a job? Nobody else can answer it"
+              audience="employer"
+              sentMessage="Sent. They can answer in one click."
               rows={offerQueue.map((item) => ({
                 id: item.application.id,
                 who: organizationName(item.posting.businessId),
@@ -783,6 +791,8 @@ export default async function AdminPage() {
               icon={<Compass className="w-5 h-5" />}
               title="Ask the learner"
               subtitle="Where are they now? The employer only knows its own half"
+              audience="learner"
+              sentMessage="Sent. Their portal has the form waiting."
               rows={followUps.map((item) => ({
                 id: item.application.id,
                 who: item.student.name,
@@ -1177,12 +1187,16 @@ function ChaseList({
   icon,
   title,
   subtitle,
+  audience,
+  sentMessage,
   rows,
   empty,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
+  audience: "employer" | "learner";
+  sentMessage: string;
   rows: { id: string; who: string; about: string; days: number }[];
   empty: string;
 }) {
@@ -1204,9 +1218,18 @@ function ChaseList({
                 <p className="font-semibold text-sm text-ink-950">{row.who}</p>
                 <p className="text-xs text-ink-500 mt-0.5">{row.about}</p>
               </div>
-              <Badge tone={row.days > 60 ? "warn" : "neutral"}>
-                {row.days} {row.days === 1 ? "day" : "days"}
-              </Badge>
+              <div className="flex items-center gap-3 shrink-0">
+                <Badge tone={row.days > 60 ? "warn" : "neutral"}>
+                  {row.days} {row.days === 1 ? "day" : "days"}
+                </Badge>
+                <NudgeButton
+                  applicationId={row.id}
+                  audience={audience}
+                  label="Send a nudge"
+                  sentMessage={sentMessage}
+                  action={adminNudgeFollowUp}
+                />
+              </div>
             </li>
           ))}
         </ul>

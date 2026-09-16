@@ -480,20 +480,26 @@ withDatabase("parity with the in-memory layer", () => {
     const withNote = seeded.filter((o) => o.note);
     expect(withNote.length).toBeGreaterThan(0);
 
-    for (const role of ["student", "board"] as const) {
+    // Everybody but the administrator and the author. The college is on this
+    // list deliberately despite working the same cases — narrow by default,
+    // because widening later costs nothing and un-disclosing is impossible.
+    for (const role of ["student", "board", "college"] as const) {
       for (const repos of [postgres, memoryRepositories]) {
         const rows = await repos.hostOffers.list(contextFor(role));
         expect(rows.every((o) => o.note === undefined)).toBe(true);
-        // The answer is not a secret from either of them. A learner knows
+        // The answer is not a secret from any of them. A learner knows
         // whether they were offered a job.
         expect(rows.every((o) => Boolean(o.answer))).toBe(true);
       }
     }
 
-    // The college and the employer, who work from it, still get the note.
-    for (const role of ["college", "business"] as const) {
-      const rows = await postgres.hostOffers.list(contextFor(role));
-      expect(rows.some((o) => o.note)).toBe(true);
+    // The employer that wrote it reads it back — a statement somebody cannot
+    // read back is one they cannot correct — and so does the administrator.
+    for (const role of ["business", "admin"] as const) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.hostOffers.list(contextFor(role));
+        expect(rows.some((o) => o.note)).toBe(true);
+      }
     }
   });
 
