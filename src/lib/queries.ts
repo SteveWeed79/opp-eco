@@ -40,12 +40,14 @@ import {
 } from "@/domain/funding";
 import {
   awaitsFollowUp,
+  followUpWindowDue,
   canReadOutcomes,
   daysSinceExit,
   hasExited,
   summarizeOutcomes,
   type OutcomeSummary,
 } from "@/domain/outcome";
+import type { WindowStatus } from "@/domain/window";
 import {
   offerAwaitsAnswer,
   summarizeHostOffers,
@@ -424,6 +426,14 @@ export interface FollowUpItem {
   posting: Posting;
   /** How long the learner has been waiting to be asked. */
   days: number;
+  /**
+   * The quarter this row is asking about — "Jul–Sep 2026".
+   *
+   * Carried so the screen can say which window it means rather than making
+   * anybody work out that a placement ending in February is measured in July.
+   * The arithmetic is the product's job; the operator sees months.
+   */
+  window: WindowStatus;
 }
 
 /**
@@ -452,13 +462,15 @@ export async function followUpQueue(
     repositories.outcomes.list(actor),
   ]);
 
-  const candidates = applications.filter((a) => awaitsFollowUp(a, outcomes));
+  const candidates = applications
+    .map((a) => ({ a, window: followUpWindowDue(a, outcomes, DEMO_NOW) }))
+    .filter((c): c is { a: Application; window: WindowStatus } => c.window !== null);
 
   // Resolved together rather than one after another, for the reason
   // `stalledApplications` does it: against Postgres this loop would otherwise
   // be two sequential round trips per row.
   const resolved = await Promise.all(
-    candidates.map(async (application) => {
+    candidates.map(async ({ a: application, window }) => {
       const [student, posting] = await Promise.all([
         repositories.students.find(actor, application.studentId),
         repositories.postings.find(actor, application.postingId),
@@ -469,13 +481,17 @@ export async function followUpQueue(
         student,
         posting,
         days: daysSinceExit(application, DEMO_NOW),
+        window,
       };
     }),
   );
 
+  // Oldest open window first, then longest since exit. The window is the
+  // better key: a row whose quarter is about to close is the one that becomes
+  // unrecoverable first, and that is not always the one that exited longest ago.
   return resolved
     .filter((item): item is FollowUpItem => item !== null)
-    .sort((a, b) => b.days - a.days);
+    .sort((a, b) => a.window.closesOn.localeCompare(b.window.closesOn) || b.days - a.days);
 }
 
 export interface HostOfferItem {
@@ -573,7 +589,7 @@ export async function outcomeReport(
   ]);
 
   const byId = new Map(markets.map((m) => [m.id, m]));
-  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes)).length;
+  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes, DEMO_NOW)).length;
   return summarizeOutcomes(outcomes, unmeasured, (id) => byId.get(id) ?? null);
 }
 

@@ -226,7 +226,7 @@ export default async function StudentPage() {
             subtitle="Your placement has finished. Nobody has asked you yet — and your answer is worth more than anybody else's guess"
           />
           <ul className="row-list divide-y divide-line">
-            {followUps.map(({ application, posting, days }) => (
+            {followUps.map(({ application, posting, days, window }) => (
               <li
                 key={application.id}
                 className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
@@ -235,7 +235,8 @@ export default async function StudentPage() {
                   <p className="font-semibold text-sm text-ink-950">{posting.title}</p>
                   <p className="text-xs text-ink-500 mt-0.5">
                     {organizationName(posting.businessId)} · finished {days}{" "}
-                    {days === 1 ? "day" : "days"} ago
+                    {days === 1 ? "day" : "days"} ago · asking about{" "}
+                    {window.label}
                   </p>
                 </div>
                 <RecordOutcome
@@ -258,7 +259,7 @@ export default async function StudentPage() {
               Your college and the workforce board see the answer. Neither sees
               the detail box, and &ldquo;still looking&rdquo; is counted apart
               from the people nobody asked — so saying so never makes anything
-              look worse than staying quiet (Q23).
+              look worse than staying quiet.
             </Assumption>
           </div>
         </Card>

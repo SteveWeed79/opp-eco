@@ -192,3 +192,18 @@ test("a nudge leaves the building, and names nobody on the way", async ({ page }
   // than on the template that produced it.
   await expect(outbox).not.toContainText(learner);
 });
+
+test("the queue says which quarter it is asking about", async ({ page }) => {
+  // The window is the product's arithmetic, not the operator's. A placement
+  // that ended in February is measured in July, and nobody working this queue
+  // should have to know why — they should see the months.
+  await page.goto("/demo/college");
+  const rows = rowsUnder(page, "Follow-up");
+  await expect(rows).not.toHaveCount(0);
+
+  // Every row names a quarter, and none of them names a countdown in quarters.
+  const quarter = /Covers [A-Z][a-z]{2}–[A-Z][a-z]{2} \d{4}/;
+  for (const text of await rows.allInnerTexts()) {
+    expect(text).toMatch(quarter);
+  }
+});

@@ -655,7 +655,7 @@ export default async function AdminPage() {
               One observation per learner, most recent first — a learner followed
               up twice is one learner. The rate is over learners measured, not
               over everyone who finished, so an unworked queue never reads as a
-              programme that fails to place people (Q23).
+              programme that fails to place people. Asked on a clock — the 2nd and 4th quarter after exit — so two cohorts are measured against the same calendar rather than against their own end dates.
             </Assumption>
           </div>
         </Card>
@@ -796,7 +796,7 @@ export default async function AdminPage() {
               rows={followUps.map((item) => ({
                 id: item.application.id,
                 who: item.student.name,
-                about: item.posting.title,
+                about: `${item.posting.title} · ${item.window.label}`,
                 days: item.days,
               }))}
               empty="Every finished placement has a follow-up."

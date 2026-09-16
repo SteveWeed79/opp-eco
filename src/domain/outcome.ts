@@ -21,6 +21,7 @@
  * counts a missing row as a result of any kind.
  */
 
+import { windowDueNow, windowStatuses, type WindowStatus } from "./window";
 import type {
   ActorRole,
   Application,
@@ -317,16 +318,54 @@ export function exitDateOf(application: Application): string {
  * once per learner — a queue that nags is better than a queue that forgets,
  * and a report that double-counts is just wrong.
  *
- * Recording a *second* observation about the same experience later is supported
- * and expected. It is simply not something a work queue can prompt, since no
- * date makes the next follow-up due rather than merely possible.
+ * **No longer one-shot.** This used to be "has anything at all been recorded
+ * against this placement", which cleared a learner from the queue forever the
+ * first time anybody asked — and the comment here used to say a second
+ * observation "is simply not something a work queue can prompt, since no date
+ * makes the next follow-up due rather than merely possible".
+ *
+ * There is now a date. `window.ts` puts two of them on every placement, at the
+ * 2nd and 4th calendar quarter after it ended, so a placement re-enters this
+ * queue when its next window opens and leaves again when that window is
+ * answered. A window that closed unanswered does **not** come back: nobody can
+ * be phoned in February and asked where they were last August with any
+ * confidence, and a queue offering impossible work teaches its operator to
+ * ignore the queue. Those are reported as missed instead.
  */
 export function awaitsFollowUp(
   application: Application,
   outcomes: Outcome[],
+  now: Date,
 ): boolean {
-  if (!hasExited(application)) return false;
-  return !outcomes.some((o) => o.applicationId === application.id);
+  return followUpWindowDue(application, outcomes, now) !== null;
+}
+
+/** This placement's windows and where each stands, or none if it has not ended. */
+export function followUpWindowsFor(
+  application: Application,
+  outcomes: Outcome[],
+  now: Date,
+): WindowStatus[] {
+  if (!hasExited(application)) return [];
+  return windowStatuses(
+    exitDateOf(application),
+    outcomes.filter((o) => o.applicationId === application.id),
+    now,
+  );
+}
+
+/** The window to ask about now, or null when nothing is open and unanswered. */
+export function followUpWindowDue(
+  application: Application,
+  outcomes: Outcome[],
+  now: Date,
+): WindowStatus | null {
+  if (!hasExited(application)) return null;
+  return windowDueNow(
+    exitDateOf(application),
+    outcomes.filter((o) => o.applicationId === application.id),
+    now,
+  );
 }
 
 // ---------------------------------------------------------------------------

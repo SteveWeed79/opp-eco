@@ -391,6 +391,47 @@ because the follow-up history is the evidence being offered. `summarizeOutcomes`
 counts one observation per learner, the most recent, so a diligent officer cannot
 inflate the denominator by doing their job.
 
+### When it is asked
+
+Two windows per placement: the **2nd and the 4th calendar quarter after the
+quarter it ended in**. That is the shape workforce reporting already uses, so
+the resulting number lands beside figures a board recognises instead of needing
+a translation nobody performs.
+
+Calendar quarters rather than elapsed months, and the difference is the point. A
+placement ending 20 February and one ending 28 March are both in Q1, so both are
+measured in Jul–Sep — while one ending 2 April is measured in Oct–Dec. Elapsed
+time therefore varies from about three months to six, which looks arbitrary and
+is exactly what makes two cohorts comparable: they are measured against the same
+calendar rather than against their own end dates. Every screen says "covers
+Jul–Sep 2026"; the arithmetic is the product's job.
+
+**Two rather than one**, because each alone is misleading. Somebody employed
+three months after an internship may simply be finishing the summer, so the
+second quarter is a weak retention signal on its own. The fourth alone misses
+the people who were reachable early and gone later — and misses the movement
+between them, which is itself a finding: regional at Q2 and gone at Q4 is a
+different story about a town than never having stayed.
+
+**The queue stopped being one-shot.** It used to clear a placement the first
+time anybody recorded anything, which is why a second observation was supported
+and never prompted — there was no date that made one *due* rather than merely
+possible. Now a placement re-enters when its next window opens and leaves again
+when that window is answered, by `observedOn` rather than `recordedOn`: a
+follow-up written up a fortnight after the call still describes the day of the
+call.
+
+**A window that closed unanswered stays closed.** Nobody can be phoned in
+February and asked where they were last August with any confidence, and a queue
+offering impossible work teaches its operator to ignore the queue. Those are
+reported as *missed* rather than queued — the running cost of having had no
+clock, and the reason the seed ships with one.
+
+All of it measures from `Application.exitedOn`, written once when the placement
+ends and never moved. `statusSince` is overwritten by every later transition, so
+a clock reading it slides forward with the credit paperwork — by 55 days on one
+seeded fixture, which is enough to file an observation in the wrong quarter.
+
 ### Absence is not a result
 
 `still_seeking` is a recorded answer. A learner nobody has asked has **no row at

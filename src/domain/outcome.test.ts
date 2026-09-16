@@ -9,6 +9,7 @@ import {
   canRecordOutcome,
   daysSinceExit,
   exitDateOf,
+  followUpWindowsFor,
   followUpBlockReason,
   hasExited,
   isEmployment,
@@ -262,20 +263,64 @@ describe("when a follow-up is due", () => {
 });
 
 describe("the follow-up queue", () => {
-  it("lists an exited placement nobody has asked about", () => {
-    expect(awaitsFollowUp(application(), [])).toBe(true);
+  // The fixture exits 1 May 2026 — Q2 — so its windows are Oct–Dec 2026 and
+  // Apr–Jun 2027. Dates below are chosen against that rather than against the
+  // day the suite happens to run.
+  const beforeFirst = new Date("2026-08-01T00:00:00.000Z");
+  const inFirst = new Date("2026-11-01T00:00:00.000Z");
+  const betweenWindows = new Date("2027-02-01T00:00:00.000Z");
+  const inSecond = new Date("2027-05-01T00:00:00.000Z");
+  const answeredFirst = () => outcome({ observedOn: "2026-11-15T00:00:00.000Z" });
+
+  it("lists an exited placement once its window opens", () => {
+    expect(awaitsFollowUp(application(), [], inFirst)).toBe(true);
   });
 
-  it("clears once one outcome is recorded against it", () => {
-    expect(awaitsFollowUp(application(), [outcome()])).toBe(false);
+  it("does not list one before the first window opens", () => {
+    // The change from the old rule, and the point of having a clock: a
+    // placement that finished last month is not yet a measurement anybody can
+    // take, and listing it teaches an operator that the queue is noise.
+    expect(awaitsFollowUp(application(), [], beforeFirst)).toBe(false);
+  });
+
+  it("clears once an outcome lands inside the open window", () => {
+    expect(awaitsFollowUp(application(), [answeredFirst()], inFirst)).toBe(false);
+  });
+
+  it("is not cleared by an outcome recorded before the window opened", () => {
+    // A follow-up taken in May says where somebody was in May. It is a real
+    // record and it still counts in the summary; it is not a measurement of
+    // Oct–Dec, and letting it pass as one is how a series stops being
+    // comparable.
+    expect(awaitsFollowUp(application(), [outcome()], inFirst)).toBe(true);
+  });
+
+  it("comes back when the next window opens", () => {
+    // No longer one-shot. The old rule cleared a placement forever the first
+    // time anybody asked, which is why a second observation was supported and
+    // never prompted.
+    const answered = [answeredFirst()];
+    expect(awaitsFollowUp(application(), answered, betweenWindows)).toBe(false);
+    expect(awaitsFollowUp(application(), answered, inSecond)).toBe(true);
+  });
+
+  it("stops asking about a window that closed unanswered", () => {
+    // Reported as missed rather than queued. Nobody can be phoned in February
+    // and asked where they were last November with any confidence.
+    expect(awaitsFollowUp(application(), [], betweenWindows)).toBe(false);
+    const missed = followUpWindowsFor(application(), [], betweenWindows);
+    expect(missed[0].state).toBe("missed");
+    expect(missed[1].state).toBe("waiting");
   });
 
   it("is not cleared by an outcome against a different placement", () => {
-    expect(awaitsFollowUp(application(), [outcome({ applicationId: "app-2" })])).toBe(true);
+    const elsewhere = [answeredFirst()].map((o) => ({ ...o, applicationId: "app-2" }));
+    expect(awaitsFollowUp(application(), elsewhere, inFirst)).toBe(true);
   });
 
   it("never lists a placement that is still running", () => {
-    expect(awaitsFollowUp(application({ status: "placement_active" }), [])).toBe(false);
+    expect(awaitsFollowUp(application({ status: "placement_active" }), [], inFirst)).toBe(false);
+    expect(followUpWindowsFor(application({ status: "placement_active" }), [], inFirst)).toEqual([]);
   });
 
   it("measures how long a learner has been waiting to be asked", () => {
