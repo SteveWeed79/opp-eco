@@ -295,6 +295,14 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  changeUserEmail(userId: string, email: string) {
+    const index = seed.users.findIndex((u) => u.id === userId);
+    if (index === -1) throw new Error(`Unknown user ${userId}`);
+    this.effects.push(() => {
+      seed.users[index] = { ...seed.users[index], email };
+    });
+  }
+
   createConsent(consent: import("@/domain/types").ConsentRecord) {
     if (seed.consents.some((c) => c.id === consent.id)) {
       throw new Error(`Consent ${consent.id} already exists`);

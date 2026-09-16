@@ -859,6 +859,52 @@ withDatabase("saving a learner who is already verified", () => {
  * guards do what their `WHERE` clauses claim, and that single use is the
  * database's property rather than the caller's.
  */
+withDatabase("changing a work address", () => {
+  /**
+   * The narrow write behind account recovery.
+   *
+   * Here rather than alongside the service because the risk it carries is SQL
+   * rather than logic: the statement has to reach the right row and leave the
+   * name alone, and a recording client cannot tell you whether Postgres agrees.
+   * The policy around it — who may call it, the reason, the domain rule, the
+   * audit entry — is the service's, and is tested there.
+   */
+  it("moves the address and touches nothing else about the person", async () => {
+    await reseed();
+    const before = (await memoryRepositories.users.find("u-marcia"))!;
+
+    const store = postgresStore(client);
+    await store.transaction((uow) => {
+      uow.changeUserEmail("u-marcia", "m.delgado@sekwp.example.org");
+    });
+
+    const [row] = await client.query<{ name: string; email: string }>(
+      "SELECT name, email FROM users WHERE id = $1",
+      ["u-marcia"],
+    );
+    expect(row.email).toBe("m.delgado@sekwp.example.org");
+    // The reason this is `changeUserEmail` and not `saveUser`: recovering an
+    // account must not be a way to rename the person it belongs to.
+    expect(row.name).toBe(before.name);
+  });
+
+  it("leaves the old address free of the account, so sign-on cannot find it", async () => {
+    await reseed();
+    const store = postgresStore(client);
+    await store.transaction((uow) => {
+      uow.changeUserEmail("u-marcia", "m.delgado@sekwp.example.org");
+    });
+
+    // `users.email` is citext, so this is the case-insensitive comparison the
+    // sign-on path makes — the old address must resolve to nobody.
+    const stale = await client.query(
+      "SELECT id FROM users WHERE email = $1",
+      ["MDELGADO@SEKWP.EXAMPLE.ORG"],
+    );
+    expect(stale).toHaveLength(0);
+  });
+});
+
 withDatabase("the auth store", () => {
   const COLLEGE_USER = "u-ellen";
   const ADMIN_USER = "u-admin";

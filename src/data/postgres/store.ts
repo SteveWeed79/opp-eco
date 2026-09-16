@@ -425,6 +425,10 @@ class PostgresUnitOfWork implements UnitOfWork {
       WHERE id = ${student.userId}`);
   }
 
+  changeUserEmail(userId: string, email: string) {
+    this.add(sql`UPDATE users SET email = ${email} WHERE id = ${userId}`);
+  }
+
   // -- Consent --------------------------------------------------------------
 
   createConsent(consent: ConsentRecord) {

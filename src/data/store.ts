@@ -227,6 +227,23 @@ export interface UnitOfWork {
    * able to do.
    */
   purgeLearner(student: Student, at: string): void;
+  /**
+   * Change the work address an account is known by. Nothing else about them.
+   *
+   * Narrow for the same reason `purgeLearner` is: a general `saveUser` would
+   * hand every caller the ability to rename a person. This one can move an
+   * address and cannot touch a name, so what it is for is readable from what it
+   * can do.
+   *
+   * It is the account-recovery path for somebody whose mailbox is gone — a
+   * public employee whose agency address changed, with no password to fall back
+   * on and no identity provider to ask. That makes it the most dangerous write
+   * in this file: the address is the credential on the code path and the reset
+   * route on the password path, so moving it is the act of handing an account
+   * to whoever holds the new mailbox. `changeWorkAddress` is the only caller,
+   * and it is where the reason, the domain check and the audit entry live.
+   */
+  changeUserEmail(userId: string, email: string): void;
   createConsent(consent: ConsentRecord): void;
   saveConsent(consent: ConsentRecord, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;
