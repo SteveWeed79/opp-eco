@@ -146,27 +146,40 @@ export function inRegion(
 // ---------------------------------------------------------------------------
 
 /**
- * The college and the administrator, and for now nobody else.
+ * The college, the administrator, and the learner about themselves.
  *
  * The college because follow-up is local-operator work and it already holds the
  * relationship that makes the call get answered; the administrator for the
  * reason they can do anything else here, which is that a market whose college
  * has not acted is what an operator exists to unstick.
  *
- * Two parties are **deliberately absent and are the open question** (Q23): the
- * learner, whose self-report is the most common source in real workforce
- * reporting, and the employer, who is the only party that actually knows it
- * hired someone. Both are better evidence than a college's second-hand note for
- * the outcomes they can speak to, and both want a surface and a rule about what
- * each may claim — an employer can attest `employed_by_host` and cannot possibly
- * know about `employed_elsewhere`. Adding them is a scoping decision rather than
- * a wiring job, so the narrow answer ships first.
+ * **The learner is here now**, and the bound on them is the whole of why it is
+ * safe: a learner may record about their own record and no other, which
+ * `recordOutcome` enforces and `studentScope` makes unreachable anyway. This is
+ * their own disclosure about their own life — the same seam the consent model
+ * already draws between what a student enters and what an institution verifies
+ * — and self-report is the commonest source in real workforce reporting for the
+ * plain reason that a college phoning fourteen people who have left town is the
+ * bottleneck.
+ *
+ * What that buys comes with a bias that runs one way: people who landed a good
+ * job answer, and people who did not go quiet. `source` keeps a self-report
+ * distinguishable from a college's verified note, `unmeasured` keeps the size
+ * of the silence visible, and the administrator's chase queue is what turns
+ * silence into a phone call rather than a gap in a chart.
+ *
+ * The **employer is deliberately still absent from this list**, and that is not
+ * an omission. It answers the one question it can speak to through `HostOffer`,
+ * which records what it decided about its own headcount; an accepted offer
+ * writes the outcome from there. What an employer cannot do is file an outcome
+ * directly, because everything else an outcome can say — continued education,
+ * still looking, a job somewhere else — is hearsay from where it sits.
  *
  * The board is absent for the reason it sees no introductions: it reimburses
  * placements. Where a learner works afterwards is the programme's measure, not
  * a condition of a claim it already paid.
  */
-export const OUTCOME_RECORDERS: ActorRole[] = ["college", "admin"];
+export const OUTCOME_RECORDERS: ActorRole[] = ["college", "admin", "student"];
 
 export function canRecordOutcome(role: ActorRole): boolean {
   return OUTCOME_RECORDERS.includes(role);

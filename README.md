@@ -163,7 +163,9 @@ That distinction is load-bearing. `postings.find` narrows by organization for `b
 
 ## The five state machines
 
-Still five, and `Outcome` is deliberately not a sixth — see [Outcomes](#outcomes).
+Still five. `Outcome` is deliberately not a sixth — see [Outcomes](#outcomes) —
+and neither is `HostOffer`: one answer per placement, recorded once, with no
+status and nothing to move it through.
 
 Five things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, an **organization's** vetting, and an employer's **mentorship offer**. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
 
@@ -409,12 +411,26 @@ anything, and a figure no fixture produces is copy nobody ever reads.
 
 ### Who does it, and who sees it
 
+**Three channels, each bounded to what its party can actually know.**
+
 The college records them, because follow-up is local-operator work and it holds
 the relationship that makes the call get answered; an administrator can too, for
-the same reason they can do anything else here. The learner and the employer are
-deliberately absent and are the open question (Q23) — an employer is the only
-party that actually knows it made a hire, and a self-report is the commonest
-source in real workforce reporting, but each needs a rule about what it may claim.
+the same reason they can do anything else here. **A learner records their own** —
+their own disclosure about their own life, refused for anybody else's record —
+because a college phoning fourteen people who have left town is the bottleneck,
+and self-report is the commonest source in real workforce reporting.
+
+**An employer records none of these.** It answers a different question through
+[a host offer](#what-the-host-did), and an accepted offer writes the outcome from
+there. What it cannot do is file an outcome directly: continued education, still
+looking, or a job somewhere else is hearsay from where it sits.
+
+Self-report carries a bias that runs one way — people who landed a good job
+answer, and people who did not go quiet. Three things hold against it. `source`
+keeps a self-report distinguishable from a college's verified note, because the
+source is part of the evidence. `unmeasured` keeps the size of the silence
+visible. And the administrator's chase queue turns silence into a phone call
+rather than a gap in a chart.
 
 **The board reads the counts and never the free text.** Its obligation is how
 many were employed and how many stayed, which is exactly what the kind says; the
@@ -429,6 +445,70 @@ shown every placement it hosted as never followed up — work already done,
 presented as outstanding, with no way to discover otherwise. `canReadOutcomes`
 exists so a derived view can tell "no outcome exists" from "you may not see one",
 and `outcomeScope` is tested against it so the two cannot drift.
+
+## What the host did
+
+An outcome says where a learner went. It cannot say whether the employer who
+supervised the placement offered to keep them — and that is the strongest result
+the programme produces, the cheapest to collect, and the only fact here with
+exactly one party who knows it. A college can tell you somebody is working; what
+an employer decided about its own headcount is not something it observes.
+
+A `HostOffer` is one answer about one finished placement. **Three answers:**
+
+| | |
+|---|---|
+| We offered, and they took it | The hire. Also writes the outcome, in the same transaction |
+| We offered, and they turned it down | The work was here, and something else won |
+| We made no offer | No headcount, wrong fit, wrong timing |
+
+**The middle one is why this is a record rather than a boolean.** "We offered and
+they turned it down" and "we made no offer" are opposite findings about a town —
+the first says the work is there and something else pulled the learner away, the
+second says the work is not there. A programme asking why rural graduates leave
+has to tell those apart, and folded into one "did not convert" they are not
+merely hard to separate but unrecoverable: separating them later means asking an
+employer again about a placement that ended a year ago. `summarizeHostOffers`
+reports a hire rate and an offer rate side by side for exactly this reason — two
+towns with the same hire rate and different offer rates have opposite problems.
+
+### Silence is not an answer
+
+There is a fourth state and it is deliberately **not a value**: nobody has
+replied. That is the absence of a row, which is the whole reason this is a table
+rather than a column on `Application`. A three-valued column puts the absence of
+an answer in the same field as the answers, one mis-written query away from
+counting silence as "no offer" — understating the programme by the size of its
+own admin backlog.
+
+So the rate is computed over placements *answered*, the count nobody has been
+asked for travels beside it, and the administrator's console carries a **chase
+queue**: two lists, because they are two calls to two different people. The
+employer knows what it decided and cannot say where a learner it did not hire
+went; the learner knows where they are now and cannot answer for the employer.
+
+The same rule the outcome summary follows for unmeasured learners, applied to a
+different question. A recorded "we made no offer" is a finding. A placement
+nobody has answered for is a gap. The two are never added together.
+
+### Who answers, and who reads it
+
+The employer, and an administrator writing down what an employer said on the
+phone. Not the college, which does not observe another organization's hiring
+decision; not the learner, who says what happened to them through their own
+outcome. `source` records which of the two it was, so an answer given firsthand
+stays distinguishable from one transcribed — a report that cannot see that
+difference cannot tell a working process from a hand-worked one.
+
+Reading **inverts the outcome rule where it matters**. An employer reads no
+outcomes at all; it reads its own answers here, because it is the author, and a
+statement somebody cannot read back is one they cannot correct. The learner and
+the board get the answer with the note stripped by `redactHostOffer`. Neither is
+kept from what happened — a learner knows perfectly well whether they were
+offered a job, and hiding it from the person it happened to would be theatre.
+What both are kept from is the employer's candid sentence about why it did not
+keep a named person, which is the most useful line in the record for a town
+review and the most damaging one for its subject.
 
 ## What leaves the building
 
@@ -1120,7 +1200,8 @@ The outbox states plainly whether "delivered" means an email left the building o
   outcome was true as of from the date it was entered, which is what a windowed
   report would need; what is missing is the rule about when a follow-up becomes
   *due* rather than merely possible, and that decides whether the resulting
-  figure is comparable to the ones a board already reports (Q23).
+  figure is comparable to the ones a board already reports (Q23b — *who* records
+  one is settled, the interval is not).
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

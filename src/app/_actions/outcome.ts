@@ -7,9 +7,10 @@
  * would let anyone file an employment claim as a college's finding, and Server
  * Actions accept direct POSTs.
  *
- * Who may record is `OUTCOME_RECORDERS` in the domain — the college and an
- * administrator. The service checks it again regardless of which wrapper
- * called, because a wrapper is a convenience and the domain is the rule.
+ * Who may record is `OUTCOME_RECORDERS` in the domain — the college, an
+ * administrator, and a learner about their own record. The service checks it
+ * again regardless of which wrapper called, because a wrapper is a convenience
+ * and the domain is the rule.
  */
 
 import { revalidatePath } from "next/cache";
@@ -32,7 +33,7 @@ import { PORTAL_PATH } from "@/routes";
  * down where they work would be a message nobody asked for about a record they
  * did not choose to have made.
  */
-const AFFECTED = [PORTAL_PATH.college, PORTAL_PATH.admin];
+const AFFECTED = [PORTAL_PATH.college, PORTAL_PATH.admin, PORTAL_PATH.student];
 
 const blank = (value: unknown) =>
   value === "" || value === null || value === undefined ? undefined : value;

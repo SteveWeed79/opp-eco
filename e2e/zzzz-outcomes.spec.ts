@@ -67,13 +67,19 @@ test("the queue refuses to measure a placement that is still running", async ({
   // Nothing in the follow-up card may be a live placement. The guard is
   // server-side, but a queue offering the row at all is a promise the action
   // then breaks.
-  const followUp = page
+  // `following::ul[1]`, not an ancestor lookup. This read
+  // `ancestor::*[contains(@class,'card')][1]`, which matches nothing — `Card`
+  // puts no such class on its outer element — so the count guard below was
+  // always zero and the assertion never ran. A test that cannot fail is not a
+  // test, and this one is guarding a real promise: a queue offering a live
+  // placement is an action the server then refuses.
+  const rows = page
     .getByRole("heading", { name: "Follow-up" })
-    .locator("xpath=ancestor::*[contains(@class,'card')][1]");
+    .locator("xpath=following::ul[1]")
+    .locator("li");
 
-  if ((await followUp.count()) > 0) {
-    await expect(followUp.first()).not.toContainText("In progress");
-  }
+  await expect(rows).not.toHaveCount(0);
+  await expect(rows.filter({ hasText: "In progress" })).toHaveCount(0);
 });
 
 test("the workforce board is never shown the free text of an outcome", async ({

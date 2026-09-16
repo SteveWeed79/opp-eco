@@ -23,7 +23,7 @@ now done. Nothing else in this document is urgent.
 |---|---|
 | **The field instrument is standardised before the visits scale** | Towns reviewed with different questions are not comparable. The first nineteen visits cannot be re-walked |
 | ~~**Outcomes capture the employment *county*, not an in-region boolean**~~ — **done**, migration `0014_outcome_place.sql` | "In region" recorded as a tick is a judgement that cannot be re-derived when the boundary you meant turns out to be wrong. Captured from here on; the rows written before it keep what the recorder claimed, labelled as a claim rather than converted into a county nobody gave |
-| **The measurement interval for outcomes is fixed** (`Q23`) | You cannot phone somebody eighteen months later and ask where they were at three months. A late decision does not delay the report; it permanently shortens the series |
+| **The measurement interval for outcomes is fixed** (`Q23b`) | You cannot phone somebody eighteen months later and ask where they were at three months. A late decision does not delay the report; it permanently shortens the series. *Who* records one is now settled (`Q23a`): the college, the administrator, the learner about themselves, and the employer about its own hiring decision |
 | **Area totals are snapshotted each period** | Without them the retention schedule eventually anonymises the records the history was computed from, and takes the history with it |
 
 Everything else — peer selection, the report surface, the playbook library — can
@@ -358,7 +358,8 @@ Derived from everything above, in priority order:
 
 | | |
 |---|---|
-| **Q23** | Who records an outcome, and on what interval? Load-bearing for everything here, and the clock is running |
+| **Q23b** | On what interval is an outcome measured? Load-bearing for everything here, and the clock is running. *Who* records one is settled — see `Q23a` |
+| **Host answers** | `HostOffer` separates "we offered and they turned it down" from "we made no offer", which is the difference between a town short of jobs and a town short of reasons to stay. Both belong in the report, and the second is the one a playbook entry comes from |
 | **Instrument dimensions** | The administrator's to define. This note lists candidates, not answers |
 | **Region boundary** | Confirm the pilot board's WIOA local area counties |
 | **Non-participant retention** | Do interns stay at a higher rate than non-interns? The platform holds the intern half cleanly; the other half needs college or state data. Worth more than the rest of the report combined |

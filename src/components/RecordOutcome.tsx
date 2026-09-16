@@ -19,10 +19,17 @@ import {
  * because it takes a year of follow-ups to answer, the record has to exist
  * before there is anything to put in it.
  *
- * Shared by the college and, when it gets a surface, the administrator: each
- * passes its own Server Action with its role pinned server-side, exactly as
- * `IntroduceStudent` does. Rendering is not authorization, and the same checks
- * run again inside the action.
+ * Shared by the college, the administrator and the learner: each passes its own
+ * Server Action with its role pinned server-side, exactly as `IntroduceStudent`
+ * does. Rendering is not authorization, and the same checks run again inside the
+ * action — a learner's own action is refused for anybody else's record by the
+ * service, not by this component.
+ *
+ * `self` switches the voice rather than the form. A learner is answering about
+ * their own life and "What did Omar do next?" is not a question you ask Omar;
+ * the fields, the rules and the county logic are identical either way, because
+ * two copies of that logic is how the college's figure and the learner's stop
+ * agreeing.
  */
 export interface OutcomeChoice {
   value: string;
@@ -41,6 +48,7 @@ export function RecordOutcome({
   regionState,
   choices,
   action,
+  self = false,
 }: {
   studentId: string;
   applicationId: string;
@@ -62,6 +70,8 @@ export function RecordOutcome({
     employmentCounty?: string,
     employmentState?: string,
   ) => Promise<{ ok: boolean; error?: string }>;
+  /** Addressed to the person it is about, rather than about them. */
+  self?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<string | null>(null);
@@ -107,7 +117,10 @@ export function RecordOutcome({
       );
       if (result.ok) {
         close();
-        toast.show("success", `Recorded. ${studentName} is measured.`);
+        toast.show(
+          "success",
+          self ? "Thank you. That is genuinely useful." : `Recorded. ${studentName} is measured.`,
+        );
       } else {
         toast.show("error", result.error ?? "Could not record that.");
       }
@@ -117,14 +130,18 @@ export function RecordOutcome({
   return (
     <>
       <Button size="sm" variant="quiet" onClick={() => setOpen(true)}>
-        Record outcome
+        {self ? "Tell us where you are" : "Record outcome"}
       </Button>
 
       <Modal
         open={open}
         onClose={close}
-        title={`What did ${studentName} do next?`}
-        description={`Following ${placementTitle}. One answer per finished experience — a later follow-up adds to this rather than replacing it.`}
+        title={self ? "Where are you now?" : `What did ${studentName} do next?`}
+        description={
+          self
+            ? `Following ${placementTitle}. Your answer, in your words — and you can add to it later if things change.`
+            : `Following ${placementTitle}. One answer per finished experience — a later follow-up adds to this rather than replacing it.`
+        }
         size="lg"
         footer={
           <>
@@ -154,7 +171,9 @@ export function RecordOutcome({
                 className="mt-1"
               />
               <span>
-                <span className="font-semibold">{hostName} kept them on.</span>{" "}
+                <span className="font-semibold">
+                  {hostName} kept {self ? "me" : "them"} on.
+                </span>{" "}
                 The strongest result this programme produces — and it needs no
                 county, because the host is an employer in this market.
               </span>
@@ -163,7 +182,7 @@ export function RecordOutcome({
             {!byHost && (
               <div className="grid gap-4 sm:grid-cols-[2fr_1fr] items-start">
                 <TextField
-                  label="County they work in"
+                  label={self ? "County you work in" : "County they work in"}
                   value={county}
                   list="region-counties"
                   onChange={(event) => setCounty(event.target.value)}
@@ -186,7 +205,7 @@ export function RecordOutcome({
 
             {!byHost && !county.trim() && (
               <p className="text-xs text-ink-500">
-                Leave the county blank if you only know they are working. It is
+                Leave the county blank if {self ? "you would rather not say where" : "you only know they are working"}. It is
                 recorded as employment with the place unknown, and counted
                 separately rather than as having left.
               </p>
@@ -217,9 +236,9 @@ export function RecordOutcome({
         <p className="mt-4 text-xs text-ink-500 flex items-start gap-2">
           <Compass className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
           <span>
-            &ldquo;Still looking&rdquo; is a real answer and worth recording. A
-            learner nobody asked is counted separately, so an unworked queue can
-            never read as a bad result.
+            &ldquo;Still looking&rdquo; is a real answer and worth recording. It
+            is counted apart from the people nobody asked, so saying so never
+            makes the programme look worse than saying nothing.
           </span>
         </p>
       </Modal>

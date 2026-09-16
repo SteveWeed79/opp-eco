@@ -17,6 +17,7 @@ import { logger } from "@/services/logging";
 import { submitApplication } from "@/services/creation";
 import { drainPending } from "@/services/outbox";
 import { updateProfile } from "@/services/profile";
+import { recordFollowUp } from "@/app/_actions/outcome";
 import { PORTAL_PATH } from "@/routes";
 
 /**
@@ -290,4 +291,41 @@ export async function saveProfile(edit: unknown): Promise<ActionResult> {
   // view of it can go stale.
   for (const path of Object.values(PORTAL_PATH)) revalidatePath(path);
   return { ok: true };
+}
+
+/**
+ * Say where you are now, after a placement that has finished.
+ *
+ * The role is hardcoded here as it is in every wrapper in this directory, and
+ * the service refuses the learner for anybody's record but their own — twice
+ * over, since `studentScope` makes another learner's record unresolvable in the
+ * first place.
+ *
+ * `studentId` still crosses the wire rather than being derived from the
+ * session, because the service takes it and checks it. A caller who sends
+ * somebody else's gets a refusal that says so, which is the honest answer; a
+ * silently substituted id would mean a learner could file a record and be shown
+ * a success for something that never happened.
+ */
+export async function studentRecordOwnOutcome(
+  studentId: unknown,
+  applicationId: unknown,
+  kind: unknown,
+  observedOn: unknown,
+  detail?: unknown,
+  employedByHost?: unknown,
+  employmentCounty?: unknown,
+  employmentState?: unknown,
+): Promise<ActionResult> {
+  return recordFollowUp(
+    "student",
+    studentId,
+    applicationId,
+    kind,
+    observedOn,
+    detail,
+    employedByHost,
+    employmentCounty,
+    employmentState,
+  );
 }

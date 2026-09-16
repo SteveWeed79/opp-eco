@@ -506,7 +506,7 @@ export async function recordOutcome(
   if (!canRecordOutcome(actor.membership.role)) {
     return {
       ok: false,
-      error: "Only the college or an administrator can record an outcome.",
+      error: "Only the college, an administrator, or the learner can record an outcome.",
       code: "forbidden",
     };
   }
@@ -514,6 +514,22 @@ export async function recordOutcome(
   const student = await repositories.students.find(actor, input.studentId);
   if (!student) {
     return { ok: false, error: "Student not found.", code: "not_found" };
+  }
+
+  // A learner may record about themselves and nobody else.
+  //
+  // `studentScope` already makes another learner's record unresolvable, so the
+  // read above returns null and this is unreachable through the repositories.
+  // Stated anyway, for the reason every guard here is stated twice — and
+  // because the two refusals mean different things: "not found" is what a
+  // scoping rule says, and this is what the domain says. A learner who is told
+  // their own record does not exist has been told something false.
+  if (actor.membership.role === "student" && student.userId !== actor.user.id) {
+    return {
+      ok: false,
+      error: "You can only record an outcome about yourself.",
+      code: "forbidden",
+    };
   }
 
   const at = deps.now();

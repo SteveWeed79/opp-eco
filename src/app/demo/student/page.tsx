@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   CalendarClock,
   Clock,
+  Compass,
   HandHeart,
   Layers,
   Sparkles,
@@ -30,7 +31,7 @@ import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
 import { DEMO_NOW } from "@/data/seed";
 import { LogHours } from "./LogHours";
-import { marketFunding, studentCreditProgress } from "@/lib/queries";
+import { followUpQueue, marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { mentorshipFormatLabel } from "@/domain/mentorship";
@@ -38,7 +39,13 @@ import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
 import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
-import { saveProfile, studentTransition } from "./actions";
+import {
+  saveProfile,
+  studentRecordOwnOutcome,
+  studentTransition,
+} from "./actions";
+import { RecordOutcome } from "@/components/RecordOutcome";
+import { OUTCOME_KINDS } from "@/domain/outcome";
 import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
 
@@ -72,9 +79,10 @@ export default async function StudentPage() {
   const skillVocabulary = Array.from(
     new Set(published.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
   ).sort();
-  const [progress, funding] = await Promise.all([
+  const [progress, funding, followUps] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
     marketFunding(actor, market!.id),
+    followUpQueue(actor),
   ]);
   const remainingBudget = funding.wage?.remaining ?? 0;
   const ratePerHour = funding.wage?.source.ratePerHour ?? 0;
@@ -199,6 +207,62 @@ export default async function StudentPage() {
           </Badge>
         )}
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Where you went                                                      */}
+      {/*                                                                     */}
+      {/* Above the pause, and it blocks nothing — which is the argument for  */}
+      {/* putting it here rather than at the bottom. A learner whose          */}
+      {/* placement has finished has no other reason to open this page, so a  */}
+      {/* card they have to scroll past everything to reach is a card nobody  */}
+      {/* answers. It is also the cheapest way past a college officer         */}
+      {/* phoning fourteen people who have left town.                         */}
+      {/* ------------------------------------------------------------------ */}
+      {followUps.length > 0 && (
+        <Card>
+          <CardHeader
+            icon={<Compass className="w-5 h-5" />}
+            title="Where did you land?"
+            subtitle="Your placement has finished. Nobody has asked you yet — and your answer is worth more than anybody else's guess"
+          />
+          <ul className="row-list divide-y divide-line">
+            {followUps.map(({ application, posting, days }) => (
+              <li
+                key={application.id}
+                className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-ink-950">{posting.title}</p>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {organizationName(posting.businessId)} · finished {days}{" "}
+                    {days === 1 ? "day" : "days"} ago
+                  </p>
+                </div>
+                <RecordOutcome
+                  self
+                  studentId={STUDENT_ID}
+                  applicationId={application.id}
+                  studentName={student.name}
+                  placementTitle={posting.title}
+                  hostName={organizationName(posting.businessId)}
+                  regionCounties={market?.counties ?? []}
+                  regionState={market?.state ?? ""}
+                  choices={OUTCOME_KINDS}
+                  action={studentRecordOwnOutcome}
+                />
+              </li>
+            ))}
+          </ul>
+          <div className="px-6 pb-5">
+            <Assumption>
+              Your college and the workforce board see the answer. Neither sees
+              the detail box, and &ldquo;still looking&rdquo; is counted apart
+              from the people nobody asked — so saying so never makes anything
+              look worse than staying quiet (Q23).
+            </Assumption>
+          </div>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* The pause — surfaced the instant it opens, with slots inline        */}

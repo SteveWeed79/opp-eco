@@ -174,21 +174,23 @@ describe("what counts as the venture's own measure", () => {
 
 
 describe("who may record one", () => {
-  it("is the college and the administrator", () => {
-    expect(OUTCOME_RECORDERS).toEqual(["college", "admin"]);
+  it("is the college, the administrator, and the learner", () => {
+    expect(OUTCOME_RECORDERS).toEqual(["college", "admin", "student"]);
     expect(canRecordOutcome("college")).toBe(true);
     expect(canRecordOutcome("admin")).toBe(true);
+    expect(canRecordOutcome("student")).toBe(true);
   });
 
   it("is not the board, which reimburses placements rather than measuring them", () => {
     expect(canRecordOutcome("board")).toBe(false);
   });
 
-  it("is not yet the learner or the employer — Q23", () => {
-    // Both are better evidence than a college's note for the outcomes they can
-    // speak to, and both need a rule about what each may claim. The narrow
-    // answer ships first; this test is the reminder that it is narrow.
-    expect(canRecordOutcome("student")).toBe(false);
+  it("is still not the employer, which answers a different question", () => {
+    // Not an omission. An employer says what it decided about its own headcount
+    // through `HostOffer`, and an accepted offer writes the outcome from there.
+    // What it cannot do is file an outcome directly, because everything else an
+    // outcome can say — continued education, still looking, a job somewhere
+    // else — is hearsay from where it sits.
     expect(canRecordOutcome("business")).toBe(false);
   });
 });

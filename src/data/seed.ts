@@ -1980,6 +1980,13 @@ export const hostOffers: HostOffer[] = [
     recordedByUserId: "u-dana",
     recordedOn: daysAgo(22),
     source: "business",
+    // A note on the one answer that did not need one, because the employer's
+    // own words about its own decision are a different record from the
+    // college's note about where the learner ended up — `out-1` says he is a
+    // junior controls technician, and this says why Apex made the offer. Also
+    // the fixture that lets the parity suite check the note reaches the
+    // employer unredacted while the learner and the board see it stripped.
+    note: "Offered him the junior controls role two weeks before he finished. Easiest hire we have made.",
   },
   {
     // The middle answer, and the only one nobody else could have given. Jordan
