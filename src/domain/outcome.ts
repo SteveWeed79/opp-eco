@@ -235,7 +235,7 @@ const REACHED_PLACEMENT: ApplicationStatus[] = [
  * placement ended early is the one whose next step matters most, and a
  * follow-up process that quietly drops them reports only on its successes.
  */
-const NO_LONGER_RUNNING: ApplicationStatus[] = [
+export const NO_LONGER_RUNNING: ApplicationStatus[] = [
   "placement_completed",
   "terminated_early",
   "credit_pending",
@@ -286,8 +286,23 @@ export function followUpBlockReason(application: Application): string | null {
  * to make that exact.
  */
 export function daysSinceExit(application: Application, now: Date): number {
-  const since = new Date(application.statusSince).getTime();
+  const since = new Date(exitDateOf(application)).getTime();
   return Math.max(0, Math.floor((now.getTime() - since) / 86_400_000));
+}
+
+/**
+ * When the placement ended, for anything that measures from it.
+ *
+ * `exitedOn` when the row has one, and `statusSince` as the fallback for rows
+ * written before the column existed and never migrated. The fallback is the old
+ * approximation and is wrong by however long the application kept moving after
+ * the work stopped — kept anyway, because a follow-up clock that returns
+ * nothing for an un-backfilled row is worse than one that returns a date a
+ * little late, and the backfill in migration 0016 makes it unreachable in
+ * practice.
+ */
+export function exitDateOf(application: Application): string {
+  return application.exitedOn ?? application.statusSince;
 }
 
 /**

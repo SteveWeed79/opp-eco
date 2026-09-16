@@ -280,3 +280,93 @@ describe("optimistic concurrency", () => {
     expect(second.ok).toBe(false);
   });
 });
+
+describe("when the placement ended", () => {
+  /**
+   * A live placement that can actually be closed.
+   *
+   * Not simply the first `placement_active` row: completion is guarded on
+   * having no unapproved weeks, and the seed deliberately leaves one employer
+   * with hours waiting. Picking blind would have made these tests about the
+   * timesheet guard rather than about the exit stamp.
+   *
+   * Driven by the administrator rather than the host, because the only
+   * `placement_active` rows with a clear timesheet belong to employers with no
+   * account in the demo fixtures — `contextFor` resolves one account per role.
+   * Who may close a placement is settled elsewhere in this file; what is under
+   * test here is what the write stamps.
+   */
+  function closable() {
+    const application = seed.applications.find(
+      (a) =>
+        a.status === "placement_active" &&
+        !seed.timeEntries.some(
+          (t) => t.applicationId === a.id && t.status === "submitted",
+        ),
+    );
+    if (!application) throw new Error("no closable live placement in the seed");
+    return application;
+  }
+
+  it("stamps the exit on the first move that ends the work", async () => {
+    const application = closable();
+    expect(application.exitedOn).toBeUndefined();
+
+    const result = await executeTransition(admin, {
+      applicationId: application.id,
+      to: "placement_completed",
+      reason: "The placement finished.",
+    });
+    expect(result.ok).toBe(true);
+    expect(find(application.id).exitedOn).toBeTruthy();
+  });
+
+  it("does not move it when the application carries on afterwards", async () => {
+    // The bug `exitedOn` exists to prevent, as a test. `statusSince` is
+    // rewritten by every later move — credit pending, credit granted, closed —
+    // and a follow-up clock reading it would slide months past the day the work
+    // actually stopped.
+    // Two clocks six weeks apart, because that is the situation: the work
+    // stopped in one month and the paperwork moved in another. Run against a
+    // single `new Date()` both writes land in the same millisecond and the test
+    // passes without demonstrating anything.
+    const ended = new Date("2026-06-01T09:00:00.000Z");
+    const paperwork = new Date("2026-07-15T09:00:00.000Z");
+
+    const application = closable();
+    await executeTransition(
+      admin,
+      {
+        applicationId: application.id,
+        to: "placement_completed",
+        reason: "The placement finished.",
+      },
+      { store: memoryStore, now: () => ended },
+    );
+    const atExit = find(application.id).exitedOn;
+    expect(atExit).toBe(ended.toISOString());
+
+    const moved = await executeTransition(
+      admin,
+      {
+        applicationId: application.id,
+        to: "credit_pending",
+        reason: "Credit paperwork, weeks after the work stopped.",
+      },
+      { store: memoryStore, now: () => paperwork },
+    );
+    expect(moved.ok).toBe(true);
+
+    const after = find(application.id);
+    expect(after.exitedOn).toBe(ended.toISOString());
+    // And the thing it is not: `statusSince` moved to the paperwork date, six
+    // weeks later. Right for dwell-time reporting, and wrong by six weeks for
+    // anything measuring from the day the work stopped.
+    expect(after.statusSince).toBe(paperwork.toISOString());
+  });
+
+  it("leaves it unset while the placement is still running", async () => {
+    const live = seed.applications.find((a) => a.status === "placement_active")!;
+    expect(live.exitedOn).toBeUndefined();
+  });
+});

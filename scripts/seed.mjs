@@ -324,11 +324,11 @@ export async function seedInto(tx) {
   for (const application of seed.applications) {
     await insert(
       `INSERT INTO applications (id, market_id, posting_id, student_id, track, status,
-         furthest_status, submitted_on, status_since, match_score,
+         furthest_status, submitted_on, status_since, exited_on, match_score,
          match_algorithm_version, match_factors, interview_slot_id,
          funding_authorized_hours, funding_authorized_rate_cents,
          hours_logged, hours_approved, deliverable_submitted, deliverable_accepted, version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         application.id,
         application.marketId,
@@ -339,6 +339,7 @@ export async function seedInto(tx) {
         application.furthestStatus ?? null,
         application.submittedOn,
         application.statusSince,
+        application.exitedOn ?? null,
         application.matchScore.score,
         application.matchScore.algorithmVersion,
         JSON.stringify(application.matchScore.factors),

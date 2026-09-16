@@ -551,6 +551,23 @@ export interface Application {
   submittedOn: string;
   /** When the current status was entered — drives dwell-time reporting. */
   statusSince: string;
+  /**
+   * When the placement itself ended, written once and never overwritten.
+   *
+   * Distinct from `statusSince`, which every later move rewrites. A placement
+   * that finishes in May, has credit granted in June and is closed in August
+   * carries `statusSince` of August — so a follow-up clock running from it
+   * would be three months out, which is enough to push an observation into the
+   * wrong quarter. That is the same failure as the in-region boolean arriving
+   * by a different door: a comparison broken in a way that still renders as a
+   * clean chart.
+   *
+   * Set on the first transition into a status that means the work is over,
+   * whatever happens afterwards. Optional only for the rows that predate the
+   * column; migration 0016 backfills them from the audit log, which has
+   * recorded the real transition all along.
+   */
+  exitedOn?: string;
   matchScore: MatchScore;
 
   interviewSlotId?: string;

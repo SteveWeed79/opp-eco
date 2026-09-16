@@ -76,7 +76,7 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       INSERT INTO applications (
         id, market_id, posting_id, student_id, track, status, furthest_status,
-        submitted_on, status_since, match_score, match_algorithm_version,
+        submitted_on, status_since, exited_on, match_score, match_algorithm_version,
         match_factors, interview_slot_id, funding_authorized_hours,
         funding_authorized_rate_cents, hours_logged, hours_approved,
         deliverable_submitted, deliverable_accepted, version
@@ -84,7 +84,8 @@ class PostgresUnitOfWork implements UnitOfWork {
         ${application.id}, ${application.marketId}, ${application.postingId},
         ${application.studentId}, ${application.track}, ${application.status},
         ${application.furthestStatus ?? null}, ${application.submittedOn},
-        ${application.statusSince}, ${application.matchScore.score},
+        ${application.statusSince}, ${application.exitedOn ?? null},
+        ${application.matchScore.score},
         ${application.matchScore.algorithmVersion},
         ${JSON.stringify(application.matchScore.factors)}::jsonb,
         ${application.interviewSlotId ?? null},
@@ -97,6 +98,15 @@ class PostgresUnitOfWork implements UnitOfWork {
       )`);
   }
 
+  /**
+   * `exited_on` is never cleared once set.
+   *
+   * The service writes it on the first transition into a terminal status and
+   * leaves it; the COALESCE below is the second lock, so a caller holding an
+   * application it loaded before the column existed cannot blank a real exit
+   * date by saving a stale copy. Every other column here is last-write-wins,
+   * which is right for state that moves and wrong for a date that happened.
+   */
   saveApplication(application: Application, expectedVersion: number) {
     this.add(
       sql`
@@ -104,6 +114,7 @@ class PostgresUnitOfWork implements UnitOfWork {
           status = ${application.status},
           furthest_status = ${application.furthestStatus ?? null},
           status_since = ${application.statusSince},
+          exited_on = COALESCE(${application.exitedOn ?? null}, applications.exited_on),
           interview_slot_id = ${application.interviewSlotId ?? null},
           funding_authorized_hours = ${application.fundingAuthorizedHours ?? null},
           funding_authorized_rate_cents = ${optionalCents(application.fundingAuthorizedRate)},

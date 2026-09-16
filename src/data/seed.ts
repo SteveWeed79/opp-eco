@@ -1136,6 +1136,15 @@ interface AppSeed {
   furthestStatus?: ApplicationStatus;
   submittedDaysAgo: number;
   statusSinceDaysAgo: number;
+  /**
+   * When the placement itself ended, where that is not when the row last moved.
+   *
+   * Set on the fixtures that carried on moving after the work stopped — credit
+   * pending, credit granted, closed — because those are the ones where the two
+   * dates differ, and a fixture set where they never differ would let the bug
+   * this column exists to fix come back unnoticed.
+   */
+  exitedDaysAgo?: number;
   fundingHours?: number;
   hoursLogged?: number;
   hoursApproved?: number;
@@ -1311,6 +1320,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_pending",
     submittedDaysAgo: 70,
     statusSinceDaysAgo: 9,
+    exitedDaysAgo: 24,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1321,6 +1331,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_pending",
     submittedDaysAgo: 55,
     statusSinceDaysAgo: 9,
+    exitedDaysAgo: 21,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1333,6 +1344,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_granted",
     submittedDaysAgo: 190,
     statusSinceDaysAgo: 26,
+    exitedDaysAgo: 62,
     fundingHours: 280,
     hoursLogged: 268,
     hoursApproved: 268,
@@ -1345,6 +1357,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_granted",
     submittedDaysAgo: 200,
     statusSinceDaysAgo: 31,
+    exitedDaysAgo: 68,
     fundingHours: 210,
     hoursLogged: 205,
     hoursApproved: 205,
@@ -1357,6 +1370,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_pending",
     submittedDaysAgo: 180,
     statusSinceDaysAgo: 12,
+    exitedDaysAgo: 30,
     fundingHours: 252,
     hoursLogged: 240,
     hoursApproved: 240,
@@ -1394,6 +1408,7 @@ const appSeeds: AppSeed[] = [
     furthestStatus: "credit_granted",
     submittedDaysAgo: 260,
     statusSinceDaysAgo: 40,
+    exitedDaysAgo: 95,
     fundingHours: 210,
     hoursLogged: 198,
     hoursApproved: 198,
@@ -1443,6 +1458,37 @@ function trackOf(postingId: string): Track {
   return postings.find((p) => p.id === postingId)?.track ?? "standard";
 }
 
+/**
+ * Whether a seeded application had a placement that is over.
+ *
+ * Duplicated from `hasExited` rather than imported, because this file builds
+ * the `Application` objects that predicate takes — importing it would mean
+ * constructing one to ask about the thing being constructed.
+ */
+function hasFinished(
+  status: ApplicationStatus,
+  furthest: ApplicationStatus | undefined,
+): boolean {
+  const reached: ApplicationStatus[] = [
+    "placement_active",
+    "placement_completed",
+    "terminated_early",
+    "credit_pending",
+    "credit_granted",
+    "credit_denied",
+  ];
+  const over: ApplicationStatus[] = [
+    "placement_completed",
+    "terminated_early",
+    "credit_pending",
+    "credit_granted",
+    "credit_denied",
+    "closed",
+  ];
+  const started = reached.includes(furthest ?? status) || reached.includes(status);
+  return started && over.includes(status);
+}
+
 export const applications: Application[] = appSeeds.map((a) => {
   const posting = postings.find((p) => p.id === a.postingId)!;
   const student = students.find((s) => s.id === a.studentId)!;
@@ -1456,6 +1502,11 @@ export const applications: Application[] = appSeeds.map((a) => {
     furthestStatus: a.furthestStatus,
     submittedOn: daysAgo(a.submittedDaysAgo),
     statusSince: daysAgo(a.statusSinceDaysAgo),
+    // Falls back to `statusSince` for a placement that stopped where it ended,
+    // which is exactly what the two dates mean for one that never moved again.
+    exitedOn: hasFinished(a.status, a.furthestStatus)
+      ? daysAgo(a.exitedDaysAgo ?? a.statusSinceDaysAgo)
+      : undefined,
     matchScore: scoreMatch(student, posting, "Crawford"),
     interviewSlotId: a.interviewSlotId,
     fundingAuthorizedHours: a.fundingHours,

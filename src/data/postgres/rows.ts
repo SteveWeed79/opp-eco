@@ -417,6 +417,7 @@ export function toApplication(row: Row): Application {
       : undefined,
     submittedOn: timestamp(row.submitted_on),
     statusSince: timestamp(row.status_since),
+    exitedOn: optionalTimestamp(row.exited_on),
     matchScore: {
       score: number(row.match_score),
       algorithmVersion: text(row.match_algorithm_version),

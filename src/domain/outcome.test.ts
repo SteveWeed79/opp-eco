@@ -8,6 +8,7 @@ import {
   canReadOutcomes,
   canRecordOutcome,
   daysSinceExit,
+  exitDateOf,
   followUpBlockReason,
   hasExited,
   isEmployment,
@@ -279,6 +280,27 @@ describe("the follow-up queue", () => {
 
   it("measures how long a learner has been waiting to be asked", () => {
     expect(daysSinceExit(application({ statusSince: "2026-05-01T00:00:00.000Z" }), NOW)).toBe(31);
+  });
+
+  it("measures from when the placement ended, not from when the row last moved", () => {
+    // The whole reason `exitedOn` exists. A placement that finished in March,
+    // had credit granted in May and was closed in May carries a `statusSince`
+    // of May — and a clock running from that is two months out, which is enough
+    // to file an observation in the wrong quarter.
+    const moved = application({
+      exitedOn: "2026-03-01T00:00:00.000Z",
+      statusSince: "2026-05-01T00:00:00.000Z",
+    });
+    expect(daysSinceExit(moved, NOW)).toBe(92);
+    expect(exitDateOf(moved)).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("falls back to the last move for a row that has no exit date", () => {
+    // Rows written before the column existed and never backfilled. The old
+    // approximation kept as a floor: a date a little late beats no date at all,
+    // and migration 0016 makes this unreachable in practice.
+    const old = application({ statusSince: "2026-05-01T00:00:00.000Z" });
+    expect(exitDateOf(old)).toBe("2026-05-01T00:00:00.000Z");
   });
 
   it("never reports a negative wait", () => {

@@ -557,6 +557,27 @@ withDatabase("the write path", () => {
     }
   });
 
+  it("never lets a stale save blank an exit date", async () => {
+    // `saveApplication` is last-write-wins for everything except this column,
+    // which COALESCEs. A caller holding an application it loaded before 0016 —
+    // or before the placement ended — would otherwise write `exited_on = NULL`
+    // over a real date, and the follow-up clock would silently fall back to
+    // `status_since` for that row with nothing to show it had happened.
+    const store = postgresStore(client);
+    const repos = postgresRepositories(client);
+    const admin = contextFor("admin");
+
+    const exited = (await repos.applications.list(admin)).find((a) => a.exitedOn)!;
+    expect(exited).toBeTruthy();
+
+    await store.transaction((uow) => {
+      uow.saveApplication({ ...exited, exitedOn: undefined }, exited.version);
+    });
+
+    const after = await repos.applications.find(admin, exited.id);
+    expect(after?.exitedOn).toBe(exited.exitedOn);
+  });
+
   it("commits the row, its audit entry, and its notification together", async () => {
     const store = postgresStore(client);
     const actor = contextFor("college");
