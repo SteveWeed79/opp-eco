@@ -2,6 +2,7 @@
 
 import { awardFunds, changeAllocation } from "@/app/_actions/funding";
 import { purgeLearner } from "@/app/_actions/privacy";
+import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { overrideInput, validate } from "@/services/validation";
@@ -108,4 +109,27 @@ export async function adminPurgeLearner(
   reason: unknown,
 ): Promise<ActionResult> {
   return purgeLearner("admin", studentId, reason);
+}
+
+/**
+ * Who can get into an organization, and under what address.
+ *
+ * Wrapped here with the role implied by the file rather than accepted, like
+ * every other action in this portal: a Server Action is a URL, and one that
+ * took its own role as an argument would be a way to claim one.
+ */
+export async function addPerson(
+  organizationId: unknown,
+  name: unknown,
+  email: unknown,
+): Promise<ActionResult> {
+  return addMember(organizationId, name, email);
+}
+
+export async function moveWorkAddress(
+  currentEmail: unknown,
+  newEmail: unknown,
+  reason: unknown,
+): Promise<ActionResult> {
+  return changeAddress(currentEmail, newEmail, reason);
 }

@@ -582,6 +582,27 @@ own identity provider, and an address on one is told plainly to go there — an
 institution's identity arrangement is not a secret about a person. No SSO adapter
 ships yet.
 
+**One account is one person, and adding a colleague is adding an account.** A
+workforce board with four officers is four accounts on four work addresses. That
+is not a preference — it is the whole of how attribution works here. An
+eligibility determination is attributable because the audit entry names an
+individual, and it stops being attributable the moment an office shares a login,
+*silently*: the entry still looks well-formed, it just means "somebody there".
+Nothing could add a person to an organization until recently, which meant a board
+that grew was a board that shared a mailbox. `addOrganizationMember` is the path,
+the role comes from the organization rather than from a form field, and the
+address has to be on a domain the organization declared.
+
+**A lost mailbox has a way back.** An agency address changes and, on the code
+path, there is no password to fall back on — so without a recovery path the
+person is locked out for good. An administrator can move a work address, and
+because that is also the act of handing an account to whoever holds the new
+mailbox it carries the controls to match: a required reason, the declared-domain
+rule, an audit entry recording both addresses, every session and outstanding code
+revoked, and a warning to the address being left behind. The account is named by
+its current address rather than picked from a list, because a list of everybody
+is the directory this page spends its effort not being.
+
 **An administrator proves a second factor every time**, because that account
 reads every market, every learner and every figure, and authorises money. The
 account whose compromise is worst should not be the one standing behind the
@@ -1000,7 +1021,8 @@ either the role picker or real sign-on and cannot be both:
 ```bash
 AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev > /tmp/oe.log &
 AUTH_MODE=code AUTH_ECHO_LOG=/tmp/oe.log npx playwright test \
-  e2e/zzzzzzz-sign-in.spec.ts e2e/zzzzzzzzzzz-password.spec.ts
+  e2e/zzzzzzz-sign-in.spec.ts e2e/zzzzzzzzzzz-password.spec.ts \
+  e2e/zzzzzzzzzzzz-access.spec.ts
 ```
 
 `npm run dev` rather than the production build the rest of the suite uses,

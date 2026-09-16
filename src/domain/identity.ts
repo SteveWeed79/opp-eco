@@ -110,11 +110,18 @@ export function isPrivileged(role: ActorRole): boolean {
  * the one standing behind the weakest thing, and that is the asymmetry worth
  * closing first.
  *
- * **Not the board officer, deliberately.** A public employee signs in with a
- * one-time code to their agency address and nothing else — no password here,
- * and no authenticator from us. That is not a weaker choice than issuing them a
- * second factor; it is the same principle as federation, one step earlier. The
- * factor is their agency's mailbox, which their own IT department already
+ * **Not the board officer, deliberately**, and the honest reason is practical
+ * rather than principled. A TOTP seed is not a reusable credential the way a
+ * password is — it cannot be presented anywhere but here — so the
+ * data-minimisation argument that rules out holding their password does not by
+ * itself rule out holding a seed. What rules it out is that public agencies
+ * routinely forbid installing apps on issued phones, and plenty of staff are
+ * not issued one at all: requiring an authenticator would lock out the agency
+ * that determines eligibility, which is the same failure as the `federated`
+ * lockout this schema already backed out of once. So it is not required, and an
+ * agency that has the capability and wants it is not prevented from asking.
+ *
+ * Their factor is the agency's mailbox, which their own IT department already
  * protects with its own controls, and `emailDomains` is what makes that true
  * rather than aspirational: the code can only be sent to an address on the
  * agency's domain, never to a personal one they control.

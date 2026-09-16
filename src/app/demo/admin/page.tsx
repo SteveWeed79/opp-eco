@@ -42,11 +42,13 @@ import { actorForPortal } from "@/auth/session";
 import { healthReport } from "@/services/health";
 import { mfaStatus } from "@/services/mfa";
 import { SecondFactor } from "./SecondFactor";
+import { Access } from "./Access";
 import {
   dropEnrolment,
   finishEnrolment,
   startEnrolment,
 } from "@/app/_actions/mfa";
+import { addPerson, moveWorkAddress } from "./actions";
 import {
   allMarketHealth,
   averagePauseDays,
@@ -146,16 +148,25 @@ export default async function AdminPage() {
       }));
   // Independent of one another, so resolved together rather than in a queue
   // of six sequential round trips.
-  const [health, stalled, pendingOrgs, stages, deployed, pauseDays, outcomes] =
-    await Promise.all([
-      allMarketHealth(admin),
-      stalledApplications(admin),
-      await repositories.organizations.pendingVetting(admin),
-      funnel(admin),
-      subsidyDeployed(admin),
-      averagePauseDays(admin),
-      outcomeReport(admin),
-    ]);
+  const [
+    health,
+    stalled,
+    pendingOrgs,
+    organizations,
+    stages,
+    deployed,
+    pauseDays,
+    outcomes,
+  ] = await Promise.all([
+    allMarketHealth(admin),
+    stalledApplications(admin),
+    repositories.organizations.pendingVetting(admin),
+    repositories.organizations.list(admin),
+    funnel(admin),
+    subsidyDeployed(admin),
+    averagePauseDays(admin),
+    outcomeReport(admin),
+  ]);
   /**
    * Every fund across every market, and who could be awarded from one.
    *
@@ -926,6 +937,19 @@ export default async function AdminPage() {
         finish={finishEnrolment}
         drop={dropEnrolment}
       />
+
+      <PageSection
+        title="Access"
+        description="Who can sign in for each organization, and under what address"
+      >
+        <Access
+          organizations={organizations
+            .filter((o) => o.status !== "rejected")
+            .map((o) => ({ id: o.id, name: o.name, domains: o.emailDomains }))}
+          add={addPerson}
+          move={moveWorkAddress}
+        />
+      </PageSection>
 
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">

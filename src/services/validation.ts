@@ -133,6 +133,38 @@ export const withdrawConsentInput = z.object({ id, reason });
 export const purgeLearnerInput = z.object({ id, reason });
 
 /**
+ * Who gets an account, and under what address.
+ *
+ * The address is bounded and lightly shaped here — one `@`, something either
+ * side, no whitespace — and the rule that actually matters is checked in the
+ * service, where the organization's declared domains are known. This is the
+ * trust boundary catching a 40-kilobyte string, not the policy.
+ */
+const workAddress = z
+  .string()
+  .trim()
+  .min(3, "Enter a work email address")
+  .max(254, "That address is too long")
+  .regex(/^[^\s@]+@[^\s@]+$/, "That is not an email address");
+
+export const addMemberInput = z.object({
+  organizationId: id,
+  name: z.string().trim().min(1, "Enter the person's name").max(120, "That name is too long"),
+  email: workAddress,
+});
+
+/**
+ * Moving an address carries a reason for the same reason an override does: it
+ * is the one write that can hand an account to somebody else, and an audit
+ * entry that cannot say why is the entry nobody can act on a year later.
+ */
+export const changeAddressInput = z.object({
+  currentEmail: workAddress,
+  newEmail: workAddress,
+  reason,
+});
+
+/**
  * Changing what a fund holds.
  *
  * The reason is required rather than optional, unlike most reasons here. An
