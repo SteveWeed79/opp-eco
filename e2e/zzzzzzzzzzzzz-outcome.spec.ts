@@ -34,7 +34,7 @@ async function signIn(
   email: string,
   portal: string,
 ) {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(email);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Forgot your password?" }).click();
