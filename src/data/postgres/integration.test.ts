@@ -31,6 +31,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Pool } from "pg";
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import type { ActorContext, ActorRole } from "@/domain/types";
 import { ConcurrencyError } from "../store";
@@ -47,7 +48,7 @@ import { createMemoryFileStore, type FileStore } from "@/services/uploads/storag
 import { postgresFileStore } from "@/services/uploads/postgres-store";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- plain JS operator script, which cannot import TypeScript
-import { seedInto, TABLES } from "../../../scripts/seed.mjs";
+import { seedInto, reseedInto, TABLES } from "../../../scripts/seed.mjs";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- ditto
 import { withLedgerInsert } from "../../../scripts/migrations.mjs";
@@ -1455,5 +1456,244 @@ withDatabase("the auth store", () => {
       );
       expect(Number(count)).toBe(0);
     });
+  });
+});
+
+/**
+ * What a re-seed is allowed to destroy.
+ *
+ * The statements are checkable against a recording client and are, in
+ * `seed.test.ts`. What is not checkable there is whether Postgres agrees:
+ * whether `<> ALL($1)` over a text array actually finds the foreign rows,
+ * whether `SELECT *` hands back the column names the restore rebuilds its
+ * INSERT from, and — the one that matters most — whether an administrator put
+ * back after a `TRUNCATE ... CASCADE` still satisfies `admin_is_cross_market`
+ * and the foreign keys. A fake client says yes to all of that regardless.
+ *
+ * The scenario is the one a deployment actually meets: `db:admin` created an
+ * administrator, and somebody then re-ran `db:seed` to refresh the fixtures.
+ */
+withDatabase("re-seeding a database somebody is already using", () => {
+  const ADMIN = { id: "u-realadmin", name: "A Real Administrator", email: "real@a-real-domain.org" };
+
+  /**
+   * A raw `pg` pool, deliberately, rather than the `PostgresClient` the rest of
+   * this file uses.
+   *
+   * The operator scripts do not go through the Store — that is the
+   * application's write path and is read-only by default — so they see the
+   * driver's own result shape, `{ rows, fields }`, where `PostgresClient`
+   * unwraps to `Row[]`. The restore rebuilds its INSERT from `fields`, so a
+   * client that discarded them would test something this script never meets.
+   */
+  let pool: Pool;
+
+  beforeAll(() => {
+    pool = new Pool({ connectionString: url, max: 2 });
+  });
+
+  afterAll(async () => {
+    await pool.end();
+    // The fixtures every other file in this suite reads are left as they were.
+    await reseed();
+  });
+
+  async function makeRealAdmin(): Promise<void> {
+    await client.query(`INSERT INTO users (id, name, email) VALUES ($1,$2,$3)`, [
+      ADMIN.id,
+      ADMIN.name,
+      ADMIN.email,
+    ]);
+    await client.query(
+      `INSERT INTO memberships (id, user_id, organization_id, market_id, role)
+       VALUES ('mem-realadmin',$1,NULL,NULL,'admin')`,
+      [ADMIN.id],
+    );
+    await client.query(
+      `INSERT INTO user_passwords (user_id, password_hash, must_change) VALUES ($1,$2,true)`,
+      [ADMIN.id, "scrypt$131072$8$1$salt$key"],
+    );
+    await client.query(
+      `INSERT INTO user_totp (user_id, secret, confirmed_at, last_counter)
+       VALUES ($1,'JBSWY3DPEHPK3PXP', now(), 99)`,
+      [ADMIN.id],
+    );
+  }
+
+  /** Exactly what `scripts/seed.mjs` `main()` wraps around it. */
+  async function runSeed(options?: { force?: boolean; replaceAdmins?: boolean }) {
+    const connection = await pool.connect();
+    try {
+      await connection.query("BEGIN");
+      const outcome = await reseedInto(connection, options);
+      await connection.query("COMMIT");
+      return outcome;
+    } catch (error) {
+      await connection.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  beforeEach(async () => {
+    await client.transaction(async (tx) => {
+      await tx.query(`TRUNCATE ${TABLES.join(", ")} RESTART IDENTITY CASCADE`);
+      await seedInto(tx as { query(text: string, params?: unknown[]): Promise<unknown> });
+    });
+  });
+
+  it("carries the administrator, their password and their authenticator through", async () => {
+    await makeRealAdmin();
+
+    const outcome = await runSeed();
+    expect(outcome.preserved).toHaveLength(1);
+    expect(outcome.preserved[0].email).toBe(ADMIN.email);
+
+    const [row] = await client.query<{
+      email: string;
+      password_hash: string;
+      must_change: boolean;
+      secret: string;
+      last_counter: string;
+      role: string;
+      market_id: string | null;
+    }>(
+      `SELECT u.email, p.password_hash, p.must_change, t.secret, t.last_counter,
+              m.role, m.market_id
+         FROM users u
+         JOIN memberships m    ON m.user_id = u.id
+         JOIN user_passwords p ON p.user_id = u.id
+         JOIN user_totp t      ON t.user_id = u.id
+        WHERE u.id = $1`,
+      [ADMIN.id],
+    );
+
+    // Not "an administrator exists" — *this* credential, unchanged. A restore
+    // that re-hashed or reset `must_change` would leave them holding a password
+    // that no longer opens the door.
+    expect(row).toBeDefined();
+    expect(row.password_hash).toBe("scrypt$131072$8$1$salt$key");
+    expect(row.must_change).toBe(true);
+    expect(row.secret).toBe("JBSWY3DPEHPK3PXP");
+    expect(Number(row.last_counter)).toBe(99);
+    expect(row.role).toBe("admin");
+    expect(row.market_id).toBeNull();
+
+    // And the fixtures landed alongside them rather than instead of them.
+    const [{ count }] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM markets",
+    );
+    expect(Number(count)).toBeGreaterThan(0);
+  });
+
+  it("revokes the session it did not carry", async () => {
+    await makeRealAdmin();
+    await client.query(
+      `INSERT INTO sessions (id, user_id, expires_at) VALUES ('sess-real',$1, now() + interval '1 day')`,
+      [ADMIN.id],
+    );
+
+    await runSeed();
+
+    // The password survives so they can sign in again; the session does not,
+    // because it was issued against a database that no longer exists.
+    const [{ count }] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM sessions",
+    );
+    expect(Number(count)).toBe(0);
+  });
+
+  it("refuses, and destroys nothing, when a row is not the fixtures'", async () => {
+    await client.query(
+      `INSERT INTO users (id, name, email) VALUES ('u-realperson','A Real Learner','learner@a-real-school.edu')`,
+    );
+
+    await expect(runSeed()).rejects.toThrow(/users/);
+
+    // The refusal is only worth anything if the transaction took nothing with
+    // it on the way out.
+    const [{ count }] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM users WHERE id = 'u-realperson'",
+    );
+    expect(Number(count)).toBe(1);
+  });
+
+  it("refuses over a county list recorded against a seeded market", async () => {
+    // The case this is really for: a board's WIOA counties are a phone call,
+    // recorded through the admin console against a market that came from the
+    // fixtures. Nothing else about that row looks real.
+    await makeRealAdmin();
+    await client.query(
+      `INSERT INTO region_definitions
+         (id, market_id, state, counties, effective_from, recorded_by, recorded_on)
+       VALUES ('rd-real','mkt-pittsburg','KS',ARRAY['Crawford','Cherokee'],'2026-01-01',$1,'2026-01-01')`,
+      [ADMIN.id],
+    );
+
+    await expect(runSeed()).rejects.toThrow(/region_definitions/);
+
+    const [{ count }] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM region_definitions WHERE id = 'rd-real'",
+    );
+    expect(Number(count)).toBe(1);
+  });
+
+  it("does not carry an account that also holds a market role", async () => {
+    // Carrying the user while the truncate took the membership anchoring their
+    // other role would leave half an account. It has to refuse instead.
+    await makeRealAdmin();
+    const [org] = await client.query<{ id: string }>(
+      "SELECT id FROM organizations WHERE kind = 'college' LIMIT 1",
+    );
+    await client.query(
+      `INSERT INTO memberships (id, user_id, organization_id, market_id, role)
+       VALUES ('mem-alsocollege',$1,$2,'mkt-pittsburg','college')`,
+      [ADMIN.id, org.id],
+    );
+
+    await expect(runSeed()).rejects.toThrow(/users/);
+  });
+
+  it("proceeds under --force, and still keeps the administrator", async () => {
+    await makeRealAdmin();
+    await client.query(
+      `INSERT INTO users (id, name, email) VALUES ('u-realperson','A Real Learner','learner@a-real-school.edu')`,
+    );
+
+    const outcome = await runSeed({ force: true });
+
+    expect(outcome.foreign).toContainEqual({ table: "users", count: 1 });
+    expect(outcome.preserved).toHaveLength(1);
+
+    const [gone] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM users WHERE id = 'u-realperson'",
+    );
+    expect(Number(gone.count)).toBe(0);
+    const [kept] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM user_passwords WHERE user_id = $1",
+      [ADMIN.id],
+    );
+    expect(Number(kept.count)).toBe(1);
+  });
+
+  it("drops the administrator under --replace-admins", async () => {
+    await makeRealAdmin();
+
+    const outcome = await runSeed({ replaceAdmins: true });
+
+    expect(outcome.preserved).toEqual([]);
+    expect(outcome.replaced).toHaveLength(1);
+    const [{ count }] = await client.query<{ count: string }>(
+      "SELECT count(*) AS count FROM users WHERE id = $1",
+      [ADMIN.id],
+    );
+    expect(Number(count)).toBe(0);
+  });
+
+  it("is a no-op on a database holding only fixtures", async () => {
+    const outcome = await runSeed();
+    expect(outcome.foreign).toEqual([]);
+    expect(outcome.preserved).toEqual([]);
   });
 });
