@@ -83,10 +83,42 @@ export async function connect({ max = 1 } = {}) {
   }
 
   const { databaseConfig, poolFor } = await load();
-  const config = databaseConfig();
-  // One connection is enough for a script that runs statements in sequence,
-  // and it keeps a migration from holding several backends on a free tier.
-  return poolFor({ ...config, maxConnections: max });
+  return poolFor(operatorConfig(databaseConfig(), max));
+}
+
+/**
+ * The config an operator script runs on, given the application's.
+ *
+ * Exported and pure so the rule below can be asserted without a database —
+ * it is one line, it looks like a tuning knob, and it is not.
+ */
+export function operatorConfig(config, max = 1) {
+  return {
+    ...config,
+    // One connection is enough for a script that runs statements in sequence,
+    // and it keeps a migration from holding several backends on a free tier.
+    maxConnections: max,
+    /**
+     * Never the HTTP fast path, whatever the environment says.
+     *
+     * Neon's `poolQueryViaFetch` sends each `pool.query()` as a *prepared
+     * statement* over one HTTP request, and a prepared statement holds exactly
+     * one command. Every migration is dozens, spliced into a single BEGIN…
+     * COMMIT with the ledger insert so that "applied" and "recorded as applied"
+     * are the same commit — so on Neon the runner died on the first file with
+     * `cannot insert multiple commands into a prepared statement`.
+     *
+     * It survived this long because nothing tested it: CI and every local run
+     * use a container, which is the `pg` driver, where this setting does not
+     * exist. The first person to migrate a Neon database found it immediately.
+     *
+     * Forced here rather than left to `DATABASE_QUERY_VIA_FETCH`, because that
+     * variable exists to tune the *application's* short reads. An operator
+     * script runs multi-statement DDL and gains nothing from skipping a
+     * handshake, so its correctness must not depend on how the app is tuned.
+     */
+    queryViaFetch: false,
+  };
 }
 
 /** Which driver `connect` used, for scripts that report what they did. */
