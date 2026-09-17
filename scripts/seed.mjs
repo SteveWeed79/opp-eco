@@ -9,11 +9,26 @@
  * is what the alias hook alongside this file exists for.
  *
  * Idempotent: every table is truncated first, so running it twice leaves the
- * same database rather than a duplicated one. The connection comes from
- * `pool.mjs`, so it reaches whatever `DATABASE_URL` names — Neon, a container
- * in CI, or a local cluster. It writes through raw SQL and not
- * through the Store, deliberately — the Store is the application's write path
- * and is read-only by default, while loading fixtures is an operator action.
+ * same database rather than a duplicated one.
+ *
+ * That truncate is the dangerous part, and it is why this script looks at what
+ * is already there before it runs. Loading fixtures over a database that holds
+ * real rows is not a refresh, it is a deletion — so:
+ *
+ *  - It **refuses** when it finds rows the fixtures did not write, naming them.
+ *    `--force` proceeds anyway, which is the only way that destruction happens.
+ *  - It **carries administrators through**, with their passwords and
+ *    authenticators. An administrator cannot be created through the product —
+ *    `db:admin` exists precisely because there is no other way to make one — so
+ *    a re-seed that destroyed them would make refreshing the demo data cost a
+ *    re-credentialling every time, and the flag to skip that check would become
+ *    the flag everybody types. `--replace-admins` drops them deliberately.
+ *
+ * The connection comes from `pool.mjs`, so it reaches whatever `DATABASE_URL`
+ * names — Neon, a container in CI, or a local cluster. It writes through raw
+ * SQL and not through the Store, deliberately — the Store is the application's
+ * write path and is read-only by default, while loading fixtures is an
+ * operator action.
  */
 
 import { dirname, join } from "node:path";
@@ -98,6 +113,207 @@ export const TABLES = [
   "organizations",
   "markets",
 ];
+
+// ---------------------------------------------------------------------------
+// Telling the fixtures apart from somebody's real data
+// ---------------------------------------------------------------------------
+
+/**
+ * Refused before anything was destroyed.
+ *
+ * Its own class so the command can present it as a decision rather than as a
+ * crash — the same distinction `admin.mjs` draws with `AdminRefused`.
+ */
+export class SeedRefused extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "SeedRefused";
+  }
+}
+
+/**
+ * The ids the fixtures write, per table.
+ *
+ * This is how the seed tells its own rows from somebody's real ones: a row in
+ * one of these tables whose id is not on this list was put there by the running
+ * application or by an operator, and a fixture loader has no business
+ * destroying it.
+ *
+ * Seven tables rather than all thirty, chosen because each one carries an
+ * identity somebody entered by hand — a market, an employer, an account, a
+ * learner, a job, an application to it, and the county list a board actually
+ * operates over. A real person, organization or placement cannot exist without
+ * a row here, so checking these catches the case that matters. What it
+ * deliberately does not catch is a record the app wrote *about a fixture* — an
+ * outcome on a seeded learner is demo data by construction, and re-seeding is
+ * how you throw demo data away.
+ *
+ * `region_definitions` is on the list for a specific reason: it is the one
+ * place where real, hand-gathered information gets recorded against a seeded
+ * market. A board's WIOA county list is a phone call, not a fixture, and
+ * losing it to a re-seed means making that call again.
+ */
+export const FIXTURE_IDS = {
+  markets: seed.markets.map((m) => m.id),
+  organizations: seed.organizations.map((o) => o.id),
+  users: seed.users.map((u) => u.id),
+  students: seed.students.map((s) => s.id),
+  postings: seed.postings.map((p) => p.id),
+  applications: seed.applications.map((a) => a.id),
+  region_definitions: seed.regionDefinitions.map((r) => r.id),
+};
+
+/**
+ * Administrators this script did not create, and can therefore carry through a
+ * truncate rather than destroy.
+ *
+ * Preserving an administrator is safe in a way that preserving anybody else is
+ * not, and the constraint is what makes it so: `admin_is_cross_market` requires
+ * a null market *and* a null organization, so an administrator is the one role
+ * that nothing the truncate removes is anchored to. Every other role points at
+ * an organization that is about to stop existing — carrying one of those
+ * through would leave a row referring to a market that no longer exists, which
+ * is why an account holding any non-admin membership is excluded here and falls
+ * through to the refusal instead.
+ */
+export async function findRealAdmins(tx) {
+  const { rows } = await tx.query(
+    `SELECT u.id, u.name, u.email
+       FROM users u
+       JOIN memberships m ON m.user_id = u.id AND m.role = 'admin'
+      WHERE u.id <> ALL($1)
+        AND NOT EXISTS (
+              SELECT 1 FROM memberships other
+               WHERE other.user_id = u.id AND other.role <> 'admin'
+            )
+      ORDER BY u.email`,
+    [FIXTURE_IDS.users],
+  );
+  return rows;
+}
+
+/**
+ * Rows the fixtures did not write, counted per table.
+ *
+ * `<> ALL($1)` over an empty array is true for every row, which is the answer
+ * we want: a table the fixtures write nothing into is a table where everything
+ * present is somebody else's.
+ */
+export async function surveyForeignRows(tx, { exceptUsers = [] } = {}) {
+  const found = [];
+  for (const [table, ids] of Object.entries(FIXTURE_IDS)) {
+    // The administrators being carried through are not foreign — they are the
+    // one thing this script knows how to keep.
+    const known = table === "users" ? [...ids, ...exceptUsers] : ids;
+    const { rows } = await tx.query(
+      `SELECT count(*)::int AS count FROM ${table} WHERE id <> ALL($1)`,
+      [known],
+    );
+    if (rows[0]?.count > 0) found.push({ table, count: rows[0].count });
+  }
+  return found;
+}
+
+/**
+ * The tables a preserved administrator lives in, and the column joining each
+ * one to them.
+ *
+ * Sessions, sign-in codes and MFA challenges are deliberately absent: they are
+ * in flight rather than owned, and a re-seed is exactly the moment they should
+ * stop being valid. The password survives, so the administrator signs back in;
+ * the session does not, so anything holding one is cut off.
+ */
+export const ADMIN_TABLES = [
+  { table: "users", key: "id" },
+  // Only the admin membership. By the time anything is captured we have already
+  // established this account holds no other role, so this is belt and braces.
+  { table: "memberships", key: "user_id", only: "role = 'admin'" },
+  { table: "user_passwords", key: "user_id" },
+  { table: "user_totp", key: "user_id" },
+  { table: "user_recovery_codes", key: "user_id" },
+];
+
+/** Everything those tables hold for the given accounts, columns included. */
+export async function captureAdmins(tx, userIds) {
+  const captured = [];
+  for (const { table, key, only } of ADMIN_TABLES) {
+    const result = await tx.query(
+      `SELECT * FROM ${table} WHERE ${key} = ANY($1)${only ? ` AND ${only}` : ""}`,
+      [userIds],
+    );
+    const rows = result.rows ?? [];
+    captured.push({
+      table,
+      // Read off the result rather than listed here. `SELECT *` plus the
+      // columns the server named back is a capture that carries a column added
+      // by a later migration without anybody remembering to come and add it —
+      // and one is coming, because `user_totp.secret` has to stop being stored
+      // in the clear.
+      columns: (result.fields ?? []).map((f) => f.name),
+      rows,
+    });
+  }
+  return captured;
+}
+
+/** Put them back, in the order the foreign keys require. */
+export async function restoreAdmins(tx, captured) {
+  for (const { table, columns, rows } of captured) {
+    for (const row of rows) {
+      const cols = columns?.length ? columns : Object.keys(row);
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
+      await tx.query(
+        `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
+        cols.map((col) => row[col]),
+      );
+    }
+  }
+}
+
+/** What the refusal says, given what the survey found. */
+export function refusalMessage(foreign) {
+  const rows = foreign
+    .map(({ table, count }) => `  ${String(count).padStart(5)}  ${table}`)
+    .join("\n");
+  return (
+    `the database holds rows these fixtures did not create:\n\n${rows}\n\n` +
+    `Seeding truncates every one of those tables, so this would destroy them.\n` +
+    `Administrators are carried through a seed and are never the reason for\n` +
+    `this refusal — something else here is real.\n\n` +
+    `If this is a scratch database and losing that is what you want:\n\n` +
+    `  npm run db:seed -- --force\n`
+  );
+}
+
+/**
+ * Truncate, put the administrators back, and load the fixtures.
+ *
+ * Takes a transaction rather than opening one, so the whole thing is one unit —
+ * a database that has been truncated but not re-seeded is worse than either
+ * end state — and so that it can be exercised against a real Postgres by the
+ * integration suite rather than only through the command.
+ */
+export async function reseedInto(tx, { force = false, replaceAdmins = false } = {}) {
+  const admins = await findRealAdmins(tx);
+
+  // Exempt from the survey whether or not they are being kept: under
+  // `--replace-admins` the operator has already said this specific destruction
+  // is intended, so it is not what the refusal is for.
+  const foreign = await surveyForeignRows(tx, { exceptUsers: admins.map((a) => a.id) });
+  if (foreign.length > 0 && !force) throw new SeedRefused(refusalMessage(foreign));
+
+  const preserved = replaceAdmins ? [] : admins;
+  const replaced = replaceAdmins ? admins : [];
+  const captured = preserved.length
+    ? await captureAdmins(tx, preserved.map((a) => a.id))
+    : [];
+
+  await tx.query(`TRUNCATE ${TABLES.join(", ")} RESTART IDENTITY CASCADE`);
+  await restoreAdmins(tx, captured);
+  await seedInto(tx);
+
+  return { preserved, replaced, foreign };
+}
 
 export async function seedInto(tx) {
   const insert = (text, params) => tx.query(text, params);
@@ -583,16 +799,37 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   await main();
 }
 
+/** `--force` and `--replace-admins`, and nothing else. */
+export function parseArgs(argv) {
+  const known = new Set(["--force", "--replace-admins"]);
+  const unknown = argv.filter((arg) => !known.has(arg));
+  if (unknown.length > 0) {
+    throw new SeedRefused(
+      `unrecognised argument ${unknown[0]}. This command takes --force and ` +
+        `--replace-admins.`,
+    );
+  }
+  return {
+    force: argv.includes("--force"),
+    replaceAdmins: argv.includes("--replace-admins"),
+  };
+}
+
 async function main() {
 const pool = await connect();
 try {
+  // Inside the try so that an unrecognised flag is presented as the same
+  // one-line refusal as everything else here, rather than as a stack trace
+  // from an unhandled rejection.
+  const args = parseArgs(process.argv.slice(2));
   const client = await pool.connect();
+  let outcome;
   try {
     // One transaction: a half-seeded database is worse than an empty one,
-    // because it looks like it worked.
+    // because it looks like it worked. The survey runs inside it too, so the
+    // refusal is decided against the same snapshot the truncate would act on.
     await client.query("BEGIN");
-    await client.query(`TRUNCATE ${TABLES.join(", ")} RESTART IDENTITY CASCADE`);
-    await seedInto(client);
+    outcome = await reseedInto(client, args);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -626,8 +863,31 @@ try {
   for (const [table, count] of Object.entries(rows[0])) {
     console.log(`  ${String(count).padStart(5)}  ${table}`);
   }
+
+  if (outcome.preserved.length > 0) {
+    const n = outcome.preserved.length;
+    console.log(`\ncarried through the truncate — ${n} administrator${n === 1 ? "" : "s"}:`);
+    for (const admin of outcome.preserved) console.log(`  ${admin.name} <${admin.email}>`);
+    console.log("\nPasswords and authenticators came with them. Sessions did not, so sign in again.");
+  }
+  if (outcome.replaced.length > 0) {
+    console.log("\nDestroyed, as --replace-admins asked:");
+    for (const admin of outcome.replaced) console.log(`  ${admin.name} <${admin.email}>`);
+    console.log("\n  npm run db:admin -- you@yourdomain.com --name \"Your Name\"");
+  }
+  if (outcome.foreign.length > 0) {
+    // Only reachable under --force: the operator was told and said yes.
+    console.log("\nDestroyed, as --force asked:");
+    for (const { table, count } of outcome.foreign) {
+      console.log(`  ${String(count).padStart(5)}  ${table} not written by these fixtures`);
+    }
+  }
 } catch (error) {
-  console.error("\nseed failed:", error.message ?? error);
+  if (error instanceof SeedRefused) {
+    console.error(`\nRefused: ${error.message}`);
+  } else {
+    console.error("\nseed failed:", error.message ?? error);
+  }
   process.exitCode = 1;
 } finally {
   await pool.end();

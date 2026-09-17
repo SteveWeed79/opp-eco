@@ -94,6 +94,25 @@ Run with no arguments, `npm run db:admin` reports who the administrators are
 and whether each of them can actually get in — an account with no password and
 no authenticator is a row, not a way in.
 
+Re-running `npm run db:seed` later does **not** cost you that account. The seed
+truncates, so it used to: an administrator cannot be created through the product
+and a refreshed set of fixtures would take the only way back into the deployment
+with it. It now carries administrators through the truncate with their passwords
+and authenticators — their sessions are dropped, so you sign in again — and
+**refuses outright** when it finds anything else it did not write, naming the
+tables rather than destroying them:
+
+```
+Refused: the database holds rows these fixtures did not create:
+
+      1  users
+      1  region_definitions
+```
+
+`--force` proceeds anyway and reports what it destroyed; `--replace-admins`
+drops the administrators too. Neither is needed for the ordinary case of
+refreshing the demo data on a database that holds only demo data.
+
 The password it prints is spent the first time it is used. Signing in with it
 produces a real session that may do exactly one thing: replace it. Typing a
 portal URL instead of using the form lands on the same page, because the
@@ -1230,6 +1249,10 @@ npm run db:seed       # load the same fixtures the demo runs on
 DATABASE_READ_ONLY=false npm run dev
 ```
 
+`db:seed` truncates before it loads, so it refuses when the database holds rows
+it did not write, and carries any administrator through. See
+[Being an administrator, on your own database](#being-an-administrator-on-your-own-database).
+
 On Neon, use the **direct** connection string for migrations — DDL through a
 connection pooler can land on a different session than the one holding the
 transaction — and the **pooler** host for the running app.
@@ -1294,8 +1317,14 @@ doing after any change to the data layer:
 export DATABASE_URL=postgresql://you@localhost:5432/oppeco
 export DATABASE_READ_ONLY=false
 export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
-npm run db:seed && npm run build && npm run test:e2e
+npm run db:seed -- --force && npm run build && npm run test:e2e
 ```
+
+`--force` because the previous run left rows behind: the suite drives the real
+application, so it creates postings and applications the fixtures never wrote,
+and a second `db:seed` would otherwise refuse to destroy them. On this database
+that refusal is noise — the variable above has already declared it disposable —
+and everywhere else it is the point.
 
 Every flow the demo has passes on either backend, and the sign-on suites below
 are run against both as well — the in-memory store and Postgres each hold
