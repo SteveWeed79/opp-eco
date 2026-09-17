@@ -70,8 +70,9 @@ test("an employer is asked about its own placements and nobody else's", async ({
   // is also what makes the exclusion below meaningful rather than a guess.
   const ownName = await page.getByRole("heading", { level: 1 }).first().innerText();
 
-  const own = await rowsUnder(page, "Did you keep them on?").count();
-  expect(own).toBeGreaterThan(0);
+  const ownRows = rowsUnder(page, "Did you keep them on?");
+  await expect(ownRows).not.toHaveCount(0);
+  const own = await ownRows.count();
 
   // Deliberately not an absolute count. Earlier suites in this run complete
   // placements, so "exactly one" is true of a fresh seed and false by the time
@@ -105,8 +106,12 @@ test("no offer is recorded as an answer, and leaves both queues", async ({ page 
 
   await page.goto("/demo/business");
   const ownRows = rowsUnder(page, "Did you keep them on?");
+  // Waited for rather than counted straight away. `count()` does not auto-wait,
+  // so reading it before the list renders returns zero — and a zero here does
+  // not fail, it poisons the arithmetic below and fails somewhere else.
+  await expect(ownRows).not.toHaveCount(0);
   const beforeOwn = await ownRows.count();
-  await page.getByRole("button", { name: "Answer" }).first().click();
+  await ownRows.first().getByRole("button", { name: "Answer" }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
@@ -140,8 +145,13 @@ test("a learner records their own, and the college's queue reflects it", async (
 }) => {
   await page.goto("/demo/college");
   const collegeQueue = page.getByRole("button", { name: "Record outcome" });
+  // Waited for rather than counted straight away. Every portal here has a
+  // `loading.tsx`, so Next serves the shell first and streams the page in
+  // behind it — `goto` can resolve on the skeleton, and `count()` does not
+  // auto-wait. A zero read there does not fail honestly; it fails as though
+  // the queue were empty, which is a different bug entirely.
+  await expect(collegeQueue).not.toHaveCount(0);
   const before = await collegeQueue.count();
-  expect(before).toBeGreaterThan(0);
 
   await page.goto("/demo/student");
   await page.getByRole("button", { name: "Tell us where you are" }).first().click();
@@ -173,8 +183,8 @@ test("a nudge leaves the building, and names nobody on the way", async ({ page }
   // read. The outbox is where "delivered" is defined, so it is where this is
   // checked rather than at the button that caused it.
   await page.goto("/demo/admin");
-  const before = await page.getByRole("button", { name: "Send a nudge" }).count();
-  expect(before).toBeGreaterThan(0);
+  const nudges = page.getByRole("button", { name: "Send a nudge" });
+  await expect(nudges).not.toHaveCount(0);
 
   // The learner named on the row this nudge is about, so the assertion below
   // is about a real name rather than a name nobody ever had.
@@ -206,4 +216,54 @@ test("the queue says which quarter it is asking about", async ({ page }) => {
   for (const text of await rows.allInnerTexts()) {
     expect(text).toMatch(quarter);
   }
+});
+
+test("redefining a region appends a boundary and leaves the old one", async ({ page }) => {
+  // The guarantee the whole model exists for, through the screen. A boundary
+  // is never edited: a redesignation is a new row with a later date, and every
+  // figure already computed keeps the map it was measured against.
+  await page.goto("/demo/admin");
+
+  const card = page
+    .getByRole("heading", { name: "Redefine a region" })
+    .locator("xpath=following::div[1]");
+  await expect(card).toContainText("in force");
+
+  const before = await card.locator("li").count();
+  expect(before).toBeGreaterThan(0);
+  const existing = (await card.locator("li").first().innerText()).split("—")[0].trim();
+
+  await page.getByLabel("Counties").fill("Crawford, Cherokee, Labette, Neosho, Bourbon");
+  await page.getByLabel("In force from").fill("2027-07-01");
+  await page.getByLabel("What changed this").fill("2027 local area redesignation.");
+  await page.getByRole("button", { name: "Record the new boundary" }).click();
+
+  await expect(
+    page.getByRole("status").filter({ hasText: /unchanged/i }),
+  ).toBeVisible();
+
+  // One more boundary on record, and the one that was there is still there
+  // word for word — an edit would have replaced it.
+  await expect(async () => {
+    expect(await card.locator("li").count()).toBe(before + 1);
+  }).toPass({ timeout: 5000 });
+  await expect(card).toContainText(existing);
+  await expect(card).toContainText("Bourbon");
+});
+
+test("a region cannot be backdated over the boundary it replaces", async ({ page }) => {
+  // Backdating is a rewrite of history wearing an append's clothing, which is
+  // the single thing this model exists to prevent.
+  await page.goto("/demo/admin");
+  await page.getByLabel("Counties").fill("Crawford");
+  await page.getByLabel("In force from").fill("1999-01-01");
+  await page.getByLabel("What changed this").fill("Trying to backdate.");
+  await page.getByRole("button", { name: "Record the new boundary" }).click();
+
+  // `alert`, not `status`: the toast component gives an error the assertive
+  // role and everything else the polite one, which is right for a screen
+  // reader and easy to get wrong in a test.
+  await expect(
+    page.getByRole("alert").filter({ hasText: /after the one it replaces/i }),
+  ).toBeVisible();
 });

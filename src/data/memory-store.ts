@@ -371,6 +371,30 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createRegionDefinition(definition: import("@/domain/types").RegionDefinition) {
+    if (seed.regionDefinitions.some((d) => d.id === definition.id)) {
+      throw new Error(`Region definition ${definition.id} already exists`);
+    }
+    // One boundary per market per instant, which Postgres enforces with a
+    // unique constraint. Checked here too, or the two backends disagree about
+    // whether a duplicate is an error or a silent second row — and the
+    // in-memory one is what the demo and the whole browser suite run on.
+    if (
+      seed.regionDefinitions.some(
+        (d) =>
+          d.marketId === definition.marketId &&
+          d.effectiveFrom === definition.effectiveFrom,
+      )
+    ) {
+      throw new Error(
+        `Market ${definition.marketId} already has a boundary effective ${definition.effectiveFrom}`,
+      );
+    }
+    this.effects.push(() => {
+      seed.regionDefinitions.push(definition);
+    });
+  }
+
   createHostOffer(offer: import("@/domain/types").HostOffer) {
     if (seed.hostOffers.some((o) => o.id === offer.id)) {
       throw new Error(`Host offer ${offer.id} already exists`);

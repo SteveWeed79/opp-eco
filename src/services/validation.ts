@@ -274,6 +274,29 @@ export const recordHostOfferInput = z.object({
 });
 
 /**
+ * A market's new boundary.
+ *
+ * `source` is required, unlike almost every other note in this file. A
+ * redesignation moves every figure reported after it, and "why did this
+ * market's retention rate change in 2027" is a question somebody will ask —
+ * the answer has to be in the record rather than in somebody's memory.
+ */
+export const redefineRegionInput = z.object({
+  marketId: id,
+  state: z
+    .string()
+    .trim()
+    .length(2, "Use the two-letter state code")
+    .regex(/^[A-Za-z]{2}$/, "Use the two-letter state code"),
+  // Bounded, not validated against a real gazetteer. The platform decides what
+  // a county name *counts as* rather than refusing one it did not expect —
+  // the same stance `recordOutcomeInput` takes about where somebody works.
+  counties: z.array(z.string().trim().min(1).max(80)).min(1).max(120),
+  effectiveFrom: z.string().min(1).max(40),
+  source: z.string().trim().min(1).max(500),
+});
+
+/**
  * A nudge from the chase queue.
  *
  * Two fields, and there is deliberately no third. The message itself is a

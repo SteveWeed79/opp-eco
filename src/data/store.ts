@@ -24,6 +24,7 @@ import type {
   Membership,
   Organization,
   HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -289,6 +290,16 @@ export interface UnitOfWork {
    * path anybody can reach.
    */
   createHostOffer(offer: HostOffer): void;
+  /**
+   * Record a new boundary for a market.
+   *
+   * Create-only, and there is deliberately no `saveRegionDefinition`. Every
+   * other create-only operation here is that way because the record is an
+   * observation; this one is that way because **editing a boundary rewrites
+   * every figure ever computed against it**. A redesignation is a new row with
+   * a later effective date, and the row it supersedes is left untouched.
+   */
+  createRegionDefinition(definition: RegionDefinition): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;
 }

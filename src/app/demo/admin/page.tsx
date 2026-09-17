@@ -33,6 +33,8 @@ import {
 } from "@/components/ui";
 import { HOST_OFFER_ANSWERS } from "@/domain/offer";
 import { NudgeButton } from "@/components/NudgeButton";
+import { RedefineRegion } from "@/components/RedefineRegion";
+import { regionHistory } from "@/domain/region";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { organizationMachine } from "@/domain/lifecycle";
@@ -76,6 +78,7 @@ import {
   adminAwardFunds,
   adminNudgeFollowUp,
   adminPurgeLearner,
+  adminRedefineRegion,
 } from "./actions";
 import type { ApplicationStatus } from "@/domain/types";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
@@ -161,6 +164,7 @@ export default async function AdminPage() {
     offers,
     offerQueue,
     followUps,
+    allRegions,
   ] = await Promise.all([
     allMarketHealth(admin),
     stalledApplications(admin),
@@ -173,7 +177,28 @@ export default async function AdminPage() {
     hostOfferReport(admin),
     hostOfferQueue(admin),
     followUpQueue(admin),
+    repositories.regionDefinitions.list(admin),
   ]);
+
+  /**
+   * Every market with its whole boundary history, newest first.
+   *
+   * The history rather than just the current boundary: somebody about to
+   * change a map should be able to see the map, and an administrator looking
+   * at a figure that moved between two years needs to know whether the
+   * programme changed or the boundary did.
+   */
+  const regionChoices = (await repositories.markets.list(admin)).map((market) => ({
+    marketId: market.id,
+    marketName: market.name,
+    history: regionHistory(allRegions, market.id).map((definition) => ({
+      id: definition.id,
+      counties: definition.counties,
+      state: definition.state,
+      effectiveFrom: definition.effectiveFrom,
+      source: definition.source,
+    })),
+  }));
   /**
    * Every fund across every market, and who could be awarded from one.
    *
@@ -1095,6 +1120,21 @@ export default async function AdminPage() {
         finish={finishEnrolment}
         drop={dropEnrolment}
       />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* The map every retention figure is measured against.                 */}
+      {/*                                                                     */}
+      {/* Last on the page, next to Access, because it is the rarest thing    */}
+      {/* here — and the one with the longest reach. A boundary recorded      */}
+      {/* today decides what "stayed in the region" means for every figure    */}
+      {/* computed afterwards, and leaves every figure before it alone.       */}
+      {/* ------------------------------------------------------------------ */}
+      <PageSection
+        title="Regions"
+        description="The counties each market's retention is measured against, and when each boundary took effect"
+      >
+        <RedefineRegion markets={regionChoices} action={adminRedefineRegion} />
+      </PageSection>
 
       <PageSection
         title="Access"

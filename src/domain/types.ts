@@ -1204,6 +1204,10 @@ export interface AuditEvent {
     // it and when has to be answerable a year later — particularly when the
     // answer was transcribed by an administrator rather than given firsthand.
     | "host_offer"
+    // A market's boundary. Audited because a redesignation moves every figure
+    // reported after it, and "why did this market's retention rate change in
+    // 2027" has to be answerable with something other than a guess.
+    | "region"
     | "funding_source"
     | "funding_commitment"
     | "consent"

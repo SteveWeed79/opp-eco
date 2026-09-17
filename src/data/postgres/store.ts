@@ -31,6 +31,7 @@ import type {
   Membership,
   Organization,
   HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -592,6 +593,19 @@ class PostgresUnitOfWork implements UnitOfWork {
         ${outcome.observedOn}, ${outcome.recordedOn},
         ${outcome.recordedByUserId}, ${outcome.source},
         ${outcome.detail ?? null}
+      )`);
+  }
+
+  createRegionDefinition(definition: RegionDefinition) {
+    this.add(sql`
+      INSERT INTO region_definitions (
+        id, market_id, state, counties, effective_from, source,
+        recorded_by, recorded_on
+      ) VALUES (
+        ${definition.id}, ${definition.marketId}, ${definition.state},
+        ${definition.counties}, ${definition.effectiveFrom},
+        ${definition.source ?? null}, ${definition.recordedByUserId},
+        ${definition.recordedOn}
       )`);
   }
 

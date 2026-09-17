@@ -17,14 +17,15 @@ deadline — what has to be captured now because it cannot be reconstructed late
 ## Cheap now, impossible later
 
 Four things get permanently more expensive every month they wait. **Two of them
-are now done.** Nothing else in this document is urgent.
+are now done, and a third turned out to be narrower than it looked.** Nothing
+else in this document is urgent.
 
 | | Why it cannot wait |
 |---|---|
 | **The field instrument is standardised before the visits scale** | Towns reviewed with different questions are not comparable. The first nineteen visits cannot be re-walked |
 | ~~**Outcomes capture the employment *county*, not an in-region boolean**~~ — **done**, migration `0014_outcome_place.sql` | "In region" recorded as a tick is a judgement that cannot be re-derived when the boundary you meant turns out to be wrong. Captured from here on; the rows written before it keep what the recorder claimed, labelled as a claim rather than converted into a county nobody gave |
 | ~~**The measurement interval for outcomes is fixed**~~ — **done** (`Q23a` and `Q23b`) | The 2nd and 4th calendar quarter after exit, measured from the day the placement ended rather than the day its paperwork last moved. A window that closes unanswered is reported as missed rather than re-queued, because nobody can be phoned eighteen months later and asked where they were at three months — which is the permanent cost the lateness of this decision already carries |
-| **Area totals are snapshotted each period** | Without them the retention schedule eventually anonymises the records the history was computed from, and takes the history with it |
+| **Area totals are snapshotted each period** | The weakest of the four, and worth saying so: the purge anonymises rather than deletes, so an outcome keeps its kind and its county and the totals stay recomputable. What a snapshot buys is a figure that cannot drift as the derivation changes — not a history that would otherwise be lost. The part that *would* have been lost is the boundary each figure was measured against, and that is now recorded |
 
 Everything else — peer selection, the report surface, the playbook library — can
 be built at any time from data collected correctly.
@@ -172,6 +173,13 @@ pilot board covers rather than assuming.*
 census, so region definitions need effective dates and every snapshot must record
 which boundary set produced it. Otherwise a redesignation silently rewrites
 history and a trend line moves for reasons unrelated to performance.
+
+*Done*, migration `0017_region_definitions.sql`. A boundary is a dated
+`RegionDefinition` rather than a column on the market, an outcome is judged
+against whichever definition was in force the moment it was observed, and the
+administrator's form appends rather than edits — backdating is refused, and so is
+a second definition at the same instant. The history is shown above the fields,
+because somebody about to change a map should be able to see the map.
 
 Rural commute sheds are wide — thirty or forty miles is ordinary, often across
 county lines — which makes the captured county matter *more* here than it would
@@ -342,7 +350,8 @@ Derived from everything above, in priority order:
 
 1. ~~**Employment county** on `Outcome`, replacing the in-region boolean~~ —
    **done**
-2. **Counties and region definitions** as reference data, with effective dates
+2. ~~**Counties and region definitions** as reference data, with effective
+   dates~~ — **done**, migration `0017_region_definitions.sql`
 3. **Area snapshots** per period, stamped with boundary set and instrument version
 4. **The field instrument**: town profile, dated findings with sources, playbook
    entries

@@ -369,7 +369,8 @@ miles from Joplin across a state line, and two colleges will draw that line
 differently. A comparison broken that way still renders as a clean chart.
 
 So an employment outcome carries the **county and state the work is in**, and
-`inRegion` derives the answer against the counties a `Market` declares. That
+`inRegion` derives the answer against the counties the market's region declared
+*at the moment the observation was made*. That
 distinction is the entire argument the venture rests on — a programme that
 reliably produces graduates who leave is a talent pipeline out of the county, and
 a board funding it should be able to see that — which is exactly why it should
@@ -431,6 +432,51 @@ All of it measures from `Application.exitedOn`, written once when the placement
 ends and never moved. `statusSince` is overwritten by every later transition, so
 a clock reading it slides forward with the credit paperwork — by 55 days on one
 seeded fixture, which is enough to file an observation in the wrong quarter.
+
+### The region is a dated record, not a field
+
+A market's counties started life as a column, which meant they were always
+whatever they are now. That is fine until a boundary moves — local workforce
+areas get redesignated and MSAs are redrawn after each census — and then a single
+mutable list does something quietly catastrophic: the 2026 retention rate
+recomputed in 2029 comes back different, measured against a map nobody had in
+2026, and nothing on the screen says so. A figure already sent to a board is the
+worst possible thing to be silently wrong.
+
+So a boundary is a `RegionDefinition` — a market, a state, a list of counties,
+and the date it took effect. `regionInForce(definitions, marketId, at)` answers
+which one was real at a given moment, and every outcome is judged against the map
+that was real when it was observed. Null is a real answer rather than a failure:
+an observation predating every definition on record has no boundary to be judged
+against, and it lands in `placeUnknown` — counted apart — rather than being
+scored as having left.
+
+**Definitions are appended, never edited.** `redefineRegion` is the only writer
+and it has no update path, which is what makes the guarantee above hold rather
+than merely describe an intention. It refuses four things:
+
+| | Why |
+|---|---|
+| A boundary effective at or before the one in force | Backdating is a rewrite of history wearing an append's clothing, and two rows sharing a date make "in force" a coin toss the two data layers would each call differently |
+| A boundary identical to the one in force | A form submitted twice, not a redesignation. Recording it would put a row in the history that changes nothing and make the market look as though its map moved on a date it did not |
+| An empty county list | A region with no counties scores every outcome as having left |
+| Anyone but an administrator | Unusual, and deliberate — see below |
+
+The administrator alone, which is odd for something a board would hear about
+first. A redesignation is not this market's news, it is the state's, and it
+reaches every market in the network at once; it is also the only write in the
+product whose effect is retroactive in appearance, because every figure computed
+*after* it moves. That belongs on the desk that answers for the platform rather
+than on one that reports through it. The form shows the whole history above the
+fields, because somebody about to change a map should be able to see the map, and
+a mistake here is corrected by recording a third definition rather than by fixing
+the second.
+
+What this does **not** do is snapshot the totals. Those stay recomputable, and
+deliberately so — the retention purge anonymises rather than deletes, so an
+outcome keeps its kind and its county long after it stops naming anybody. A
+boundary nobody wrote down is the one thing that could not be reconstructed from
+anything, which is why it is the piece that was cheap now and impossible later.
 
 ### Absence is not a result
 

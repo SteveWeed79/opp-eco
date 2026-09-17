@@ -6,6 +6,7 @@ import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { nudgeForFollowUp } from "@/app/_actions/outreach";
+import { redefineMarketRegion } from "@/app/_actions/region";
 import { overrideInput, validate } from "@/services/validation";
 
 /**
@@ -149,4 +150,21 @@ export async function adminNudgeFollowUp(
   audience: unknown,
 ): Promise<ActionResult> {
   return nudgeForFollowUp(applicationId, audience);
+}
+
+/**
+ * Record a market's new boundary.
+ *
+ * Appends rather than edits, which is the whole guarantee — see
+ * `services/region.ts`. The role is hardcoded here as it is everywhere in this
+ * file.
+ */
+export async function adminRedefineRegion(
+  marketId: unknown,
+  state: unknown,
+  counties: unknown,
+  effectiveFrom: unknown,
+  source: unknown,
+): Promise<ActionResult> {
+  return redefineMarketRegion(marketId, state, counties, effectiveFrom, source);
 }
