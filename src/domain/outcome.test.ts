@@ -473,6 +473,40 @@ describe("summarising outcomes", () => {
     expect(summary.placeUnknown).toBe(0);
   });
 
+  it("judges each observation against the boundary that was real when it was made", () => {
+    // The reason a region is a dated definition rather than a column, asserted
+    // end to end. Labette joins this market in 2027. A learner working in
+    // Labette in 2026 had left; the same learner in 2028 has not — and the 2026
+    // figure must not change when the map does.
+    const boundaries = [
+      { from: "2000-01-01T00:00:00.000Z", counties: ["Crawford"], state: "KS" },
+      { from: "2027-07-01T00:00:00.000Z", counties: ["Crawford", "Labette"], state: "KS" },
+    ];
+    const inForce = (_marketId: string, observedOn: string) =>
+      boundaries.filter((b) => b.from <= observedOn).at(-1) ?? null;
+
+    const inLabette = (id: string, studentId: string, observedOn: string) =>
+      outcome({ id, studentId, observedOn, employmentCounty: "Labette" });
+
+    expect(
+      summarizeOutcomes([inLabette("out-1", "stu-1", "2026-08-01T00:00:00.000Z")], 0, inForce)
+        .regional,
+    ).toBe(0);
+    expect(
+      summarizeOutcomes([inLabette("out-2", "stu-2", "2028-02-01T00:00:00.000Z")], 0, inForce)
+        .regional,
+    ).toBe(1);
+  });
+
+  it("counts an observation with no boundary on record as a place unknown", () => {
+    // Not as a departure. A lookup that resolves to nothing has no map to judge
+    // against, and scoring that as having left would turn a gap in the
+    // reference data into a retention failure.
+    const summary = summarizeOutcomes([outcome()], 0, () => null);
+    expect(summary.placeUnknown).toBe(1);
+    expect(summary.regional).toBe(0);
+  });
+
   it("reports every kind, including the ones nobody scored", () => {
     // A chart that omits empty categories silently changes shape between
     // markets, which is how two screenshots of the same report disagree.

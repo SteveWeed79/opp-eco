@@ -29,6 +29,7 @@ import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
 import { INTRODUCERS, placesLeft } from "@/domain/mentorship";
 import { canRecordOutcome, followUpBlockReason } from "@/domain/outcome";
 import { canRecordHostOffer, isHire, offerBlockReason } from "@/domain/offer";
+import { regionInForce } from "@/domain/region";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -768,7 +769,13 @@ export async function recordHostOffer(
         actor,
         posting.businessId,
       );
-      const market = await repositories.markets.find(actor, application.marketId);
+      // The boundary in force now, for the state code that makes the county
+      // unambiguous. An employer hiring today is judged against today's map.
+      const region = regionInForce(
+        await repositories.regionDefinitions.forMarket(actor, application.marketId),
+        application.marketId,
+        observedOn,
+      );
       outcome = {
         id: deps.id("out"),
         marketId: application.marketId,
@@ -782,7 +789,7 @@ export async function recordHostOffer(
         // `employedByHost` either way, and the county is what lets the report
         // roll the hire up by county as well.
         employmentCounty: organization?.county ?? null,
-        employmentState: organization?.county ? (market?.state ?? null) : null,
+        employmentState: organization?.county ? (region?.state ?? null) : null,
         assertedInRegion: null,
         observedOn,
         recordedOn: observedOn,

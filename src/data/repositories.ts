@@ -26,6 +26,7 @@ import type {
   MentorshipPairing,
   Organization,
   HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -231,6 +232,22 @@ export interface HostOfferRepository {
   forStudent(actor: ActorContext, studentId: string): Promise<HostOffer[]>;
 }
 
+/**
+ * The boundaries a market's figures are measured against, and when each began.
+ *
+ * Read by **everyone**, unscoped beyond the market rule, which is unusual here
+ * and deliberate. A region definition names no person and holds no figure — it
+ * is a list of counties and a date, closer to a postcode table than to a
+ * record. A learner asked where they work, an employer deciding whether hosting
+ * counts locally, and a board reading a retention rate are all entitled to know
+ * what "in region" means, and a definition somebody cannot see is a figure they
+ * cannot check.
+ */
+export interface RegionDefinitionRepository {
+  list(actor: ActorContext): Promise<RegionDefinition[]>;
+  forMarket(actor: ActorContext, marketId: string): Promise<RegionDefinition[]>;
+}
+
 export interface AuditEventRepository {
   list(actor: ActorContext, filter?: { entityId?: string }): Promise<AuditEvent[]>;
 }
@@ -255,6 +272,7 @@ export interface Repositories {
   consents: ConsentRepository;
   outcomes: OutcomeRepository;
   hostOffers: HostOfferRepository;
+  regionDefinitions: RegionDefinitionRepository;
   auditEvents: AuditEventRepository;
   users: UserRepository;
 }

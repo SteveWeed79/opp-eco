@@ -25,6 +25,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories } from "@/data/backend";
+import { currentRegion } from "@/domain/region";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
@@ -79,6 +80,11 @@ export default async function StudentPage() {
   const skillVocabulary = Array.from(
     new Set(published.flatMap((p) => [...p.skillsRequired, ...p.skillsPreferred])),
   ).sort();
+  const region = currentRegion(
+    await repositories.regionDefinitions.forMarket(actor, student.marketId),
+    student.marketId,
+    DEMO_NOW,
+  );
   const [progress, funding, followUps] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
     marketFunding(actor, market!.id),
@@ -246,8 +252,8 @@ export default async function StudentPage() {
                   studentName={student.name}
                   placementTitle={posting.title}
                   hostName={organizationName(posting.businessId)}
-                  regionCounties={market?.counties ?? []}
-                  regionState={market?.state ?? ""}
+                  regionCounties={region?.counties ?? []}
+                  regionState={region?.state ?? ""}
                   choices={OUTCOME_KINDS}
                   action={studentRecordOwnOutcome}
                 />

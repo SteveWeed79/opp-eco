@@ -237,6 +237,7 @@ withDatabase("parity with the in-memory layer", () => {
       creditAwards: await repos.creditAwards.list(actor),
       outcomes: await repos.outcomes.list(actor),
       hostOffers: await repos.hostOffers.list(actor),
+      regionDefinitions: await repos.regionDefinitions.list(actor),
       consents: await repos.consents.list(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
@@ -451,6 +452,21 @@ withDatabase("parity with the in-memory layer", () => {
     const once = await postgres.postings.list(actor);
     const twice = await postgres.postings.list(actor);
     expect(once.map((p) => p.id)).toEqual(twice.map((p) => p.id));
+  });
+
+  it("gives every role the boundary its market is measured against", async () => {
+    // The loosest scope in the schema, and the assertion is that it really is
+    // loose: a definition names nobody and holds no figure, and a boundary
+    // somebody cannot see is a figure they cannot check. Pinned because the
+    // reflex in this codebase is to narrow, and narrowing here would leave a
+    // learner unable to find out what "in region" means.
+    const postgres = pg();
+    for (const role of ROLES) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.regionDefinitions.list(contextFor(role));
+        expect(rows.length).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("shows an employer its own host answers and nobody else's", async () => {

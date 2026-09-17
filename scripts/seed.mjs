@@ -77,6 +77,7 @@ export const TABLES = [
   "sign_in_codes",
   "notification_outbox",
   "audit_events",
+  "region_definitions",
   "host_offers",
   "outcomes",
   "consents",
@@ -110,17 +111,35 @@ export async function seedInto(tx) {
    */
   for (const market of seed.markets) {
     await insert(
-      `INSERT INTO markets (id, name, city, counties, state, stage, board_id,
+      `INSERT INTO markets (id, name, city, stage, board_id,
          launched_on, program_year)
-       VALUES ($1,$2,$3,$4,$5,'configuring',NULL,$6,$7)`,
+       VALUES ($1,$2,$3,'configuring',NULL,$4,$5)`,
       [
         market.id,
         market.name,
         market.city,
-        market.counties,
-        market.state,
         market.launchedOn,
         market.programYear,
+      ],
+    );
+  }
+
+  // The boundary each market's figures are measured against. Loaded straight
+  // after the markets they belong to and before anything that reads one.
+  for (const region of seed.regionDefinitions) {
+    await insert(
+      `INSERT INTO region_definitions (id, market_id, state, counties,
+         effective_from, source, recorded_by, recorded_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        region.id,
+        region.marketId,
+        region.state,
+        region.counties,
+        region.effectiveFrom,
+        region.source ?? null,
+        region.recordedByUserId,
+        region.recordedOn,
       ],
     );
   }
@@ -597,6 +616,7 @@ try {
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
        (SELECT count(*) FROM host_offers)        AS host_offers,
+       (SELECT count(*) FROM region_definitions) AS region_definitions,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
        (SELECT count(*) FROM funding_commitments) AS funding_commitments,

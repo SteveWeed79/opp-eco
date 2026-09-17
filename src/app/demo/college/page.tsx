@@ -22,6 +22,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories } from "@/data/backend";
+import { currentRegion } from "@/domain/region";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
@@ -73,6 +74,13 @@ export default async function CollegePage() {
   const college = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
+  // The boundary in force today. A county list is no longer a property of a
+  // market — it is a dated definition, and this is the current one.
+  const region = currentRegion(
+    await repositories.regionDefinitions.forMarket(actor, market.id),
+    market.id,
+    DEMO_NOW,
+  );
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
   const remainingBudget = (await marketFunding(actor, market.id)).wage?.remaining ?? 0;
@@ -718,8 +726,8 @@ export default async function CollegePage() {
                     studentName={student.name}
                     placementTitle={posting.title}
                     hostName={organizationName(posting.businessId)}
-                    regionCounties={market.counties}
-                    regionState={market.state}
+                    regionCounties={region?.counties ?? []}
+                    regionState={region?.state ?? ""}
                     choices={OUTCOME_KINDS.map((kind) => ({
                       value: kind.value,
                       label: kind.label,

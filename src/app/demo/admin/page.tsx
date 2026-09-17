@@ -363,7 +363,7 @@ export default async function AdminPage() {
                         {h.market.name}
                       </h3>
                       <p className="text-xs text-ink-500 mt-0.5">
-                        {h.market.counties.join(" · ")} County
+                        {h.region ? `${h.region.counties.join(" · ")} County` : "No region defined"}
                       </p>
                     </div>
                     <Badge tone={isLive ? "good" : "warn"}>

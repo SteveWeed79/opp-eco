@@ -50,6 +50,7 @@ import {
   fundingCommitmentScope,
   marketScope,
   hostOfferScope,
+  regionDefinitionScope,
   outcomeScope,
   mentorshipPairingScope,
   ownMarketScope,
@@ -67,6 +68,7 @@ import {
   toFundingCommitment,
   toFundingSource,
   toHostOffer,
+  toRegionDefinition,
   toMentorshipPairing,
   toOutcome,
   toOrganization,
@@ -248,6 +250,16 @@ export function postgresRepositories(db: SqlClient): Repositories {
     // despite working the same cases.
     const { role } = actor.membership;
     return role === "admin" || role === "business" ? rows : rows.map(redactHostOffer);
+  }
+
+  function regionsWhere(actor: ActorContext, extra: Sql) {
+    const where = joinSql([regionDefinitionScope(actor), extra], " AND ");
+    return all(
+      sql`SELECT * FROM region_definitions WHERE ${where}
+          ORDER BY region_definitions.effective_from DESC,
+                   region_definitions.id COLLATE "C" DESC`,
+      toRegionDefinition,
+    );
   }
 
   async function timeEntriesWhere(
@@ -606,6 +618,12 @@ export function postgresRepositories(db: SqlClient): Repositories {
       },
       forStudent: (actor, studentId) =>
         hostOffersWhere(actor, sql`host_offers.student_id = ${studentId}`),
+    },
+
+    regionDefinitions: {
+      list: (actor) => regionsWhere(actor, sql`TRUE`),
+      forMarket: (actor, marketId) =>
+        regionsWhere(actor, sql`region_definitions.market_id = ${marketId}`),
     },
 
     auditEvents: {

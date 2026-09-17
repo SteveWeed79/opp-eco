@@ -26,7 +26,7 @@ import type {
   ActorRole,
   Application,
   ApplicationStatus,
-  Market,
+  RegionDefinition,
   Outcome,
   OutcomeKind,
 } from "./types";
@@ -103,11 +103,11 @@ export function isEmployment(kind: OutcomeKind): boolean {
 export function placeInRegion(
   county: string,
   state: string,
-  market: Pick<Market, "counties" | "state">,
+  region: Boundary,
 ): boolean {
-  if (state.trim().toUpperCase() !== market.state.trim().toUpperCase()) return false;
+  if (state.trim().toUpperCase() !== region.state.trim().toUpperCase()) return false;
   const named = county.trim().toLowerCase();
-  return market.counties.some((c) => c.trim().toLowerCase() === named);
+  return region.counties.some((c) => c.trim().toLowerCase() === named);
 }
 
 /**
@@ -132,15 +132,24 @@ export function placeInRegion(
  */
 export function inRegion(
   outcome: Outcome,
-  market: Pick<Market, "counties" | "state">,
+  region: Boundary,
 ): boolean | null {
   if (!isEmployment(outcome.kind)) return null;
   if (outcome.employedByHost) return true;
   if (outcome.employmentCounty && outcome.employmentState) {
-    return placeInRegion(outcome.employmentCounty, outcome.employmentState, market);
+    return placeInRegion(outcome.employmentCounty, outcome.employmentState, region);
   }
   return outcome.assertedInRegion;
 }
+
+/**
+ * Just the two fields that decide whether a place is inside a region.
+ *
+ * Structural rather than `RegionDefinition` itself, so the pure predicates here
+ * stay testable without an id, an effective date and an author — and so a
+ * caller holding a definition can pass it unchanged.
+ */
+export type Boundary = Pick<RegionDefinition, "counties" | "state">;
 
 // ---------------------------------------------------------------------------
 // Who may record one
@@ -424,7 +433,16 @@ export interface OutcomeSummary {
  */
 export type RegionLookup = (
   marketId: string,
-) => Pick<Market, "counties" | "state"> | null;
+  /**
+   * When the observation was true.
+   *
+   * A boundary moves, and an outcome has to be judged against the one that was
+   * real when it was observed — not the one in force at the moment somebody
+   * happens to run the report. Without this argument a redesignation in 2028
+   * silently rewrites the 2026 figure, and nothing on the screen says so.
+   */
+  observedOn: string,
+) => Boundary | null;
 
 export function summarizeOutcomes(
   outcomes: Outcome[],
@@ -447,7 +465,10 @@ export function summarizeOutcomes(
   }));
 
   const stayed = (o: Outcome): boolean | null => {
-    const region = regionFor(o.marketId);
+    // The boundary as it was when the observation was made, not as it is now.
+    // A redesignation must not reach backwards and change a figure that has
+    // already been reported.
+    const region = regionFor(o.marketId, o.observedOn);
     return region ? inRegion(o, region) : null;
   };
 

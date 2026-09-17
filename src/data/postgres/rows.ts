@@ -40,6 +40,7 @@ import type {
   MentorshipPairing,
   Organization,
   HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -170,8 +171,6 @@ export function toMarket(row: Row): import("@/domain/types").Market {
     id: text(row.id),
     name: text(row.name),
     city: text(row.city),
-    counties: list(row.counties),
-    state: text(row.state),
     stage: text(row.stage) as MarketStage,
     boardId: row.board_id === null || row.board_id === undefined ? null : text(row.board_id),
     collegeIds: list(row.college_ids),
@@ -382,6 +381,24 @@ export function toOutcome(row: Row): Outcome {
     recordedByUserId: text(row.recorded_by),
     source: text(row.source) as Outcome["source"],
     detail: optionalText(row.detail),
+  };
+}
+
+export function toRegionDefinition(row: Row): RegionDefinition {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    state: text(row.state),
+    counties: list(row.counties),
+    effectiveFrom: timestamp(row.effective_from),
+    source: optionalText(row.source),
+    // `nullableText` rather than `optionalText`: null is what the definitions
+    // migrated out of `markets` carry, and it means something — a column has no
+    // author — which is not the same as a field somebody left blank.
+    recordedByUserId: row.recorded_by === null || row.recorded_by === undefined
+      ? null
+      : text(row.recorded_by),
+    recordedOn: timestamp(row.recorded_on),
   };
 }
 

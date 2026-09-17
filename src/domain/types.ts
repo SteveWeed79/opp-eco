@@ -60,32 +60,68 @@ export interface Market {
   name: string;
   city: string;
   /**
-   * The counties this market covers — and, with `state`, the definition of
-   * "in region" that every retention figure is measured against.
-   *
-   * Predetermined boundaries rather than a judgement: an officer recording
-   * where a learner went to work names a county, and whether that counts as
-   * staying is derived here rather than decided by whoever typed it. Two
-   * colleges drawing that line differently is how a comparison breaks in a way
-   * that still renders as a clean chart.
-   *
-   * These become state-level reference data with effective dates once regions
-   * are redesignated — a market's counties are the same shape either way.
+   * `counties` and `state` used to live here. They are now `RegionDefinition`
+   * rows, for the reason `FundingSource` took `subsidyBudget` off this type:
+   * the figure belongs in one place, and a market's boundary is a thing that
+   * changes on a date rather than a property it simply has.
    */
-  counties: string[];
-  /**
-   * The state those counties are in, as a two-letter code.
-   *
-   * Load-bearing, not decoration. Kansas and Missouri both have a Jackson
-   * County, and Pittsburg is twenty miles from Joplin across the state line —
-   * so a county name alone cannot answer whether somebody stayed.
-   */
-  state: string;
   stage: MarketStage;
   boardId: string | null;
   collegeIds: string[];
   launchedOn: string | null;
   programYear: string;
+}
+
+/**
+ * The counties a market's retention figures are measured against, from a date.
+ *
+ * This was two columns on `Market`, and the comment on them said what this is:
+ * *"these become state-level reference data with effective dates once regions
+ * are redesignated"*. Local workforce areas are redesignated and MSAs are
+ * redrawn after each census, and when that happens a single mutable list of
+ * counties does something quietly catastrophic — it rewrites every historical
+ * figure. The 2026 retention rate recomputed in 2029 would come back different,
+ * against a boundary nobody had in 2026, and nothing would say so.
+ *
+ * So a definition is never edited. A boundary change writes a **new row with a
+ * later `effectiveFrom`**, and an outcome is judged against whichever definition
+ * was in force when it was observed. That is the whole guarantee, and it is why
+ * `redefineRegion` has no counterpart that updates one.
+ *
+ * Predetermined boundaries rather than a judgement, still: an officer recording
+ * where a learner went names a county, and whether that counts as staying is
+ * derived from these rather than decided by whoever typed it.
+ */
+export interface RegionDefinition {
+  id: string;
+  marketId: string;
+  /**
+   * The state those counties are in, as a two-letter code.
+   *
+   * Load-bearing rather than decoration. Kansas and Missouri both have a
+   * Jackson County, and Pittsburg is twenty miles from Joplin across the state
+   * line — so a county name alone cannot answer whether somebody stayed.
+   */
+  state: string;
+  counties: string[];
+  /**
+   * Inclusive. The definition in force at a moment is the latest one whose
+   * `effectiveFrom` is at or before it.
+   *
+   * One date rather than a from/to pair: a closed interval has to be kept
+   * consistent with its neighbour, and two rows disagreeing about where one
+   * boundary ends and the next begins is a gap no query would report.
+   */
+  effectiveFrom: string;
+  /** The redesignation notice, the census, the board's own paperwork. */
+  source?: string;
+  /**
+   * Null on the definitions migrated out of `markets`, because nobody recorded
+   * them — they were a column, and a column has no author. Every definition
+   * written since names one.
+   */
+  recordedByUserId: string | null;
+  recordedOn: string;
 }
 
 /**

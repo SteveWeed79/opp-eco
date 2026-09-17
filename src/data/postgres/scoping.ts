@@ -135,6 +135,20 @@ export function outcomeScope(actor: ActorContext): Sql {
 }
 
 /**
+ * Restrict a region definition to its market, and no further.
+ *
+ * The loosest scope in this file, and deliberately. A definition is a list of
+ * counties and a date — it names nobody and holds no figure — and every role in
+ * a market is entitled to know what "in region" means there. A learner asked
+ * where they work, an employer deciding whether hosting counts locally, and a
+ * board reading a retention rate all need it, and a boundary somebody cannot
+ * see is a figure they cannot check.
+ */
+export function regionDefinitionScope(actor: ActorContext): Sql {
+  return marketScope(actor, "region_definitions");
+}
+
+/**
  * Restrict a host's answer to the parties with a reason to read one.
  *
  * The asymmetry with `outcomeScope` is the whole point. An employer reads **no

@@ -24,7 +24,7 @@ import {
   daysInStatus,
   isTerminal,
 } from "@/domain/workflow";
-import type { ActorContext } from "@/domain/types";
+import type { ActorContext, RegionDefinition } from "@/domain/types";
 import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
@@ -48,6 +48,7 @@ import {
   type OutcomeSummary,
 } from "@/domain/outcome";
 import type { WindowStatus } from "@/domain/window";
+import { currentRegion, regionInForce } from "@/domain/region";
 import {
   offerAwaitsAnswer,
   summarizeHostOffers,
@@ -125,6 +126,14 @@ export async function stalledApplications(
 
 export interface MarketHealth {
   market: Market;
+  /**
+   * The boundary in force for this market today, or null if it has none.
+   *
+   * Carried here because the counties stopped being a field on `Market` — a
+   * region is a dated definition now, and "which counties is this market"
+   * is a question with a date in it even when the answer is "today's".
+   */
+  region: RegionDefinition | null;
   activeStudents: number;
   activeBusinesses: number;
   openPostings: number;
@@ -145,6 +154,7 @@ export interface MarketHealth {
 export async function marketHealth(
   actor: ActorContext,
   market: Market,
+  region: RegionDefinition | null = null,
 ): Promise<MarketHealth> {
   const [allApplications, allCredits, students, businesses, published, funding] =
     await Promise.all([
@@ -170,6 +180,7 @@ export async function marketHealth(
 
   return {
     market,
+    region,
     activeStudents: students.filter(
       (s) => s.marketId === market.id && s.status === "verified",
     ).length,
@@ -201,8 +212,13 @@ export async function marketHealth(
 export async function allMarketHealth(
   actor: ActorContext,
 ): Promise<MarketHealth[]> {
-  const markets = await repositories.markets.list(actor);
-  return Promise.all(markets.map((m) => marketHealth(actor, m)));
+  const [markets, regions] = await Promise.all([
+    repositories.markets.list(actor),
+    repositories.regionDefinitions.list(actor),
+  ]);
+  return Promise.all(
+    markets.map((m) => marketHealth(actor, m, currentRegion(regions, m.id, DEMO_NOW))),
+  );
 }
 
 export interface MarketFunding {
@@ -579,18 +595,23 @@ export async function outcomeReport(
   const none = () => null;
   if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0, none);
 
-  const [applications, outcomes, markets] = await Promise.all([
+  const [applications, outcomes, regions] = await Promise.all([
     repositories.applications.list(actor),
     repositories.outcomes.list(actor),
     // Read through the actor's own scope, so a college resolves its own market
     // and an administrator resolves all of them — which is exactly the
     // difference that makes the lookup necessary.
-    repositories.markets.list(actor),
+    repositories.regionDefinitions.list(actor),
   ]);
 
-  const byId = new Map(markets.map((m) => [m.id, m]));
   const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes, DEMO_NOW)).length;
-  return summarizeOutcomes(outcomes, unmeasured, (id) => byId.get(id) ?? null);
+  // Each observation judged against the boundary that was in force when it was
+  // made. A redesignation next year must not reach back and change a figure
+  // that has already been reported — which is the whole reason a definition is
+  // a dated row rather than a column.
+  return summarizeOutcomes(outcomes, unmeasured, (marketId, observedOn) =>
+    regionInForce(regions, marketId, observedOn),
+  );
 }
 
 /** Every finished experience, measured or not. The denominator behind the rate. */

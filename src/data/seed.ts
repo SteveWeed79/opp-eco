@@ -26,6 +26,7 @@ import type {
   Organization,
   HostOffer,
   Outcome,
+  RegionDefinition,
   Posting,
   Student,
   TimeEntry,
@@ -66,8 +67,6 @@ export const markets: Market[] = [
     id: "mkt-pittsburg",
     name: "Southeast Kansas",
     city: "Pittsburg",
-    counties: ["Crawford", "Cherokee", "Labette", "Neosho"],
-    state: "KS",
     stage: "live",
     boardId: "org-sekwp",
     collegeIds: ["org-verdigris"],
@@ -78,8 +77,6 @@ export const markets: Market[] = [
     id: "mkt-emporia",
     name: "Flint Hills",
     city: "Emporia",
-    counties: ["Lyon", "Chase", "Coffey"],
-    state: "KS",
     stage: "configuring",
     boardId: "org-fhwp",
     collegeIds: ["org-cottonwood"],
@@ -90,8 +87,6 @@ export const markets: Market[] = [
     id: "mkt-hays",
     name: "Smoky Hill",
     city: "Hays",
-    counties: ["Ellis", "Russell", "Trego"],
-    state: "KS",
     // The board has committed and the college is in conversation, which is
     // why `collegeIds` is still empty — a college joins that list when it
     // commits, not when it takes a meeting.
@@ -120,8 +115,6 @@ export const markets: Market[] = [
     id: "mkt-beloit",
     name: "North Central",
     city: "Beloit",
-    counties: ["Mitchell", "Lincoln", "Cloud"],
-    state: "KS",
     stage: "board_engaged",
     boardId: null,
     collegeIds: [],
@@ -129,6 +122,72 @@ export const markets: Market[] = [
     programYear: "PY2026",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Region definitions — the boundary each market's figures are measured against
+// ---------------------------------------------------------------------------
+
+/**
+ * How far back the first definition of a boundary reaches.
+ *
+ * Deliberately earlier than anything this system holds. Nobody recorded when
+ * these county sets took effect — they were a column on `markets`, and a column
+ * has no start date — so claiming they began on the market's launch date would
+ * be inventing one, and would leave any outcome observed before that launch
+ * unjudgeable. Claiming they have always been in force asserts nothing about
+ * the world and is true of every record here.
+ *
+ * What matters is not this date. It is that every change **after** it is dated.
+ */
+const BEGINNING_OF_RECORD = "2000-01-01T00:00:00.000Z";
+
+/**
+ * One definition per market, migrated out of the columns that used to hold them.
+ *
+ * No market has a second yet, which is the honest state of a platform that has
+ * not seen a redesignation. The shape is what matters: when Crawford County
+ * moves between workforce areas, that is a new row rather than an edit, and
+ * every figure already reported keeps the boundary it was computed against.
+ */
+export const regionDefinitions: RegionDefinition[] = [
+  {
+    id: "region-pittsburg",
+    marketId: "mkt-pittsburg",
+    state: "KS",
+    counties: ["Crawford", "Cherokee", "Labette", "Neosho"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-emporia",
+    marketId: "mkt-emporia",
+    state: "KS",
+    counties: ["Lyon", "Chase", "Coffey"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-hays",
+    marketId: "mkt-hays",
+    state: "KS",
+    counties: ["Ellis", "Russell", "Trego"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-beloit",
+    marketId: "mkt-beloit",
+    state: "KS",
+    counties: ["Mitchell", "Lincoln", "Cloud"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+];
+
 
 // ---------------------------------------------------------------------------
 // Organizations

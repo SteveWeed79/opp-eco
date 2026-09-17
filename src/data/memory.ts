@@ -32,6 +32,7 @@ import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { byObservedDescending } from "@/domain/outcome";
 import { byOfferOrder } from "@/domain/offer";
+import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
@@ -479,6 +480,15 @@ export const repositories: Repositories = {
       visibleHostOffers(actor)
         .filter((o) => o.studentId === studentId)
         .sort(byOfferOrder),
+  },
+
+  regionDefinitions: {
+    list: async (actor) =>
+      inScope(actor, seed.regionDefinitions).slice().sort(byEffectiveDescending),
+    forMarket: async (actor, marketId) =>
+      inScope(actor, seed.regionDefinitions)
+        .filter((d) => d.marketId === marketId)
+        .sort(byEffectiveDescending),
   },
 
   auditEvents: {

@@ -87,7 +87,6 @@ describe("entities", () => {
       id: "mkt-1",
       name: "Southeast Kansas",
       city: "Pittsburg",
-      counties: ["Crawford", "Labette"],
       stage: "live",
       board_id: "org-board",
       college_ids: ["org-college"],
@@ -96,8 +95,11 @@ describe("entities", () => {
     });
 
     expect(market.collegeIds).toEqual(["org-college"]);
-    expect(market.counties).toEqual(["Crawford", "Labette"]);
     expect(market.programYear).toBe("PY2026");
+    // The counties used to be here. They are a `RegionDefinition` now, for the
+    // same reason the money left: a boundary changes on a date, and a column
+    // that can be edited rewrites every figure ever computed against it.
+    expect("counties" in market).toBe(false);
   });
 
   it("carries no money of its own — that lives on the funds", () => {
