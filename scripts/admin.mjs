@@ -52,6 +52,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const password = await import(pathToFileURL(join(ROOT, "src/domain/password.ts")).href);
 const identity = await import(pathToFileURL(join(ROOT, "src/domain/identity.ts")).href);
 const brand = await import(pathToFileURL(join(ROOT, "src/brand.ts")).href);
+// Imported rather than written out, because it has already moved once: sign-in
+// left `/demo/sign-in` and the instruction printed below went on naming the old
+// path, which still redirects and so never looked broken.
+const routes = await import(pathToFileURL(join(ROOT, "src/routes.ts")).href);
 
 // ---------------------------------------------------------------------------
 // The address
@@ -343,10 +347,16 @@ async function main() {
     console.log(
       "It is shown once and is spent the first time it is used — signing in with it asks\n" +
         "for a password of your own before anything else.\n\n" +
-        "  1. Start the server with real sign-on:\n" +
-        "       AUTH_MODE=code AUTH_ECHO_CODES=true DATABASE_READ_ONLY=false npm run dev\n" +
-        "  2. Open http://localhost:3000/demo/sign-in and use the address above.\n" +
-        "  3. Enrol an authenticator on the admin console, then set AUTH_REQUIRE_MFA=true.\n",
+        "  1. Put these in .env.local, which `next dev` reads:\n" +
+        "       AUTH_MODE=code\n" +
+        "       AUTH_ECHO_CODES=true\n" +
+        "       DATABASE_READ_ONLY=false\n" +
+        "     All three together. `AUTH_MODE=code` is what makes sign-on real rather\n" +
+        "     than the demo role picker; without `DATABASE_READ_ONLY=false` you can sign\n" +
+        "     in and every button then refuses.\n" +
+        "  2. npm run dev\n" +
+        `  3. Open http://localhost:3000${routes.SIGN_IN_PATH} and use the address above.\n` +
+        "  4. Enrol an authenticator on the admin console, then set AUTH_REQUIRE_MFA=true.\n",
     );
   } finally {
     await pool.end();
