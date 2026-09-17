@@ -57,7 +57,7 @@ const refusal = (page: Page) =>
  * that knew the old one breaks.
  */
 async function setPasswordByEmail(page: Page, next: string): Promise<void> {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(COLLEGE);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Forgot your password?" }).click();
@@ -83,14 +83,14 @@ test("an account that has never had a password can get one", async ({ page }) =>
   // The bootstrap above is the assertion, and this says so on screen: an
   // administrator creates the account, and the person chooses the password
   // themselves rather than being told one over the phone.
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(COLLEGE);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText(/never set one\? use the same link/i)).toBeVisible();
 });
 
 test("an address decides which door opens", async ({ page }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
 
   // A college is asked for a password.
   await page.getByLabel("Work email").fill(COLLEGE);
@@ -102,7 +102,7 @@ test("an address decides which door opens", async ({ page }) => {
 test("a government address is sent a code, and never shown a password field", async ({
   page,
 }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(BOARD);
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -114,7 +114,7 @@ test("a government address is sent a code, and never shown a password field", as
 });
 
 test("a college signs in with its password", async ({ page, context }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(COLLEGE);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Password").fill(PASSWORD);
@@ -127,7 +127,7 @@ test("a college signs in with its password", async ({ page, context }) => {
 });
 
 test("a wrong password refuses, and starts no session", async ({ page, context }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(COLLEGE);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Password").fill("not the right password at all");
@@ -140,7 +140,7 @@ test("a wrong password refuses, and starts no session", async ({ page, context }
 test("an address nobody holds is refused in the same words", async ({ page }) => {
   // The two failures must not be distinguishable: the difference between them
   // is a directory of who takes part in this programme.
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill("nobody@nowhere.example");
   await page.getByRole("button", { name: "Continue" }).click();
   // Answered `password`, because the domain is not one anybody declared.
@@ -153,7 +153,7 @@ test("an address nobody holds is refused in the same words", async ({ page }) =>
 });
 
 test("forgetting a password offers a reset", async ({ page }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(COLLEGE);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Forgot your password?" }).click();
@@ -164,7 +164,7 @@ test("forgetting a password offers a reset", async ({ page }) => {
 });
 
 test("the page says what decides the door, without naming anybody", async ({ page }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   const rendered = await page.locator("main").innerText();
   expect(rendered).toMatch(/holds no password for a government employee/i);
   // No account list, no hint about who exists.
@@ -193,7 +193,7 @@ test("a forgotten password is replaced, and the old one stops working", async ({
 
     // And the old one does not.
     await context.clearCookies();
-    await page.goto("/demo/sign-in");
+    await page.goto("/sign-in");
     await page.getByLabel("Work email").fill(COLLEGE);
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByLabel("Password").fill(PASSWORD);
@@ -208,7 +208,7 @@ test("a forgotten password is replaced, and the old one stops working", async ({
 
 test("a reset code cannot be spent twice", async ({ page, context }) => {
   try {
-    await page.goto("/demo/sign-in");
+    await page.goto("/sign-in");
     await page.getByLabel("Work email").fill(COLLEGE);
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Forgot your password?" }).click();

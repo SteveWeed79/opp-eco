@@ -38,11 +38,29 @@ export function demoPath(path: string): string {
 /**
  * Where a signed-out person is sent under real sign-on.
  *
- * Inside `/demo` with the portals, because that is what it gates. The venture
- * pages at `/` are public and stay public — a funder reading about the
- * programme is not signing in to anything.
+ * At the site root, deliberately, and it used to be `demoPath("/sign-in")` on
+ * the reasoning that it belongs beside the portals it gates. That was wrong in
+ * the way that only shows up when somebody arrives at it: `isDemoSurface` was
+ * true for it, so the one screen a real person meets before they have an
+ * account wore a banner reading "every organization, student and figure shown
+ * is fictional" above a nav bar offering one-click entry to all five portals.
+ *
+ * A login page is not part of the demonstration. It is the door to the
+ * product, its URL gets sent to people in writing, and neither the banner nor
+ * the switcher belongs anywhere near it.
  */
-export const SIGN_IN_PATH = demoPath("/sign-in");
+export const SIGN_IN_PATH = "/sign-in";
+
+/**
+ * The sign-on screen, which gets neither chrome.
+ *
+ * Not the venture header — somebody signing in is not browsing the pitch, and
+ * a nav bar is an invitation to wander off mid-task. Not the demo chrome
+ * either, for the reason above. `Shell` checks this before either.
+ */
+export function isSignOnSurface(pathname: string): boolean {
+  return pathname === SIGN_IN_PATH || pathname.startsWith(`${SIGN_IN_PATH}/`);
+}
 
 export const PORTAL_PATH: Record<ActorRole, string> = {
   admin: demoPath("/admin"),

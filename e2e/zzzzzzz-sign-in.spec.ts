@@ -50,7 +50,7 @@ test("a portal refuses an anonymous request before it renders anything", async (
   // navigation bolted on, which is exactly the bug this guards.
   const response = await request.get("/demo/college", { maxRedirects: 0 });
   expect(response.status()).toBe(307);
-  expect(response.headers()["location"]).toContain("/demo/sign-in");
+  expect(response.headers()["location"]).toContain("/sign-in");
   // Nothing about the college — not its records, and not its name.
   expect(await response.text()).not.toContain("Verdigris");
 });
@@ -72,7 +72,7 @@ test("the way in is the sign-in page, not the role picker", async ({ page }) => 
   // `signInAs` refusing on the server when the mode is not `demo`, because a
   // Server Action is a URL and a hidden button is still a reachable one.
   await page.getByRole("link", { name: "Sign in" }).click();
-  await page.waitForURL("**/demo/sign-in");
+  await page.waitForURL("**/sign-in");
   await expect(page.getByLabel("Work email")).toBeVisible();
 });
 
@@ -84,7 +84,7 @@ test("a code signs a board officer in, and only into their own portal", async ({
   // to a password and never sees this path; a public employee is the population
   // the code path now exists for, and the only one this platform holds no
   // password for.
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(BOARD);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Code")).toBeVisible();
@@ -108,7 +108,7 @@ test("a code signs a board officer in, and only into their own portal", async ({
 });
 
 test("a wrong code refuses, and no session starts", async ({ page, context }) => {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(BOARD);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByLabel("Code")).toBeVisible();
@@ -128,7 +128,7 @@ test("a wrong code refuses, and no session starts", async ({ page, context }) =>
   // `.first()`, which would be an assertion about DOM order.
   const refusal = page.locator('[role="alert"]:not([id="__next-route-announcer__"])');
   await expect(refusal).toContainText(/not valid|expired|try again/i);
-  await expect(page).toHaveURL(/\/demo\/sign-in/);
+  await expect(page).toHaveURL(/\/sign-in/);
   expect((await context.cookies()).find((c) => c.name === "oe_session")).toBeUndefined();
   // Single use, expiry, and the attempt limit are asserted against the service
   // in `src/services/auth.test.ts`, where the clock can be moved. This is the
@@ -143,7 +143,7 @@ test("an invented address on the agency's domain looks exactly like a real offic
   // which guesses landed — a directory of which officers work on this programme
   // is exactly what a workforce board cannot have published on its behalf.
   const invented = "nobody.at.all@sekwp.example.org";
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(invented);
   await page.getByRole("button", { name: "Continue" }).click();
 

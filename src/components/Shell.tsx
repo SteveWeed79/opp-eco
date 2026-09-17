@@ -19,7 +19,14 @@ import { Button, ChoiceGroup, Modal, ToastProvider } from "@/components/ui";
 import { signInAs, signOut } from "@/auth/actions";
 import { brand } from "@/brand";
 import { isPartnerSurface } from "@/theme/theme";
-import { DEMO_ROOT, PORTAL_PATH, SIGN_IN_PATH, SITE_NAV, isDemoSurface } from "@/routes";
+import {
+  DEMO_ROOT,
+  PORTAL_PATH,
+  SIGN_IN_PATH,
+  SITE_NAV,
+  isDemoSurface,
+  isSignOnSurface,
+} from "@/routes";
 import type { ResolvedTheme } from "@/theme/resolve";
 
 /**
@@ -86,6 +93,22 @@ export function Shell({
   demoSignOn?: boolean;
 }) {
   const pathname = usePathname();
+
+  // Before either of the two below, because the sign-on screen is neither. See
+  // `isSignOnSurface`: the demo chrome would put a "nothing here is real"
+  // banner and a five-portal switcher above the one form a real person meets
+  // before they have an account, and the venture header would offer them four
+  // places to wander off to instead of signing in.
+  if (isSignOnSurface(pathname)) {
+    return (
+      <ToastProvider>
+        <div className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col bg-canvas">
+          <SignOnMasthead />
+          <main className="flex-1 flex flex-col">{children}</main>
+        </div>
+      </ToastProvider>
+    );
+  }
 
   if (!isDemoSurface(pathname)) {
     return (
@@ -396,6 +419,40 @@ function DemoChrome({
  * session to hold, and nothing here mutates — so the chrome is a mark, four
  * links, and one way into the prototype.
  */
+/**
+ * The brand, and nothing else.
+ *
+ * No navigation at all — not even the venture pages. Somebody on this screen is
+ * trying to get into an account, and every link is a way to fail at that. The
+ * mark stays a link to `/` so the page is not a dead end, which is the one
+ * escape route a sign-in screen owes anybody.
+ */
+function SignOnMasthead() {
+  return (
+    <header className="border-b border-line bg-white/85 backdrop-blur-xl">
+      <div className="max-w-6xl mx-auto px-6 py-4">
+        <Link href="/" className="inline-flex items-center gap-3 group">
+          <span
+            className={`w-10 h-10 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_2px_6px_-1px_rgb(3_105_161/0.5)] group-hover:from-ink-700 group-hover:to-ink-950 transition-all ${markTextSize(
+              brand.monogram,
+            )}`}
+          >
+            {brand.monogram}
+          </span>
+          <span className="leading-tight">
+            <span className="block text-sm font-extrabold tracking-tight text-ink-950">
+              {brand.lead}
+            </span>
+            <span className="block text-sm font-extrabold text-brand-700">
+              {brand.accent}
+            </span>
+          </span>
+        </Link>
+      </div>
+    </header>
+  );
+}
+
 function SiteHeader({ pathname }: { pathname: string }) {
   return (
     <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-line">

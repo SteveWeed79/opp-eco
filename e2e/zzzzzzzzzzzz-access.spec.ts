@@ -35,7 +35,7 @@ function echoedResetCode(email: string): string {
 }
 
 async function signInAsAdmin(page: import("@playwright/test").Page) {
-  await page.goto("/demo/sign-in");
+  await page.goto("/sign-in");
   await page.getByLabel("Work email").fill(ADMIN);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Forgot your password?" }).click();
