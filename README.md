@@ -65,6 +65,48 @@ password?**, paste the code the server logs, and choose one.
 sent a one-time code instead and is never shown a password field. See
 [Signing in](#signing-in).
 
+### Being an administrator, on your own database
+
+The two accounts above are fixtures, and neither is an administrator. The
+seeded administrator is on `.example`, which RFC 2606 reserves so that nothing
+can be delivered to it — and a reset code to that mailbox is the only recovery
+an administrator has, so it deliberately cannot be given a password.
+
+Everything in this product is done *through* the product, and this is the one
+thing that cannot be: the only surface that creates an account is the
+administrator's own console, so a deployment with no administrator has no way
+to get one. `npm run db:admin` is that one operator action.
+
+```bash
+DATABASE_URL=… npm run db:migrate
+DATABASE_URL=… npm run db:seed
+DATABASE_URL=… npm run db:admin -- you@yourdomain.com --name "Your Name"
+
+DATABASE_URL=… DATABASE_READ_ONLY=false AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev
+```
+
+It prints a temporary password once. `DATABASE_READ_ONLY=false` matters:
+without it the deployment is read-only and every button refuses — which is the
+right default for a database you did not mean to write to, and the wrong one
+for the deployment you are trying to use.
+
+Run with no arguments, `npm run db:admin` reports who the administrators are
+and whether each of them can actually get in — an account with no password and
+no authenticator is a row, not a way in.
+
+The password it prints is spent the first time it is used. Signing in with it
+produces a real session that may do exactly one thing: replace it. Typing a
+portal URL instead of using the form lands on the same page, because the
+obligation is carried on the session rather than by the form. Then enrol an
+authenticator on the admin console, and only once you have, set
+`AUTH_REQUIRE_MFA=true` — turning it on first locks out the only account that
+could enrol anybody.
+
+What the command deliberately will not do is turn an existing account into an
+administrator. A command that promotes a college's login is a privilege
+escalation with a friendly label, and it would be reachable by anybody who can
+read a connection string.
+
 ## Start here
 
 - [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
@@ -784,10 +826,26 @@ symbol mostly produces `Password1!`.
 self-serve signup: an administrator or an import creates the account, and the
 person chooses their own password after a code reaches the address their
 organization knows them by. "Forgot your password?" *is* that path — the same
-step whether you are replacing one or setting your first — which is also how the
-first administrator gets into a fresh deployment, and why nobody is ever told a
-password over the phone. Reset codes carry their own purpose, so asking for one
-does not invalidate a sign-in code somebody is already holding.
+step whether you are replacing one or setting your first — and it is why nobody
+is ever told a password over the phone. Reset codes carry their own purpose, so
+asking for one does not invalidate a sign-in code somebody is already holding.
+
+**With exactly one exception, and it is the bootstrap.** A fresh deployment has
+no administrator, and the only surface that creates an account is an
+administrator's console — so `npm run db:admin` stands the first one up from a
+terminal and prints a password it generated. That credential is stored
+`must_change`, which makes it the one password in the system somebody else
+chose.
+
+**A password somebody else chose is spent the first time it is used.** Signing
+in with one produces a real session — both factors proved, nothing
+half-authenticated about it — that may do exactly one thing: replace the
+password. The obligation rides on the resolved actor rather than on the form,
+because a person who types a portal URL instead of following the form has to
+land on it too; `actorForPortal` and `viewerActor` both turn that session back
+to the sign-in page, and `portal-gate.test.ts` fails if either stops. Choosing
+a password revokes every session including that one, so the new password is
+proved by using it.
 
 **One-time codes are eight characters** from an alphabet with no `0`, `O`, `1`,
 `I` or `L` in it, good for ten minutes, usable once, dead after five wrong

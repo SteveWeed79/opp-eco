@@ -150,6 +150,10 @@ export const getActor = cache(
 export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
   const session = await getActor();
   if (session) {
+    // Owing a password change outranks everything else, including being in the
+    // right portal. The sign-in page renders the change form rather than
+    // redirecting back, so this is a door that leads somewhere.
+    if (session.passwordChangeOwed) redirect(SIGN_IN_PATH);
     if (canView(session, portal)) return session;
     // Not `contextFor(portal)`: silently rendering someone else's portal under
     // a header that still says "Signed in as Steve Weed" is worse than the
@@ -175,7 +179,10 @@ export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
  */
 export async function viewerActor(): Promise<ActorContext> {
   const session = await getActor();
-  if (session) return session;
+  if (session) {
+    if (session.passwordChangeOwed) redirect(SIGN_IN_PATH);
+    return session;
+  }
   if (!anonymousFallbackAllowed()) redirect(SIGN_IN_PATH);
   return contextFor("student");
 }

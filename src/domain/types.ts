@@ -33,6 +33,20 @@ export interface User {
 export interface ActorContext {
   user: User;
   membership: Membership;
+  /**
+   * The session is real, and it may do exactly one thing: replace its password.
+   *
+   * Set when the stored password was put there by somebody else — an operator
+   * standing up the first administrator, an administrator restoring access to
+   * an account whose mailbox changed. Both factors have been proved, so this is
+   * not a half-authenticated session; it is a fully authenticated one carrying
+   * an obligation, which is why it is a property of the actor rather than a
+   * separate token like the MFA challenge.
+   *
+   * Absent on every context the demo and the system mint, because neither has a
+   * password to owe a change on.
+   */
+  passwordChangeOwed?: boolean;
 }
 
 // ---------------------------------------------------------------------------

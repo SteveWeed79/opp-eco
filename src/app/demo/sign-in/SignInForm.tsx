@@ -39,8 +39,16 @@ type Step =
   | { name: "reset-sent" }
   | { name: "must-change" };
 
-export function SignInForm() {
-  const [step, setStep] = useState<Step>({ name: "address" });
+/**
+ * @param mustChange The session already exists and owes a password of its own.
+ *   Server-resolved rather than a step this component walked to — a person who
+ *   typed a portal URL instead of following the form gets here too, and client
+ *   state knows nothing about that.
+ */
+export function SignInForm({ mustChange = false }: { mustChange?: boolean } = {}) {
+  const [step, setStep] = useState<Step>(
+    mustChange ? { name: "must-change" } : { name: "address" },
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
