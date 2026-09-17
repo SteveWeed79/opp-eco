@@ -236,6 +236,8 @@ withDatabase("parity with the in-memory layer", () => {
       awaitingReview: await repos.timeEntries.awaitingReview(actor),
       creditAwards: await repos.creditAwards.list(actor),
       outcomes: await repos.outcomes.list(actor),
+      hostOffers: await repos.hostOffers.list(actor),
+      regionDefinitions: await repos.regionDefinitions.list(actor),
       consents: await repos.consents.list(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
@@ -346,6 +348,9 @@ withDatabase("parity with the in-memory layer", () => {
       expect(byId(await postgres.outcomes.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.outcomes.forStudent(actor, student.id)),
       );
+      expect(byId(await postgres.hostOffers.forStudent(actor, student.id))).toEqual(
+        byId(await memoryRepositories.hostOffers.forStudent(actor, student.id)),
+      );
       expect(byId(await postgres.consents.forStudent(actor, student.id))).toEqual(
         byId(await memoryRepositories.consents.forStudent(actor, student.id)),
       );
@@ -370,6 +375,12 @@ withDatabase("parity with the in-memory layer", () => {
         byId(await postgres.outcomes.forApplication(actor, application.id)),
       ).toEqual(
         byId(await memoryRepositories.outcomes.forApplication(actor, application.id)),
+      );
+      // The one accessor here that returns a single record or null rather than
+      // a list, so `byId` would hide a disagreement about which of the two it
+      // was. Compared directly for that reason.
+      expect(await postgres.hostOffers.forApplication(actor, application.id)).toEqual(
+        await memoryRepositories.hostOffers.forApplication(actor, application.id),
       );
       expect(
         byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
@@ -443,6 +454,71 @@ withDatabase("parity with the in-memory layer", () => {
     expect(once.map((p) => p.id)).toEqual(twice.map((p) => p.id));
   });
 
+  it("gives every role the boundary its market is measured against", async () => {
+    // The loosest scope in the schema, and the assertion is that it really is
+    // loose: a definition names nobody and holds no figure, and a boundary
+    // somebody cannot see is a figure they cannot check. Pinned because the
+    // reflex in this codebase is to narrow, and narrowing here would leave a
+    // learner unable to find out what "in region" means.
+    const postgres = pg();
+    for (const role of ROLES) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.regionDefinitions.list(contextFor(role));
+        expect(rows.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("shows an employer its own host answers and nobody else's", async () => {
+    // The parity assertions above compare the two layers against each other,
+    // which two empty lists satisfy perfectly. This one pins that the employer
+    // narrowing returns something and leaves something out, so a scoping rule
+    // that quietly matched nothing could not pass as agreement.
+    const postgres = pg();
+    const actor = contextFor("business");
+    const own = actor.membership.organizationId;
+
+    for (const repos of [postgres, memoryRepositories]) {
+      const rows = await repos.hostOffers.list(actor);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((o) => o.businessId === own)).toBe(true);
+    }
+
+    // And there is genuinely a row belonging to somebody else to be excluded,
+    // or the assertion above proves nothing.
+    const all = await postgres.hostOffers.list(contextFor("admin"));
+    expect(all.some((o) => o.businessId !== own)).toBe(true);
+  });
+
+  it("strips the employer's note for the learner and the board, and keeps the answer", async () => {
+    const postgres = pg();
+    const seeded = await postgres.hostOffers.list(contextFor("admin"));
+    const withNote = seeded.filter((o) => o.note);
+    expect(withNote.length).toBeGreaterThan(0);
+
+    // Everybody but the administrator and the author. The college is on this
+    // list deliberately despite working the same cases — narrow by default,
+    // because widening later costs nothing and un-disclosing is impossible.
+    for (const role of ["student", "board", "college"] as const) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.hostOffers.list(contextFor(role));
+        expect(rows.every((o) => o.note === undefined)).toBe(true);
+        // The answer is not a secret from any of them. A learner knows
+        // whether they were offered a job.
+        expect(rows.every((o) => Boolean(o.answer))).toBe(true);
+      }
+    }
+
+    // The employer that wrote it reads it back — a statement somebody cannot
+    // read back is one they cannot correct — and so does the administrator.
+    for (const role of ["business", "admin"] as const) {
+      for (const repos of [postgres, memoryRepositories]) {
+        const rows = await repos.hostOffers.list(contextFor(role));
+        expect(rows.some((o) => o.note)).toBe(true);
+      }
+    }
+  });
+
   it("refuses another market's records, whoever asks", async () => {
     const postgres = pg();
     const other = await client.query<{ id: string }>(
@@ -462,6 +538,61 @@ withDatabase("parity with the in-memory layer", () => {
 withDatabase("the write path", () => {
   /** A fresh database for each write case, so one cannot depend on another. */
   beforeAll(reseed);
+
+  it("clears the free text on a purged learner's observations, and nobody else's", async () => {
+    // The in-memory layer has this covered in `consent.test.ts`; this is the
+    // half that only SQL can get wrong. Two UPDATEs with a `student_id`
+    // predicate look obviously right and are exactly the shape that silently
+    // touches every row when the predicate is dropped — so the assertion is
+    // both that the learner's text is gone and that somebody else's is not.
+    const store = postgresStore(client);
+    const repos = postgresRepositories(client);
+    const admin = contextFor("admin");
+
+    const offers = await repos.hostOffers.list(admin);
+    const mine = offers.find((o) => o.note)!;
+    expect(mine).toBeTruthy();
+    const theirs = offers.find((o) => o.note && o.studentId !== mine.studentId);
+    expect(theirs).toBeTruthy();
+
+    const student = (await repos.students.find(admin, mine.studentId))!;
+    await store.transaction((uow) => {
+      uow.purgeLearner({ ...student, name: "Purged", email: "" }, new Date().toISOString());
+    });
+
+    const after = await repos.hostOffers.list(admin);
+    expect(after.find((o) => o.id === mine.id)?.note).toBeUndefined();
+    expect(after.find((o) => o.id === theirs!.id)?.note).toBe(theirs!.note);
+
+    // The answer itself survives. Purging anonymises rather than deletes, and
+    // what survives is what the aggregates are computed from.
+    expect(after.find((o) => o.id === mine.id)?.answer).toBe(mine.answer);
+
+    for (const row of await repos.outcomes.forStudent(admin, mine.studentId)) {
+      expect(row.detail).toBeUndefined();
+    }
+  });
+
+  it("never lets a stale save blank an exit date", async () => {
+    // `saveApplication` is last-write-wins for everything except this column,
+    // which COALESCEs. A caller holding an application it loaded before 0016 —
+    // or before the placement ended — would otherwise write `exited_on = NULL`
+    // over a real date, and the follow-up clock would silently fall back to
+    // `status_since` for that row with nothing to show it had happened.
+    const store = postgresStore(client);
+    const repos = postgresRepositories(client);
+    const admin = contextFor("admin");
+
+    const exited = (await repos.applications.list(admin)).find((a) => a.exitedOn)!;
+    expect(exited).toBeTruthy();
+
+    await store.transaction((uow) => {
+      uow.saveApplication({ ...exited, exitedOn: undefined }, exited.version);
+    });
+
+    const after = await repos.applications.find(admin, exited.id);
+    expect(after?.exitedOn).toBe(exited.exitedOn);
+  });
 
   it("commits the row, its audit entry, and its notification together", async () => {
     const store = postgresStore(client);

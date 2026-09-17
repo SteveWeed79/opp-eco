@@ -21,10 +21,12 @@
  * counts a missing row as a result of any kind.
  */
 
+import { windowDueNow, windowStatuses, type WindowStatus } from "./window";
 import type {
   ActorRole,
   Application,
   ApplicationStatus,
+  RegionDefinition,
   Outcome,
   OutcomeKind,
 } from "./types";
@@ -40,7 +42,8 @@ import type {
  * `meta` is the reporting line — what this value means when it reaches a board
  * or a funder — because the whole hazard of an outcome taxonomy is a well-meant
  * officer filing "she got a job in Joplin" under the value that makes the
- * quarter look good.
+ * quarter look good. That hazard is now largely designed out: the officer names
+ * the county and the platform decides what it counts as.
  */
 export const OUTCOME_KINDS: {
   value: OutcomeKind;
@@ -49,25 +52,11 @@ export const OUTCOME_KINDS: {
   description: string;
 }[] = [
   {
-    value: "employed_by_host",
-    label: "Hired by the host employer",
-    meta: "Counts as regional employment",
+    value: "employed",
+    label: "Employed",
+    meta: "Where they went decides whether it counts as retention",
     description:
-      "The employer who supervised the placement took them on. The strongest result this programme can produce, and the one an employer is asked to confirm.",
-  },
-  {
-    value: "employed_in_region",
-    label: "Employed in the region",
-    meta: "Counts as regional employment",
-    description:
-      "Working for a different employer inside the market's counties. A different employer is not a worse result — the point is that the talent stayed.",
-  },
-  {
-    value: "employed_elsewhere",
-    label: "Employed outside the region",
-    meta: "Employment, but not retention",
-    description:
-      "Working, and gone. Recorded plainly rather than folded into a general employment figure: a programme that reliably produces graduates who leave is a pipeline out of the county, and the board funding it should be able to see that.",
+      "Working. Whether that counts as the talent staying is derived from the county recorded against it, not chosen here — which is what stops one college counting a job in Joplin as regional and another not.",
   },
   {
     value: "continued_education",
@@ -98,50 +87,109 @@ export function outcomeKindLabel(kind: OutcomeKind): string {
   return KIND_LABELS.get(kind) ?? kind;
 }
 
-/**
- * The two values that mean "the talent stayed", which is the venture's own
- * measure and the one number a funder asks for at the end of year three.
- *
- * `employed_by_host` is regional by construction: the host is an employer in
- * this market, so a hire by them is a hire in the region. Stating it here
- * rather than at each call site is what stops one report counting it and
- * another not.
- */
-export function isRegionalEmployment(kind: OutcomeKind): boolean {
-  return kind === "employed_by_host" || kind === "employed_in_region";
-}
-
 /** Employment anywhere — regional or not. Separate, because both get reported. */
 export function isEmployment(kind: OutcomeKind): boolean {
-  return isRegionalEmployment(kind) || kind === "employed_elsewhere";
+  return kind === "employed";
 }
+
+/**
+ * Whether a captured place is inside a market's region.
+ *
+ * Both parts compared, and the state is the load-bearing one: Kansas and
+ * Missouri each have a Jackson County, and Pittsburg is twenty miles from
+ * Joplin across the line. A county-name match alone would score a job in
+ * Missouri as staying.
+ */
+export function placeInRegion(
+  county: string,
+  state: string,
+  region: Boundary,
+): boolean {
+  if (state.trim().toUpperCase() !== region.state.trim().toUpperCase()) return false;
+  const named = county.trim().toLowerCase();
+  return region.counties.some((c) => c.trim().toLowerCase() === named);
+}
+
+/**
+ * Did the talent stay — the venture's own measure, and the one number a funder
+ * asks for at the end of year three.
+ *
+ * **Derived, never stored.** The recorder names a county; this decides what it
+ * counts as, against boundaries the market declares. That is the difference
+ * between a figure two colleges compute the same way and one they do not.
+ *
+ * Three answers rather than two, and the third is the honest one:
+ *
+ *  - `true` / `false` where a place was captured, or where a pre-county row
+ *    carried an explicit judgement that is still worth honouring
+ *  - **`null` where nobody knows** — an employment outcome with no place on it.
+ *    Not folded into `false`, because "we did not capture where they went" and
+ *    "they left" are different facts and a rate that confuses them understates
+ *    retention by exactly the size of the gap in the follow-up process
+ *
+ * A hire by the host employer is regional by construction — the host is an
+ * employer in this market — so it needs no county to be answered.
+ */
+export function inRegion(
+  outcome: Outcome,
+  region: Boundary,
+): boolean | null {
+  if (!isEmployment(outcome.kind)) return null;
+  if (outcome.employedByHost) return true;
+  if (outcome.employmentCounty && outcome.employmentState) {
+    return placeInRegion(outcome.employmentCounty, outcome.employmentState, region);
+  }
+  return outcome.assertedInRegion;
+}
+
+/**
+ * Just the two fields that decide whether a place is inside a region.
+ *
+ * Structural rather than `RegionDefinition` itself, so the pure predicates here
+ * stay testable without an id, an effective date and an author — and so a
+ * caller holding a definition can pass it unchanged.
+ */
+export type Boundary = Pick<RegionDefinition, "counties" | "state">;
 
 // ---------------------------------------------------------------------------
 // Who may record one
 // ---------------------------------------------------------------------------
 
 /**
- * The college and the administrator, and for now nobody else.
+ * The college, the administrator, and the learner about themselves.
  *
  * The college because follow-up is local-operator work and it already holds the
  * relationship that makes the call get answered; the administrator for the
  * reason they can do anything else here, which is that a market whose college
  * has not acted is what an operator exists to unstick.
  *
- * Two parties are **deliberately absent and are the open question** (Q23): the
- * learner, whose self-report is the most common source in real workforce
- * reporting, and the employer, who is the only party that actually knows it
- * hired someone. Both are better evidence than a college's second-hand note for
- * the outcomes they can speak to, and both want a surface and a rule about what
- * each may claim — an employer can attest `employed_by_host` and cannot possibly
- * know about `employed_elsewhere`. Adding them is a scoping decision rather than
- * a wiring job, so the narrow answer ships first.
+ * **The learner is here now**, and the bound on them is the whole of why it is
+ * safe: a learner may record about their own record and no other, which
+ * `recordOutcome` enforces and `studentScope` makes unreachable anyway. This is
+ * their own disclosure about their own life — the same seam the consent model
+ * already draws between what a student enters and what an institution verifies
+ * — and self-report is the commonest source in real workforce reporting for the
+ * plain reason that a college phoning fourteen people who have left town is the
+ * bottleneck.
+ *
+ * What that buys comes with a bias that runs one way: people who landed a good
+ * job answer, and people who did not go quiet. `source` keeps a self-report
+ * distinguishable from a college's verified note, `unmeasured` keeps the size
+ * of the silence visible, and the administrator's chase queue is what turns
+ * silence into a phone call rather than a gap in a chart.
+ *
+ * The **employer is deliberately still absent from this list**, and that is not
+ * an omission. It answers the one question it can speak to through `HostOffer`,
+ * which records what it decided about its own headcount; an accepted offer
+ * writes the outcome from there. What an employer cannot do is file an outcome
+ * directly, because everything else an outcome can say — continued education,
+ * still looking, a job somewhere else — is hearsay from where it sits.
  *
  * The board is absent for the reason it sees no introductions: it reimburses
  * placements. Where a learner works afterwards is the programme's measure, not
  * a condition of a claim it already paid.
  */
-export const OUTCOME_RECORDERS: ActorRole[] = ["college", "admin"];
+export const OUTCOME_RECORDERS: ActorRole[] = ["college", "admin", "student"];
 
 export function canRecordOutcome(role: ActorRole): boolean {
   return OUTCOME_RECORDERS.includes(role);
@@ -197,7 +245,7 @@ const REACHED_PLACEMENT: ApplicationStatus[] = [
  * placement ended early is the one whose next step matters most, and a
  * follow-up process that quietly drops them reports only on its successes.
  */
-const NO_LONGER_RUNNING: ApplicationStatus[] = [
+export const NO_LONGER_RUNNING: ApplicationStatus[] = [
   "placement_completed",
   "terminated_early",
   "credit_pending",
@@ -248,8 +296,23 @@ export function followUpBlockReason(application: Application): string | null {
  * to make that exact.
  */
 export function daysSinceExit(application: Application, now: Date): number {
-  const since = new Date(application.statusSince).getTime();
+  const since = new Date(exitDateOf(application)).getTime();
   return Math.max(0, Math.floor((now.getTime() - since) / 86_400_000));
+}
+
+/**
+ * When the placement ended, for anything that measures from it.
+ *
+ * `exitedOn` when the row has one, and `statusSince` as the fallback for rows
+ * written before the column existed and never migrated. The fallback is the old
+ * approximation and is wrong by however long the application kept moving after
+ * the work stopped — kept anyway, because a follow-up clock that returns
+ * nothing for an un-backfilled row is worse than one that returns a date a
+ * little late, and the backfill in migration 0016 makes it unreachable in
+ * practice.
+ */
+export function exitDateOf(application: Application): string {
+  return application.exitedOn ?? application.statusSince;
 }
 
 /**
@@ -264,16 +327,54 @@ export function daysSinceExit(application: Application, now: Date): number {
  * once per learner — a queue that nags is better than a queue that forgets,
  * and a report that double-counts is just wrong.
  *
- * Recording a *second* observation about the same experience later is supported
- * and expected. It is simply not something a work queue can prompt, since no
- * date makes the next follow-up due rather than merely possible.
+ * **No longer one-shot.** This used to be "has anything at all been recorded
+ * against this placement", which cleared a learner from the queue forever the
+ * first time anybody asked — and the comment here used to say a second
+ * observation "is simply not something a work queue can prompt, since no date
+ * makes the next follow-up due rather than merely possible".
+ *
+ * There is now a date. `window.ts` puts two of them on every placement, at the
+ * 2nd and 4th calendar quarter after it ended, so a placement re-enters this
+ * queue when its next window opens and leaves again when that window is
+ * answered. A window that closed unanswered does **not** come back: nobody can
+ * be phoned in February and asked where they were last August with any
+ * confidence, and a queue offering impossible work teaches its operator to
+ * ignore the queue. Those are reported as missed instead.
  */
 export function awaitsFollowUp(
   application: Application,
   outcomes: Outcome[],
+  now: Date,
 ): boolean {
-  if (!hasExited(application)) return false;
-  return !outcomes.some((o) => o.applicationId === application.id);
+  return followUpWindowDue(application, outcomes, now) !== null;
+}
+
+/** This placement's windows and where each stands, or none if it has not ended. */
+export function followUpWindowsFor(
+  application: Application,
+  outcomes: Outcome[],
+  now: Date,
+): WindowStatus[] {
+  if (!hasExited(application)) return [];
+  return windowStatuses(
+    exitDateOf(application),
+    outcomes.filter((o) => o.applicationId === application.id),
+    now,
+  );
+}
+
+/** The window to ask about now, or null when nothing is open and unanswered. */
+export function followUpWindowDue(
+  application: Application,
+  outcomes: Outcome[],
+  now: Date,
+): WindowStatus | null {
+  if (!hasExited(application)) return null;
+  return windowDueNow(
+    exitDateOf(application),
+    outcomes.filter((o) => o.applicationId === application.id),
+    now,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +389,14 @@ export interface OutcomeSummary {
   byKind: { kind: OutcomeKind; label: string; count: number }[];
   employed: number;
   regional: number;
+  /**
+   * Employment outcomes carrying no place at all.
+   *
+   * Its own number because it is a process failure rather than a result: it
+   * means somebody recorded a job and not where it was. Rolling it into
+   * "not regional" would make an incomplete follow-up look like talent leaving.
+   */
+  placeUnknown: number;
   /**
    * Regional employment as a share of *measured* learners, or null when nothing
    * has been measured.
@@ -310,9 +419,35 @@ export interface OutcomeSummary {
  * `observedOn` decides it, with `recordedOn` breaking ties, since two
  * observations of the same date differ only by which was entered later.
  */
+/**
+ * The region an outcome is measured against, looked up by market.
+ *
+ * A lookup rather than one market, because the administrator reads every market
+ * at once and a learner who stayed in Ellis County stayed with respect to the
+ * Hays market and nowhere else. Summarising a cross-market set against a single
+ * region would score most of it as having left.
+ *
+ * Returning null for a market that cannot be resolved is deliberate: the
+ * outcome then has no region to be judged against, which lands in
+ * `placeUnknown` rather than silently counting as leaving.
+ */
+export type RegionLookup = (
+  marketId: string,
+  /**
+   * When the observation was true.
+   *
+   * A boundary moves, and an outcome has to be judged against the one that was
+   * real when it was observed — not the one in force at the moment somebody
+   * happens to run the report. Without this argument a redesignation in 2028
+   * silently rewrites the 2026 figure, and nothing on the screen says so.
+   */
+  observedOn: string,
+) => Boundary | null;
+
 export function summarizeOutcomes(
   outcomes: Outcome[],
   unmeasured: number,
+  regionFor: RegionLookup,
 ): OutcomeSummary {
   const latest = new Map<string, Outcome>();
   for (const outcome of outcomes) {
@@ -329,8 +464,22 @@ export function summarizeOutcomes(
     count: current.filter((o) => o.kind === value).length,
   }));
 
+  const stayed = (o: Outcome): boolean | null => {
+    // The boundary as it was when the observation was made, not as it is now.
+    // A redesignation must not reach backwards and change a figure that has
+    // already been reported.
+    const region = regionFor(o.marketId, o.observedOn);
+    return region ? inRegion(o, region) : null;
+  };
+
   const employed = current.filter((o) => isEmployment(o.kind)).length;
-  const regional = current.filter((o) => isRegionalEmployment(o.kind)).length;
+  const regional = current.filter((o) => stayed(o) === true).length;
+  // Employment whose place was never captured. Counted and reported rather
+  // than silently scored as leaving, because the two are different facts and
+  // folding them together understates retention by the size of the gap.
+  const placeUnknown = current.filter(
+    (o) => isEmployment(o.kind) && stayed(o) === null,
+  ).length;
 
   return {
     measured: current.length,
@@ -338,6 +487,7 @@ export function summarizeOutcomes(
     byKind,
     employed,
     regional,
+    placeUnknown,
     regionalRate: current.length === 0 ? null : regional / current.length,
   };
 }

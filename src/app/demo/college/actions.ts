@@ -64,10 +64,12 @@ export async function collegeCloseIntroduction(
 /**
  * Record what one of this college's learners did next.
  *
- * The college rather than the employer or the learner, for now: follow-up is
- * local-operator work and the college already holds the relationship that makes
- * the call get answered. Widening it to the two parties with first-hand
- * knowledge is the open question the domain names (Q23).
+ * The college because follow-up is local-operator work and it already holds the
+ * relationship that makes the call get answered. It is no longer the only
+ * party: a learner records their own through the student portal's wrapper, and
+ * an employer answers what it decided through `HostOffer`. Three narrow
+ * channels rather than one wide one, each bounded to what its party can
+ * actually know.
  */
 export async function collegeRecordOutcome(
   studentId: unknown,
@@ -75,8 +77,21 @@ export async function collegeRecordOutcome(
   kind: unknown,
   observedOn: unknown,
   detail?: unknown,
+  employedByHost?: unknown,
+  employmentCounty?: unknown,
+  employmentState?: unknown,
 ): Promise<ActionResult> {
-  return recordFollowUp("college", studentId, applicationId, kind, observedOn, detail);
+  return recordFollowUp(
+    "college",
+    studentId,
+    applicationId,
+    kind,
+    observedOn,
+    detail,
+    employedByHost,
+    employmentCounty,
+    employmentState,
+  );
 }
 
 /**

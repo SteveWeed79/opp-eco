@@ -33,6 +33,20 @@ export interface User {
 export interface ActorContext {
   user: User;
   membership: Membership;
+  /**
+   * The session is real, and it may do exactly one thing: replace its password.
+   *
+   * Set when the stored password was put there by somebody else — an operator
+   * standing up the first administrator, an administrator restoring access to
+   * an account whose mailbox changed. Both factors have been proved, so this is
+   * not a half-authenticated session; it is a fully authenticated one carrying
+   * an obligation, which is why it is a property of the actor rather than a
+   * separate token like the MFA challenge.
+   *
+   * Absent on every context the demo and the system mint, because neither has a
+   * password to owe a change on.
+   */
+  passwordChangeOwed?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,12 +73,69 @@ export interface Market {
   id: string;
   name: string;
   city: string;
-  counties: string[];
+  /**
+   * `counties` and `state` used to live here. They are now `RegionDefinition`
+   * rows, for the reason `FundingSource` took `subsidyBudget` off this type:
+   * the figure belongs in one place, and a market's boundary is a thing that
+   * changes on a date rather than a property it simply has.
+   */
   stage: MarketStage;
   boardId: string | null;
   collegeIds: string[];
   launchedOn: string | null;
   programYear: string;
+}
+
+/**
+ * The counties a market's retention figures are measured against, from a date.
+ *
+ * This was two columns on `Market`, and the comment on them said what this is:
+ * *"these become state-level reference data with effective dates once regions
+ * are redesignated"*. Local workforce areas are redesignated and MSAs are
+ * redrawn after each census, and when that happens a single mutable list of
+ * counties does something quietly catastrophic — it rewrites every historical
+ * figure. The 2026 retention rate recomputed in 2029 would come back different,
+ * against a boundary nobody had in 2026, and nothing would say so.
+ *
+ * So a definition is never edited. A boundary change writes a **new row with a
+ * later `effectiveFrom`**, and an outcome is judged against whichever definition
+ * was in force when it was observed. That is the whole guarantee, and it is why
+ * `redefineRegion` has no counterpart that updates one.
+ *
+ * Predetermined boundaries rather than a judgement, still: an officer recording
+ * where a learner went names a county, and whether that counts as staying is
+ * derived from these rather than decided by whoever typed it.
+ */
+export interface RegionDefinition {
+  id: string;
+  marketId: string;
+  /**
+   * The state those counties are in, as a two-letter code.
+   *
+   * Load-bearing rather than decoration. Kansas and Missouri both have a
+   * Jackson County, and Pittsburg is twenty miles from Joplin across the state
+   * line — so a county name alone cannot answer whether somebody stayed.
+   */
+  state: string;
+  counties: string[];
+  /**
+   * Inclusive. The definition in force at a moment is the latest one whose
+   * `effectiveFrom` is at or before it.
+   *
+   * One date rather than a from/to pair: a closed interval has to be kept
+   * consistent with its neighbour, and two rows disagreeing about where one
+   * boundary ends and the next begins is a gap no query would report.
+   */
+  effectiveFrom: string;
+  /** The redesignation notice, the census, the board's own paperwork. */
+  source?: string;
+  /**
+   * Null on the definitions migrated out of `markets`, because nobody recorded
+   * them — they were a column, and a column has no author. Every definition
+   * written since names one.
+   */
+  recordedByUserId: string | null;
+  recordedOn: string;
 }
 
 /**
@@ -530,6 +601,23 @@ export interface Application {
   submittedOn: string;
   /** When the current status was entered — drives dwell-time reporting. */
   statusSince: string;
+  /**
+   * When the placement itself ended, written once and never overwritten.
+   *
+   * Distinct from `statusSince`, which every later move rewrites. A placement
+   * that finishes in May, has credit granted in June and is closed in August
+   * carries `statusSince` of August — so a follow-up clock running from it
+   * would be three months out, which is enough to push an observation into the
+   * wrong quarter. That is the same failure as the in-region boolean arriving
+   * by a different door: a comparison broken in a way that still renders as a
+   * clean chart.
+   *
+   * Set on the first transition into a status that means the work is over,
+   * whatever happens afterwards. Optional only for the rows that predate the
+   * column; migration 0016 backfills them from the audit log, which has
+   * recorded the real transition all along.
+   */
+  exitedOn?: string;
   matchScore: MatchScore;
 
   interviewSlotId?: string;
@@ -574,6 +662,70 @@ export interface MatchFactor {
   label: string;
   weight: number;
   contribution: number;
+}
+
+// ---------------------------------------------------------------------------
+// What the host decided
+// ---------------------------------------------------------------------------
+
+/**
+ * What the employer who supervised a placement did at the end of it.
+ *
+ * Three answers rather than two, and the middle one is the reason this exists.
+ * "We offered and they turned it down" and "we made no offer" are opposite
+ * findings about a town: the first says the work is there and something else
+ * pulled the learner away, the second says the work is not there. A programme
+ * trying to answer why rural graduates leave needs to tell those apart, and
+ * collapsed into one "did not convert" they are indistinguishable — not just
+ * hard to separate, but unrecoverable, because separating them later means
+ * asking an employer again about a placement that ended a year ago.
+ */
+export type HostOfferAnswer = "accepted" | "declined" | "none";
+
+/**
+ * The host's answer about one finished placement.
+ *
+ * Its own record rather than columns on `Application`, following
+ * `MentorshipPairing`: this is a thing one party said on one date, and who said
+ * it is part of what it means. An application is a mutable entity that five
+ * roles move between states; this is a statement, and statements do not get
+ * edited by whoever touches the row next.
+ *
+ * **No row means nobody has answered**, which is the whole reason it is a
+ * record rather than a nullable column on the application. A three-valued
+ * column makes the absence of an answer look like a fourth answer sitting in
+ * the same field as the real ones, and the one thing that must never happen
+ * here is silence being read as "no offer" — an employer who has not replied is
+ * not an employer who declined to hire, and a retention figure that confused
+ * the two would understate the programme by the size of its own admin backlog.
+ * Absence is work to chase, exactly as a missing `Outcome` is.
+ */
+export interface HostOffer {
+  id: string;
+  marketId: string;
+  applicationId: string;
+  /**
+   * The employer, denormalised, so the scoping rule can narrow a row to its
+   * owner without a join — the same reason `MentorshipPairing` carries it.
+   */
+  businessId: string;
+  studentId: string;
+  answer: HostOfferAnswer;
+  recordedByUserId: string;
+  recordedOn: string;
+  /**
+   * The role that gave the answer, frozen when it was recorded, for the reason
+   * `Outcome.source` gives at length. Here it separates the employer answering
+   * for itself from an administrator writing down what an employer said on the
+   * phone — both are the employer's answer, and only one of them is firsthand.
+   */
+  source: ActorRole;
+  /**
+   * Why, when there was no offer, or why they turned it down. Optional and
+   * deliberately not required: a required note is how a one-click answer turns
+   * into a form, and an employer who abandons the form tells you nothing at all.
+   */
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -912,11 +1064,19 @@ export interface ConsentRecord {
  * end up working in their own region, and until now nothing could record that
  * either way.
  *
- * `employed_in_region` versus `employed_elsewhere` is the distinction the whole
- * argument rests on, so it is a first-class value rather than a note on a
- * general "employed". A programme that reliably produces graduates who leave is
- * a talent pipeline out of the county, and a board funding it deserves to be
- * able to see that.
+ * Whether the learner stayed is still the distinction the whole argument rests
+ * on — a programme that reliably produces graduates who leave is a talent
+ * pipeline out of the county, and a board funding it deserves to see that. But
+ * it is **derived from where they went**, not chosen here.
+ *
+ * This enum used to carry `employed_by_host`, `employed_in_region` and
+ * `employed_elsewhere`, which answered three questions at once: what happened,
+ * who employs them, and where. Welding the place into the outcome type made
+ * "in region" a judgement the recorder made with no definition of region — and
+ * two colleges will draw that line differently. `Outcome` now captures the
+ * county and state, and `inRegion` derives the answer against the market's own
+ * counties. One captured place also answers county, workforce-area and state
+ * roll-ups, which a boolean never could.
  *
  * `still_seeking` is a recorded fact, not an absence. A learner who was asked
  * and is still looking is different evidence from a learner nobody followed up
@@ -925,9 +1085,7 @@ export interface ConsentRecord {
  * absence: it has no row.**
  */
 export type OutcomeKind =
-  | "employed_by_host"
-  | "employed_in_region"
-  | "employed_elsewhere"
+  | "employed"
   | "continued_education"
   | "entered_training"
   | "still_seeking";
@@ -954,6 +1112,53 @@ export interface Outcome {
    */
   applicationId: string | null;
   kind: OutcomeKind;
+  /**
+   * Whether the employer who supervised the placement took them on.
+   *
+   * Its own field rather than a kind, because it answers a different question
+   * from the other two: `employed` says what happened, the county says where,
+   * and this says who. A hire by the host is the strongest result the programme
+   * can produce and the one an employer can attest to first-hand — but it was
+   * never a *place*, and folding it into the same enum as "in region" is what
+   * made that enum unable to answer either question cleanly.
+   *
+   * False for everything that is not employment.
+   */
+  employedByHost: boolean;
+  /**
+   * Where they went to work — the county and the two-letter state.
+   *
+   * Captured rather than judged. Whether this counts as staying is derived
+   * against the market's own counties, so two colleges cannot draw the line
+   * differently, and a boundary that turns out to be wrong can be re-derived
+   * from the same rows instead of re-asked of people nobody can reach.
+   *
+   * Name and state rather than a FIPS code, deliberately: both are unambiguous
+   * — Kansas and Missouri each have a Jackson County, so the state is what
+   * disambiguates — and a name joins to FIPS later from a real reference
+   * dataset. Inventing five-digit codes from memory would put a wrong one in
+   * the column that everything else is going to key on.
+   *
+   * Null together, never singly, and null for any outcome that is not
+   * employment. Null on an employment outcome means the place was not captured
+   * — which is a real state for rows that predate this field.
+   */
+  employmentCounty: string | null;
+  employmentState: string | null;
+  /**
+   * The in-region judgement carried over from the rows that only had one.
+   *
+   * Before the county was captured, `employed_in_region` and
+   * `employed_elsewhere` were the whole answer, and those rows are real
+   * history. This preserves what was asserted without pretending to a precision
+   * they never had: their place is unknown and stays unknown, but what the
+   * recorder claimed is not thrown away.
+   *
+   * Null on every row written since. `inRegion` prefers the captured place and
+   * falls back to this, which is why both can coexist without either being a
+   * lie.
+   */
+  assertedInRegion: boolean | null;
   /**
    * The date the outcome was true as of — **not** the day someone typed it in.
    *
@@ -1008,6 +1213,15 @@ export interface AuditEvent {
     | "mentorship_pairing"
     | "interview_slot"
     | "outcome"
+    // What the host did at the end of a placement. Audited like an outcome and
+    // for the same reason: it is a figure a board will be shown, so who entered
+    // it and when has to be answerable a year later — particularly when the
+    // answer was transcribed by an administrator rather than given firsthand.
+    | "host_offer"
+    // A market's boundary. Audited because a redesignation moves every figure
+    // reported after it, and "why did this market's retention rate change in
+    // 2027" has to be answerable with something other than a guess.
+    | "region"
     | "funding_source"
     | "funding_commitment"
     | "consent"

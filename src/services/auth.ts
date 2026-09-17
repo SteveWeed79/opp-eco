@@ -377,8 +377,19 @@ export async function resolveSessionToken(
   const user = await store.findUserById(session.userId);
   if (!user) return null;
 
+  // One more read than the session itself needs, and it buys the only thing
+  // that makes `must_change` mean anything. A temporary password somebody else
+  // chose has to stop working the moment it is used, and the form that says so
+  // is client state — a person who types a portal URL instead would otherwise
+  // carry on with it indefinitely. Answered here, once per request, so the
+  // obligation arrives with the actor rather than being re-derived by whichever
+  // gate happens to remember to ask.
+  //
+  // Null for a government account, which holds no password at all.
+  const stored = await store.findPassword(user.id);
+
   await store.touchSession(session.id, now.toISOString());
-  return { user, membership };
+  return { user, membership, passwordChangeOwed: stored?.mustChange === true };
 }
 
 /** Sign out. Revokes rather than deletes, so the row can be swept on schedule. */

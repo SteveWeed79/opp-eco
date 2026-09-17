@@ -23,6 +23,8 @@ import type {
   MentorshipPairing,
   Membership,
   Organization,
+  HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -227,6 +229,18 @@ export interface UnitOfWork {
    * apart. Exposing a general `saveUser` to achieve it would hand every caller
    * the ability to rename a person, which nothing in this product should be
    * able to do.
+   *
+   * **It reaches the free text on observations too** — `outcomes.detail` and
+   * `host_offers.note` — and that is four writes in one unit rather than two
+   * for the same reason. The rule this schedule states is that the rows stay
+   * and the identifiers go, and what survives is what aggregates are *by*.
+   * Nothing aggregates over a sentence, and a sentence is the one field here
+   * that can carry a name without anybody noticing: "no headcount, but she was
+   * good" is an ordinary thing for an employer to write and a direct identifier
+   * sitting beside a record whose identity has been scrubbed.
+   *
+   * The kind, the county and the answer are left alone. They are the figures
+   * the purge exists to preserve, and none of them names anybody.
    */
   purgeLearner(student: Student, at: string): void;
   /**
@@ -265,6 +279,27 @@ export interface UnitOfWork {
   createConsent(consent: ConsentRecord): void;
   saveConsent(consent: ConsentRecord, expectedVersion: number): void;
   createOutcome(outcome: Outcome): void;
+  /**
+   * Record what the host did at the end of a placement.
+   *
+   * Create-only like `createOutcome`, but for the opposite reason. An outcome
+   * is create-only because a second follow-up is a second observation and the
+   * history is the evidence. This is create-only because there is exactly one
+   * answer per placement — the unique index says so — and an employer changing
+   * its mind is rare enough to be an administrator's job rather than a write
+   * path anybody can reach.
+   */
+  createHostOffer(offer: HostOffer): void;
+  /**
+   * Record a new boundary for a market.
+   *
+   * Create-only, and there is deliberately no `saveRegionDefinition`. Every
+   * other create-only operation here is that way because the record is an
+   * observation; this one is that way because **editing a boundary rewrites
+   * every figure ever computed against it**. A redesignation is a new row with
+   * a later effective date, and the row it supersedes is left untouched.
+   */
+  createRegionDefinition(definition: RegionDefinition): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;
 }

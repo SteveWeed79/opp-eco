@@ -7,9 +7,10 @@
  * would let anyone file an employment claim as a college's finding, and Server
  * Actions accept direct POSTs.
  *
- * Who may record is `OUTCOME_RECORDERS` in the domain — the college and an
- * administrator. The service checks it again regardless of which wrapper
- * called, because a wrapper is a convenience and the domain is the rule.
+ * Who may record is `OUTCOME_RECORDERS` in the domain — the college, an
+ * administrator, and a learner about their own record. The service checks it
+ * again regardless of which wrapper called, because a wrapper is a convenience
+ * and the domain is the rule.
  */
 
 import { revalidatePath } from "next/cache";
@@ -32,7 +33,10 @@ import { PORTAL_PATH } from "@/routes";
  * down where they work would be a message nobody asked for about a record they
  * did not choose to have made.
  */
-const AFFECTED = [PORTAL_PATH.college, PORTAL_PATH.admin];
+const AFFECTED = [PORTAL_PATH.college, PORTAL_PATH.admin, PORTAL_PATH.student];
+
+const blank = (value: unknown) =>
+  value === "" || value === null || value === undefined ? undefined : value;
 
 export async function recordFollowUp(
   role: ActorRole,
@@ -41,6 +45,9 @@ export async function recordFollowUp(
   kind: unknown,
   observedOn: unknown,
   detail: unknown,
+  employedByHost?: unknown,
+  employmentCounty?: unknown,
+  employmentState?: unknown,
 ): Promise<ActionResult> {
   const input = validate(recordOutcomeInput, {
     studentId,
@@ -50,7 +57,12 @@ export async function recordFollowUp(
     applicationId: applicationId === "" || applicationId === undefined ? null : applicationId,
     kind,
     observedOn,
-    detail: detail === "" || detail === null ? undefined : detail,
+    detail: blank(detail),
+    // A form posts "" for a county nobody filled in, which is the ordinary case
+    // for a follow-up that established somebody is working and not where.
+    employedByHost: employedByHost === undefined ? undefined : Boolean(employedByHost),
+    employmentCounty: blank(employmentCounty),
+    employmentState: blank(employmentState),
   });
   if (!input.ok) return { ok: false, error: input.error };
 

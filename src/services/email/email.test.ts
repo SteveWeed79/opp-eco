@@ -243,10 +243,22 @@ describe("policy and templates agree", () => {
     // grew by one line per feature, which is how an orphaned template
     // eventually gets waved through by someone adding to it out of habit.
     const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship)\./;
-    // The one genuine exception to the rule: a nudge about an application that
-    // has sat too long, which no single status can own because it is about the
-    // dwell time in whichever status it is in.
-    const NUDGES = new Set(["application.stalled"]);
+    // The genuine exception to the rule, and it is a category rather than a
+    // list of favours: a message sent because somebody decided to ask, not
+    // because something changed. No status can own one — `application.stalled`
+    // is about the dwell time in whichever status it is in, and the two
+    // follow-ups are sent by an administrator pressing a button on a placement
+    // that finished and was never answered for.
+    //
+    // Nothing else checks these render, since they are exempt from the policy
+    // table that would otherwise catch a missing one. `outreach.test.ts` renders
+    // both follow-ups against every seeded learner, which is the check this
+    // exemption gives up.
+    const NUDGES = new Set([
+      "application.stalled",
+      "followup.employer",
+      "followup.learner",
+    ]);
 
     const used = new Set(policyKinds());
     const orphans = knownKinds().filter(

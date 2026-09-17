@@ -26,6 +26,7 @@
 import type {
   ActorContext,
   Application,
+  HostOffer,
   MentorshipOffer,
   Organization,
   Outcome,
@@ -35,6 +36,7 @@ import type {
 } from "@/domain/types";
 import {
   disclosureFor,
+  redactHostOffer,
   redactOutcome,
   redactStudent,
   redactTimeEntry,
@@ -47,6 +49,8 @@ import {
   consentScope,
   fundingCommitmentScope,
   marketScope,
+  hostOfferScope,
+  regionDefinitionScope,
   outcomeScope,
   mentorshipPairingScope,
   ownMarketScope,
@@ -63,6 +67,8 @@ import {
   toConsentRecord,
   toFundingCommitment,
   toFundingSource,
+  toHostOffer,
+  toRegionDefinition,
   toMentorshipPairing,
   toOutcome,
   toOrganization,
@@ -230,6 +236,30 @@ export function postgresRepositories(db: SqlClient): Repositories {
       toOutcome,
     );
     return actor.membership.role === "board" ? rows.map(redactOutcome) : rows;
+  }
+
+  async function hostOffersWhere(actor: ActorContext, extra: Sql): Promise<HostOffer[]> {
+    const where = joinSql([hostOfferScope(actor), extra], " AND ");
+    const rows = await all(
+      sql`SELECT * FROM host_offers WHERE ${where}
+          ORDER BY host_offers.recorded_on DESC, host_offers.id COLLATE "C"`,
+      toHostOffer,
+    );
+    // Everybody but the administrator and the employer who wrote it. See
+    // `visibleHostOffers` for why the college is on the wrong side of that line
+    // despite working the same cases.
+    const { role } = actor.membership;
+    return role === "admin" || role === "business" ? rows : rows.map(redactHostOffer);
+  }
+
+  function regionsWhere(actor: ActorContext, extra: Sql) {
+    const where = joinSql([regionDefinitionScope(actor), extra], " AND ");
+    return all(
+      sql`SELECT * FROM region_definitions WHERE ${where}
+          ORDER BY region_definitions.effective_from DESC,
+                   region_definitions.id COLLATE "C" DESC`,
+      toRegionDefinition,
+    );
   }
 
   async function timeEntriesWhere(
@@ -575,6 +605,25 @@ export function postgresRepositories(db: SqlClient): Repositories {
         outcomesWhere(actor, sql`outcomes.student_id = ${studentId}`),
       forApplication: (actor, applicationId) =>
         outcomesWhere(actor, sql`outcomes.application_id = ${applicationId}`),
+    },
+
+    hostOffers: {
+      list: (actor) => hostOffersWhere(actor, sql`TRUE`),
+      forApplication: async (actor, applicationId) => {
+        const rows = await hostOffersWhere(
+          actor,
+          sql`host_offers.application_id = ${applicationId}`,
+        );
+        return rows[0] ?? null;
+      },
+      forStudent: (actor, studentId) =>
+        hostOffersWhere(actor, sql`host_offers.student_id = ${studentId}`),
+    },
+
+    regionDefinitions: {
+      list: (actor) => regionsWhere(actor, sql`TRUE`),
+      forMarket: (actor, marketId) =>
+        regionsWhere(actor, sql`region_definitions.market_id = ${marketId}`),
     },
 
     auditEvents: {

@@ -24,6 +24,7 @@ import type {
   AuditEvent,
 } from "@/domain/types";
 import { attemptTransition, isTerminal } from "@/domain/workflow";
+import { NO_LONGER_RUNNING } from "@/domain/outcome";
 import { timesheetTotals } from "@/domain/timesheet";
 import { repositories } from "@/data/backend";
 import { marketFunding } from "@/lib/queries";
@@ -169,6 +170,18 @@ export async function executeTransition(
     // Preserve how far this application ever got, so closing it does not erase
     // its progress from funnel reporting.
     furthestStatus: furthestOf(existing, command.to),
+    /**
+     * The moment the work stopped, written once.
+     *
+     * `??` rather than an assignment: the first transition into a status that
+     * means the placement is over sets it, and credit being granted two months
+     * later does not move it. That is the whole difference from `statusSince`
+     * above, which every later move rewrites — and the reason the follow-up
+     * clock reads this instead.
+     */
+    exitedOn:
+      existing.exitedOn ??
+      (NO_LONGER_RUNNING.includes(command.to) ? at : undefined),
     version: existing.version,
   };
 

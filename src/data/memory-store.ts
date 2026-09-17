@@ -293,6 +293,20 @@ class MemoryUnitOfWork implements UnitOfWork {
           email: student.email,
         };
       }
+      // And the free text, for the reason the contract gives: a sentence is
+      // the one field here that can carry a name without anybody noticing.
+      // Rewritten in place rather than filtered out — the observation itself is
+      // what the figures are computed from and has to survive.
+      for (let i = 0; i < seed.outcomes.length; i++) {
+        if (seed.outcomes[i].studentId === student.id && seed.outcomes[i].detail) {
+          seed.outcomes[i] = { ...seed.outcomes[i], detail: undefined };
+        }
+      }
+      for (let i = 0; i < seed.hostOffers.length; i++) {
+        if (seed.hostOffers[i].studentId === student.id && seed.hostOffers[i].note) {
+          seed.hostOffers[i] = { ...seed.hostOffers[i], note: undefined };
+        }
+      }
     });
   }
 
@@ -354,6 +368,46 @@ class MemoryUnitOfWork implements UnitOfWork {
     }
     this.effects.push(() => {
       seed.outcomes.push(outcome);
+    });
+  }
+
+  createRegionDefinition(definition: import("@/domain/types").RegionDefinition) {
+    if (seed.regionDefinitions.some((d) => d.id === definition.id)) {
+      throw new Error(`Region definition ${definition.id} already exists`);
+    }
+    // One boundary per market per instant, which Postgres enforces with a
+    // unique constraint. Checked here too, or the two backends disagree about
+    // whether a duplicate is an error or a silent second row — and the
+    // in-memory one is what the demo and the whole browser suite run on.
+    if (
+      seed.regionDefinitions.some(
+        (d) =>
+          d.marketId === definition.marketId &&
+          d.effectiveFrom === definition.effectiveFrom,
+      )
+    ) {
+      throw new Error(
+        `Market ${definition.marketId} already has a boundary effective ${definition.effectiveFrom}`,
+      );
+    }
+    this.effects.push(() => {
+      seed.regionDefinitions.push(definition);
+    });
+  }
+
+  createHostOffer(offer: import("@/domain/types").HostOffer) {
+    if (seed.hostOffers.some((o) => o.id === offer.id)) {
+      throw new Error(`Host offer ${offer.id} already exists`);
+    }
+    // The uniqueness that matters is one answer per placement, which is the
+    // constraint Postgres carries. Checked here too, or the two backends
+    // disagree about whether a second answer is an error or a silent duplicate
+    // — and the in-memory one is what the whole demo and e2e suite run on.
+    if (seed.hostOffers.some((o) => o.applicationId === offer.applicationId)) {
+      throw new Error(`Placement ${offer.applicationId} already has an answer`);
+    }
+    this.effects.push(() => {
+      seed.hostOffers.push(offer);
     });
   }
 

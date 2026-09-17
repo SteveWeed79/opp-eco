@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction } from "@/app/_actions/mentorship";
+import { answerHostOffer } from "@/app/_actions/offer";
 import { actorForPortal } from "@/auth/session";
 import { reviewHours } from "@/services/timesheet";
 import { reviewHoursInput, validate } from "@/services/validation";
@@ -85,4 +86,20 @@ export async function businessCloseIntroduction(
   note: unknown,
 ): Promise<ActionResult> {
   return closeIntroduction("business", pairingId, to, note);
+}
+
+/**
+ * Say what happened at the end of a placement.
+ *
+ * The role is hardcoded here, as everywhere in this file. The wrapper's whole
+ * job is that a direct POST cannot claim to be somebody else — and it matters
+ * more for this write than for most, because the value of the record is that
+ * the employer said it.
+ */
+export async function answerPlacementOffer(
+  applicationId: unknown,
+  answer: unknown,
+  note?: unknown,
+): Promise<ActionResult> {
+  return answerHostOffer("business", applicationId, answer, note);
 }

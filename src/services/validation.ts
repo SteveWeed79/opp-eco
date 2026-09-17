@@ -218,19 +218,94 @@ export const recordOutcomeInput = z.object({
   studentId: id,
   applicationId: id.nullable(),
   kind: z.enum([
-    "employed_by_host",
-    "employed_in_region",
-    "employed_elsewhere",
+    "employed",
     "continued_education",
     "entered_training",
     "still_seeking",
   ]),
+  employedByHost: z.boolean().optional(),
+  /**
+   * Where they went to work.
+   *
+   * Bounded and lightly shaped here; whether the county is one the market
+   * actually covers is not validated at all, deliberately. A learner can take
+   * a job anywhere, and the point of capturing the place is that the platform
+   * decides what it counts as rather than refusing what it did not expect.
+   *
+   * The state is two letters because that is what makes a county name
+   * unambiguous — Kansas and Missouri each have a Jackson County.
+   */
+  employmentCounty: z.string().trim().min(1).max(80).optional(),
+  employmentState: z
+    .string()
+    .trim()
+    .length(2, "Use the two-letter state code")
+    .regex(/^[A-Za-z]{2}$/, "Use the two-letter state code")
+    .optional(),
   observedOn: z.string().min(1).max(40),
   // Optional, unlike the note closing an introduction. A college that knows
   // only "she is working locally" should be able to say so — demanding the
   // employer's name as the price of recording the fact is how a follow-up
   // queue goes unworked.
   detail: z.string().trim().min(1).max(1000).optional(),
+});
+
+/**
+ * What the host did at the end of a placement.
+ *
+ * Three fields, and two of them are the whole request: which placement, and
+ * what happened. Everything else about the record — the employer, the learner,
+ * the market, the role that answered — is derived server-side from the
+ * placement and the acting membership, so there is nothing here a caller could
+ * use to file somebody else's hiring decision.
+ *
+ * `source` is deliberately absent for the same reason it is absent from
+ * `recordOutcomeInput`, and it matters more here: a caller who could name the
+ * source could file their own guess as an employer's firsthand answer, which
+ * is precisely the claim this record exists to be trusted about.
+ */
+export const recordHostOfferInput = z.object({
+  applicationId: id,
+  answer: z.enum(["accepted", "declined", "none"]),
+  // Never required. An employer who answered without explaining has still
+  // answered, and demanding a sentence as the price of a click is how a
+  // one-click question becomes a form nobody finishes.
+  note: z.string().trim().min(1).max(1000).optional(),
+});
+
+/**
+ * A market's new boundary.
+ *
+ * `source` is required, unlike almost every other note in this file. A
+ * redesignation moves every figure reported after it, and "why did this
+ * market's retention rate change in 2027" is a question somebody will ask —
+ * the answer has to be in the record rather than in somebody's memory.
+ */
+export const redefineRegionInput = z.object({
+  marketId: id,
+  state: z
+    .string()
+    .trim()
+    .length(2, "Use the two-letter state code")
+    .regex(/^[A-Za-z]{2}$/, "Use the two-letter state code"),
+  // Bounded, not validated against a real gazetteer. The platform decides what
+  // a county name *counts as* rather than refusing one it did not expect —
+  // the same stance `recordOutcomeInput` takes about where somebody works.
+  counties: z.array(z.string().trim().min(1).max(80)).min(1).max(120),
+  effectiveFrom: z.string().min(1).max(40),
+  source: z.string().trim().min(1).max(500),
+});
+
+/**
+ * A nudge from the chase queue.
+ *
+ * Two fields, and there is deliberately no third. The message itself is a
+ * template — see `outreach.ts` for why a compose box is the one thing this
+ * particular action must not have.
+ */
+export const sendNudgeInput = z.object({
+  applicationId: id,
+  audience: z.enum(["employer", "learner"]),
 });
 
 /**
