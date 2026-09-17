@@ -46,21 +46,49 @@ export default async function SignInPage() {
   if (actor && !owed) redirect(PORTAL_PATH[actor.membership.role]);
 
   if (demonstration) {
+    // Told, not redirected — a sign-in page that bounces somewhere else is
+    // indistinguishable from a broken one. But *what* it says has to be useful
+    // to the person in front of it, who came here to sign in and cannot.
+    //
+    // The operator's fix is shown in development only. In production it would
+    // be deployment detail on a public URL, and nobody reading it there could
+    // act on it anyway.
+    const development = process.env.NODE_ENV !== "production";
     return (
       <div className="max-w-md mx-auto px-6 pt-16 pb-20 space-y-6">
         <PageHeader
           eyebrow="Sign in"
-          title="There is nothing to sign in to"
-          subtitle="This deployment is running the demonstration, which has no accounts and no credentials — anyone can look at any portal."
+          title="Real sign-on is switched off"
+          subtitle="This deployment is running the demonstration, which holds no accounts and no credentials — anyone can open any portal without signing in."
         />
         <Card>
           <div className="px-6 py-5 space-y-4">
-            <p className="text-sm text-ink-700 leading-relaxed">
-              Said plainly rather than hidden, because a sign-in page that
-              redirects somewhere else is indistinguishable from a broken one.
-              A deployment holding real records runs real sign-on and this page
-              asks for a credential.
-            </p>
+            {development ? (
+              <>
+                <p className="text-sm text-ink-700 leading-relaxed">
+                  To turn it on, put these in <code className="font-mono text-xs bg-canvas-deep px-1.5 py-0.5 rounded">.env.local</code> and
+                  restart the server — environment files are read at boot, so an
+                  edit alone changes nothing:
+                </p>
+                <pre className="text-xs font-mono bg-ink-950 text-white rounded-card px-4 py-3 overflow-x-auto">
+{`AUTH_MODE=code
+AUTH_ECHO_CODES=true
+DATABASE_READ_ONLY=false`}
+                </pre>
+                <p className="text-sm text-ink-600 leading-relaxed">
+                  Then create an account to sign in as — the seed deliberately
+                  ships none:
+                </p>
+                <pre className="text-xs font-mono bg-ink-950 text-white rounded-card px-4 py-3 overflow-x-auto">
+{`npm run db:admin -- you@yourdomain.com --name "Your Name"`}
+                </pre>
+              </>
+            ) : (
+              <p className="text-sm text-ink-700 leading-relaxed">
+                If you were expecting to sign in here, this deployment is not the
+                one holding your account. Ask whoever sent you the link.
+              </p>
+            )}
             <Link
               href={DEMO_ROOT}
               className="inline-flex items-center gap-2 bg-gradient-to-b from-ink-700 to-ink-950 text-white px-4 py-2.5 rounded-card font-semibold text-sm"
