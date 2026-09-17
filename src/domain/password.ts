@@ -46,13 +46,26 @@ function scrypt(
 /**
  * Cost parameters.
  *
- * N=2^16, r=8, p=1 is roughly 64 MiB and a few hundred milliseconds per hash.
- * That is the point: it is slow for us once per sign-in and ruinous for
- * somebody working through a stolen table. `maxmem` has to be raised to match,
- * because Node's default ceiling is 32 MiB and scrypt refuses rather than
- * quietly using less.
+ * N=2^17, r=8, p=1 — OWASP's stated scrypt baseline, which works out at 128 MiB
+ * and roughly 350 ms per hash on the machine this was measured on. That is the
+ * point: slow for us once per sign-in, ruinous for somebody working through a
+ * stolen table. `maxmem` has to be raised to match, because Node's default
+ * ceiling is 32 MiB and scrypt refuses rather than quietly using less.
+ *
+ * Raised from 2^16, which was one notch below that baseline. It cost nothing to
+ * do, because the parameters travel inside the stored hash: `needsRehash`
+ * compares all three against these constants and `verifyPasswordSignIn`
+ * re-hashes on the next successful sign-in, so every existing password moves up
+ * as its owner uses it rather than in a migration that locks anybody out.
+ *
+ * **The memory is the thing to watch when raising this again.** 128 MiB is held
+ * for the duration of each hash, and `verifyPasswordSignIn` deliberately hashes
+ * even for an address that does not exist — otherwise the response time is the
+ * directory the wording refuses to be. So concurrent sign-ins multiply this,
+ * and on a small serverless instance the ceiling arrives sooner than the CPU
+ * cost suggests. The sign-on rate limit is what bounds it.
  */
-export const SCRYPT_N = 65536;
+export const SCRYPT_N = 131072;
 export const SCRYPT_R = 8;
 export const SCRYPT_P = 1;
 export const SCRYPT_KEY_BYTES = 32;
