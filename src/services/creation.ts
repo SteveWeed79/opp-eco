@@ -13,6 +13,8 @@
 import type {
   ActorContext,
   Application,
+  HostOffer,
+  HostOfferAnswer,
   InterviewSlot,
   MentorshipOffer,
   MentorshipOfferStatus,
@@ -26,6 +28,8 @@ import { scoreMatch } from "@/domain/matching";
 import { canApply, canTransact, transactBlockReason } from "@/domain/lifecycle";
 import { INTRODUCERS, placesLeft } from "@/domain/mentorship";
 import { canRecordOutcome, followUpBlockReason } from "@/domain/outcome";
+import { canRecordHostOffer, isHire, offerBlockReason } from "@/domain/offer";
+import { regionInForce } from "@/domain/region";
 import { repositories } from "@/data/backend";
 import { store } from "@/data/backend";
 import type { NotificationIntent, Store } from "@/data/store";
@@ -469,6 +473,19 @@ export interface RecordOutcomeInput {
   /** Null when the learner was reached some way other than a placement. */
   applicationId: string | null;
   kind: OutcomeKind;
+  /** Did the employer who supervised the placement take them on? */
+  employedByHost?: boolean;
+  /**
+   * Where they went to work — county and two-letter state.
+   *
+   * Only meaningful on an employment outcome, and optional even there: a
+   * follow-up that establishes somebody is working without establishing where
+   * is a real and common half-answer, and refusing it would mean recording
+   * nothing at all. It surfaces as `placeUnknown` in the summary rather than
+   * being quietly scored as having left.
+   */
+  employmentCounty?: string;
+  employmentState?: string;
   /** ISO date the outcome was true as of, not the day it is being entered. */
   observedOn: string;
   detail?: string;
@@ -490,7 +507,7 @@ export async function recordOutcome(
   if (!canRecordOutcome(actor.membership.role)) {
     return {
       ok: false,
-      error: "Only the college or an administrator can record an outcome.",
+      error: "Only the college, an administrator, or the learner can record an outcome.",
       code: "forbidden",
     };
   }
@@ -498,6 +515,22 @@ export async function recordOutcome(
   const student = await repositories.students.find(actor, input.studentId);
   if (!student) {
     return { ok: false, error: "Student not found.", code: "not_found" };
+  }
+
+  // A learner may record about themselves and nobody else.
+  //
+  // `studentScope` already makes another learner's record unresolvable, so the
+  // read above returns null and this is unreachable through the repositories.
+  // Stated anyway, for the reason every guard here is stated twice — and
+  // because the two refusals mean different things: "not found" is what a
+  // scoping rule says, and this is what the domain says. A learner who is told
+  // their own record does not exist has been told something false.
+  if (actor.membership.role === "student" && student.userId !== actor.user.id) {
+    return {
+      ok: false,
+      error: "You can only record an outcome about yourself.",
+      code: "forbidden",
+    };
   }
 
   const at = deps.now();
@@ -553,12 +586,36 @@ export async function recordOutcome(
   }
 
   const detail = input.detail?.trim();
+  /**
+   * Where they went, normalised, and only where it means something.
+   *
+   * Trimmed and upper-cased on the state so that "ks" and " KS " are one
+   * value — a comparison that is case-sensitive about a state code is a
+   * retention figure that silently drops rows.
+   */
+  const place =
+    input.kind === "employed" && input.employmentCounty && input.employmentState
+      ? {
+          county: input.employmentCounty.trim(),
+          state: input.employmentState.trim().toUpperCase(),
+        }
+      : null;
   const outcome: Outcome = {
     id: deps.id("out"),
     marketId: student.marketId,
     studentId: student.id,
     applicationId: application?.id ?? null,
     kind: input.kind,
+    // A place belongs to an employment outcome and to nothing else. Dropping it
+    // here rather than refusing keeps a caller from having to know that rule,
+    // and stops a stray county arriving on "still looking" and being counted.
+    employedByHost: input.kind === "employed" ? (input.employedByHost ?? false) : false,
+    employmentCounty: place?.county ?? null,
+    employmentState: place?.state ?? null,
+    // Null on everything written from here. `assertedInRegion` carries the
+    // judgement from rows that predate the captured county, and nothing new
+    // should ever be asserting what it can now derive.
+    assertedInRegion: null,
     observedOn: observedOn.toISOString(),
     recordedOn: at.toISOString(),
     recordedByUserId: actor.user.id,
@@ -585,6 +642,193 @@ export async function recordOutcome(
   });
 
   return { ok: true, created: outcome };
+}
+
+// ---------------------------------------------------------------------------
+// What the host did
+// ---------------------------------------------------------------------------
+
+export interface RecordHostOfferInput {
+  applicationId: string;
+  answer: HostOfferAnswer;
+  /** Why, when there was no offer. Never required — see `HostOffer.note`. */
+  note?: string;
+}
+
+/**
+ * Record what the employer did at the end of a placement.
+ *
+ * The cheapest high-value write in the product: one answer, from the only party
+ * that knows it, on a screen it already visits. Everything else about the
+ * record is derived here rather than accepted from the caller — the employer,
+ * the learner, the market and the role all come from the placement and the
+ * acting membership, so the request carries an application id and an answer and
+ * nothing that could be used to file somebody else's decision.
+ *
+ * **An accepted offer also writes the outcome**, in the same transaction, and
+ * that is the point of doing this at all. "Did you keep them?" is the strongest
+ * result the programme produces and the employer answering it should not leave
+ * a college to record the same fact again a month later. The employer never
+ * touches a county — it has no standing to say where a learner it did not hire
+ * went — but a hire by the host needs none: the county comes from the
+ * employer's own registered county, which is a fact about the employer rather
+ * than a claim about the learner.
+ */
+export async function recordHostOffer(
+  actor: ActorContext,
+  input: RecordHostOfferInput,
+  deps: CreationDeps = defaultDeps,
+): Promise<CreateResult<HostOffer>> {
+  if (!canRecordHostOffer(actor.membership.role)) {
+    return {
+      ok: false,
+      error: "Only the host employer or an administrator can answer this.",
+      code: "forbidden",
+    };
+  }
+
+  // Scoped read: an employer's application scope is its own postings, so a
+  // placement it did not host resolves to null here rather than to a refusal.
+  // That is the isolation, and the checks below are the second lock.
+  const application = await repositories.applications.find(actor, input.applicationId);
+  if (!application) {
+    return { ok: false, error: "Placement not found.", code: "not_found" };
+  }
+
+  const blocked = offerBlockReason(application);
+  if (blocked) return { ok: false, error: blocked, code: "forbidden" };
+
+  const posting = await repositories.postings.find(actor, application.postingId);
+  if (!posting) {
+    return { ok: false, error: "Placement not found.", code: "not_found" };
+  }
+  if (
+    actor.membership.role === "business" &&
+    posting.businessId !== actor.membership.organizationId
+  ) {
+    // Unreachable through the scoped reads above. Stated anyway: an employer
+    // answering for a placement it did not host would be filing a hiring
+    // decision in another company's name.
+    return {
+      ok: false,
+      error: "That placement was hosted by a different employer.",
+      code: "forbidden",
+    };
+  }
+
+  const already = await repositories.hostOffers.forApplication(actor, application.id);
+  if (already) {
+    return {
+      ok: false,
+      error: "This placement already has an answer.",
+      code: "duplicate",
+    };
+  }
+
+  const student = await repositories.students.find(actor, application.studentId);
+  if (!student) {
+    return { ok: false, error: "Learner not found.", code: "not_found" };
+  }
+
+  const at = deps.now();
+  const note = input.note?.trim();
+  const offer: HostOffer = {
+    id: deps.id("hoff"),
+    marketId: application.marketId,
+    applicationId: application.id,
+    businessId: posting.businessId,
+    studentId: application.studentId,
+    answer: input.answer,
+    recordedByUserId: actor.user.id,
+    recordedOn: at.toISOString(),
+    // Frozen from the acting membership and never taken from the caller, for
+    // the reason `Outcome.source` gives: a caller who could name the source
+    // could file their own guess as an employer's firsthand answer.
+    source: actor.membership.role,
+    note: note ? note : undefined,
+  };
+
+  /**
+   * The outcome a hire implies, written with the offer or not at all.
+   *
+   * Skipped when the college has already recorded a follow-up against this
+   * placement on the same day for the same kind — that is the duplicate
+   * `recordOutcome` refuses, and hitting it here would fail the whole
+   * transaction and lose the employer's answer along with it. The answer is
+   * the thing being asked for; the outcome is a convenience on top of it.
+   */
+  let outcome: Outcome | null = null;
+  if (isHire(offer.answer)) {
+    const existing = await repositories.outcomes.forApplication(actor, application.id);
+    const observedOn = at.toISOString();
+    const duplicate = existing.some(
+      (o) => o.kind === "employed" && o.observedOn === observedOn,
+    );
+    if (!duplicate) {
+      const organization = await repositories.organizations.find(
+        actor,
+        posting.businessId,
+      );
+      // The boundary in force now, for the state code that makes the county
+      // unambiguous. An employer hiring today is judged against today's map.
+      const region = regionInForce(
+        await repositories.regionDefinitions.forMarket(actor, application.marketId),
+        application.marketId,
+        observedOn,
+      );
+      outcome = {
+        id: deps.id("out"),
+        marketId: application.marketId,
+        studentId: application.studentId,
+        applicationId: application.id,
+        kind: "employed",
+        employedByHost: true,
+        // The employer's own county, not a guess about the learner. Null when
+        // the organization has none recorded, which lands as `placeUnknown`
+        // rather than as an invented place — `inRegion` answers true from
+        // `employedByHost` either way, and the county is what lets the report
+        // roll the hire up by county as well.
+        employmentCounty: organization?.county ?? null,
+        employmentState: organization?.county ? (region?.state ?? null) : null,
+        assertedInRegion: null,
+        observedOn,
+        recordedOn: observedOn,
+        recordedByUserId: actor.user.id,
+        source: actor.membership.role,
+      };
+    }
+  }
+
+  await deps.store.transaction((uow) => {
+    uow.createHostOffer(offer);
+    uow.appendAuditEvent({
+      marketId: offer.marketId,
+      at: offer.recordedOn,
+      actorUserId: actor.user.id,
+      actorRole: actor.membership.role,
+      entityType: "host_offer",
+      entityId: offer.id,
+      from: null,
+      to: offer.answer,
+      viaOverride: false,
+    });
+    if (outcome) {
+      uow.createOutcome(outcome);
+      uow.appendAuditEvent({
+        marketId: outcome.marketId,
+        at: outcome.recordedOn,
+        actorUserId: actor.user.id,
+        actorRole: actor.membership.role,
+        entityType: "outcome",
+        entityId: outcome.id,
+        from: null,
+        to: outcome.kind,
+        viaOverride: false,
+      });
+    }
+  });
+
+  return { ok: true, created: offer };
 }
 
 // ---------------------------------------------------------------------------

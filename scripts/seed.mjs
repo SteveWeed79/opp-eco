@@ -77,6 +77,8 @@ export const TABLES = [
   "sign_in_codes",
   "notification_outbox",
   "audit_events",
+  "region_definitions",
+  "host_offers",
   "outcomes",
   "consents",
   "funding_commitments",
@@ -109,16 +111,35 @@ export async function seedInto(tx) {
    */
   for (const market of seed.markets) {
     await insert(
-      `INSERT INTO markets (id, name, city, counties, stage, board_id, launched_on,
-         program_year)
-       VALUES ($1,$2,$3,$4,'configuring',NULL,$5,$6)`,
+      `INSERT INTO markets (id, name, city, stage, board_id,
+         launched_on, program_year)
+       VALUES ($1,$2,$3,'configuring',NULL,$4,$5)`,
       [
         market.id,
         market.name,
         market.city,
-        market.counties,
         market.launchedOn,
         market.programYear,
+      ],
+    );
+  }
+
+  // The boundary each market's figures are measured against. Loaded straight
+  // after the markets they belong to and before anything that reads one.
+  for (const region of seed.regionDefinitions) {
+    await insert(
+      `INSERT INTO region_definitions (id, market_id, state, counties,
+         effective_from, source, recorded_by, recorded_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        region.id,
+        region.marketId,
+        region.state,
+        region.counties,
+        region.effectiveFrom,
+        region.source ?? null,
+        region.recordedByUserId,
+        region.recordedOn,
       ],
     );
   }
@@ -322,11 +343,11 @@ export async function seedInto(tx) {
   for (const application of seed.applications) {
     await insert(
       `INSERT INTO applications (id, market_id, posting_id, student_id, track, status,
-         furthest_status, submitted_on, status_since, match_score,
+         furthest_status, submitted_on, status_since, exited_on, match_score,
          match_algorithm_version, match_factors, interview_slot_id,
          funding_authorized_hours, funding_authorized_rate_cents,
          hours_logged, hours_approved, deliverable_submitted, deliverable_accepted, version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         application.id,
         application.marketId,
@@ -337,6 +358,7 @@ export async function seedInto(tx) {
         application.furthestStatus ?? null,
         application.submittedOn,
         application.statusSince,
+        application.exitedOn ?? null,
         application.matchScore.score,
         application.matchScore.algorithmVersion,
         JSON.stringify(application.matchScore.factors),
@@ -491,19 +513,47 @@ export async function seedInto(tx) {
   for (const outcome of seed.outcomes) {
     await insert(
       `INSERT INTO outcomes (id, market_id, student_id, application_id, kind,
-         observed_on, recorded_on, recorded_by, source, detail)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+         employed_by_host, employment_county, employment_state,
+         asserted_in_region, observed_on, recorded_on, recorded_by, source,
+         detail)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         outcome.id,
         outcome.marketId,
         outcome.studentId,
         outcome.applicationId ?? null,
         outcome.kind,
+        outcome.employedByHost,
+        outcome.employmentCounty,
+        outcome.employmentState,
+        outcome.assertedInRegion,
         outcome.observedOn,
         outcome.recordedOn,
         outcome.recordedByUserId,
         outcome.source,
         outcome.detail ?? null,
+      ],
+    );
+  }
+
+  // The host's answer points at a market, an application, the employer, the
+  // learner and whoever recorded it. All five are already in.
+  for (const offer of seed.hostOffers) {
+    await insert(
+      `INSERT INTO host_offers (id, market_id, application_id, business_id,
+         student_id, answer, recorded_by, recorded_on, source, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        offer.id,
+        offer.marketId,
+        offer.applicationId,
+        offer.businessId,
+        offer.studentId,
+        offer.answer,
+        offer.recordedByUserId,
+        offer.recordedOn,
+        offer.source,
+        offer.note ?? null,
       ],
     );
   }
@@ -565,6 +615,8 @@ try {
        (SELECT count(*) FROM interview_slots)    AS interview_slots,
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
+       (SELECT count(*) FROM host_offers)        AS host_offers,
+       (SELECT count(*) FROM region_definitions) AS region_definitions,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
        (SELECT count(*) FROM funding_commitments) AS funding_commitments,

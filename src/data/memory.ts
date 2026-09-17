@@ -13,6 +13,7 @@ import type {
   ConsentRecord,
   FundingCommitment,
   MentorshipOffer,
+  HostOffer,
   MentorshipPairing,
   Organization,
   Outcome,
@@ -22,6 +23,7 @@ import type {
 } from "@/domain/types";
 import {
   disclosureFor,
+  redactHostOffer,
   redactOutcome,
   redactStudent,
   redactTimeEntry,
@@ -29,6 +31,8 @@ import {
 import { isOfferedToStudents } from "@/domain/mentorship";
 import { byWeekAscending, byWeekDescending } from "@/domain/timesheet";
 import { byObservedDescending } from "@/domain/outcome";
+import { byOfferOrder } from "@/domain/offer";
+import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
@@ -183,6 +187,36 @@ function visibleOutcomes(actor: ActorContext): Outcome[] {
     return self ? rows.filter((o) => o.studentId === self.id) : [];
   }
   if (role === "board") return rows.map(redactOutcome);
+  return rows;
+}
+
+/**
+ * Every host answer the actor may see, already reduced to what their role needs.
+ *
+ * The mirror image of `visibleOutcomes` in the one place that matters: here the
+ * **employer sees its own**, because it is the author. `businessId` is carried
+ * on the row precisely so this narrowing needs no join through postings — the
+ * same reason `MentorshipPairing` denormalises it.
+ *
+ * The learner and the board see the answer with the note stripped. Neither is
+ * being kept from what happened; both are kept from the employer's candid
+ * sentence about why it did not keep a named person.
+ */
+function visibleHostOffers(actor: ActorContext): HostOffer[] {
+  const rows = inScope(actor, seed.hostOffers);
+  const { role, organizationId } = actor.membership;
+
+  if (role === "business") return rows.filter((o) => o.businessId === organizationId);
+  if (role === "student") {
+    const self = seed.students.find((st) => st.userId === actor.user.id);
+    return self ? rows.filter((o) => o.studentId === self.id).map(redactHostOffer) : [];
+  }
+  // The note reaches the administrator and its author, and nobody else — not
+  // even the college, which works the same cases. Narrow by default because
+  // widening later costs nothing and un-disclosing is impossible, and because
+  // an employer writing candidly about why it did not keep somebody is doing it
+  // on the understanding that it is not being circulated.
+  if (role !== "admin") return rows.map(redactHostOffer);
   return rows;
 }
 
@@ -436,6 +470,25 @@ export const repositories: Repositories = {
       visibleOutcomes(actor)
         .filter((o) => o.applicationId === applicationId)
         .sort(byObservedDescending),
+  },
+
+  hostOffers: {
+    list: async (actor) => visibleHostOffers(actor).slice().sort(byOfferOrder),
+    forApplication: async (actor, applicationId) =>
+      visibleHostOffers(actor).find((o) => o.applicationId === applicationId) ?? null,
+    forStudent: async (actor, studentId) =>
+      visibleHostOffers(actor)
+        .filter((o) => o.studentId === studentId)
+        .sort(byOfferOrder),
+  },
+
+  regionDefinitions: {
+    list: async (actor) =>
+      inScope(actor, seed.regionDefinitions).slice().sort(byEffectiveDescending),
+    forMarket: async (actor, marketId) =>
+      inScope(actor, seed.regionDefinitions)
+        .filter((d) => d.marketId === marketId)
+        .sort(byEffectiveDescending),
   },
 
   auditEvents: {

@@ -65,3 +65,35 @@ describe("the portal gate", () => {
     );
   });
 });
+
+/**
+ * The other thing a gate has to refuse, checked the same structural way.
+ *
+ * A session holding a password somebody else chose is fully authenticated —
+ * both factors proved — and may do exactly one thing: replace it. The form that
+ * says so is client state, so the only thing standing between a temporary
+ * credential and permanent use of the platform is these two functions. Each is
+ * a single line that reads like a nicety and is not one, which is why it is
+ * asserted rather than trusted to survive the next edit.
+ */
+describe("a session that owes a password change", () => {
+  const session = readFileSync(join(process.cwd(), "src/auth/session.ts"), "utf8");
+
+  /** The body of one exported function, up to the next top-level one. */
+  function bodyOf(name: string): string {
+    const start = session.indexOf(`export async function ${name}(`);
+    expect(start, `${name} is gone from session.ts`).toBeGreaterThan(-1);
+    const rest = session.slice(start + 1);
+    const end = rest.indexOf("\nexport ");
+    return end === -1 ? rest : rest.slice(0, end);
+  }
+
+  it.each(["actorForPortal", "viewerActor"])("is turned away by %s", (gate) => {
+    expect(
+      bodyOf(gate),
+      `${gate} hands back an actor without checking passwordChangeOwed, so a ` +
+        `temporary password somebody else chose stays usable indefinitely by ` +
+        `anybody who types a URL instead of following the form.`,
+    ).toContain("passwordChangeOwed");
+  });
+});

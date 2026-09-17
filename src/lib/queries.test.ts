@@ -177,9 +177,10 @@ describe("the outcome report", () => {
     const report = await outcomeReport(admin);
     const seeking = report.byKind.find((k) => k.kind === "still_seeking")!;
     expect(seeking.count).toBe(0);
-    expect(
-      report.byKind.find((k) => k.kind === "employed_elsewhere")!.count,
-    ).toBeGreaterThan(0);
+    expect(report.byKind.find((k) => k.kind === "employed")!.count).toBeGreaterThan(0);
+    // And he is not counted as having stayed: the second observation puts him
+    // in Wyandotte, which is not one of this market's counties.
+    expect(report.regional).toBeLessThan(report.employed);
   });
 
   it("reports the unworked queue beside the rate", async () => {

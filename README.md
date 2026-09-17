@@ -65,11 +65,54 @@ password?**, paste the code the server logs, and choose one.
 sent a one-time code instead and is never shown a password field. See
 [Signing in](#signing-in).
 
+### Being an administrator, on your own database
+
+The two accounts above are fixtures, and neither is an administrator. The
+seeded administrator is on `.example`, which RFC 2606 reserves so that nothing
+can be delivered to it — and a reset code to that mailbox is the only recovery
+an administrator has, so it deliberately cannot be given a password.
+
+Everything in this product is done *through* the product, and this is the one
+thing that cannot be: the only surface that creates an account is the
+administrator's own console, so a deployment with no administrator has no way
+to get one. `npm run db:admin` is that one operator action.
+
+```bash
+DATABASE_URL=… npm run db:migrate
+DATABASE_URL=… npm run db:seed
+DATABASE_URL=… npm run db:admin -- you@yourdomain.com --name "Your Name"
+
+DATABASE_URL=… DATABASE_READ_ONLY=false AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev
+```
+
+It prints a temporary password once. `DATABASE_READ_ONLY=false` matters:
+without it the deployment is read-only and every button refuses — which is the
+right default for a database you did not mean to write to, and the wrong one
+for the deployment you are trying to use.
+
+Run with no arguments, `npm run db:admin` reports who the administrators are
+and whether each of them can actually get in — an account with no password and
+no authenticator is a row, not a way in.
+
+The password it prints is spent the first time it is used. Signing in with it
+produces a real session that may do exactly one thing: replace it. Typing a
+portal URL instead of using the form lands on the same page, because the
+obligation is carried on the session rather than by the form. Then enrol an
+authenticator on the admin console, and only once you have, set
+`AUTH_REQUIRE_MFA=true` — turning it on first locks out the only account that
+could enrol anybody.
+
+What the command deliberately will not do is turn an existing account into an
+administrator. A command that promotes a college's login is a privilege
+escalation with a friendly label, and it would be reachable by anybody who can
+read a connection string.
+
 ## Start here
 
 - [`docs/product-vision.md`](docs/product-vision.md) — what the platform is for, who it serves first, and where the vision does not yet match the build
 - [`docs/user-story.md`](docs/user-story.md) — the end-to-end lifecycle across all five actors, with open questions
 - [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
+- [`docs/regional-report.md`](docs/regional-report.md) — the comparative report the platform's data is for: how towns are compared when every town is small, and what has to be captured now because it cannot be reconstructed later
 - [`docs/vision-alignment-review.md`](docs/vision-alignment-review.md) — where the site and the Patterson Fellows 2026 application describe different ventures, and what closing each gap looks like
 
 ## Decisions made so far
@@ -162,7 +205,9 @@ That distinction is load-bearing. `postings.find` narrows by organization for `b
 
 ## The five state machines
 
-Still five, and `Outcome` is deliberately not a sixth — see [Outcomes](#outcomes).
+Still five. `Outcome` is deliberately not a sixth — see [Outcomes](#outcomes) —
+and neither is `HostOffer`: one answer per placement, recorded once, with no
+status and nothing to move it through.
 
 Five things have a status and rules about who may change it: an **application**, a **student's** enrolment standing, a **posting**, an **organization's** vetting, and an employer's **mentorship offer**. They share one engine (`domain/machine.ts`) that resolves every move the same way — market isolation, ownership, does the transition exist, is the role permitted, does the guard pass, and may an administrator override it (role and guard yes, market isolation never, and never without a reason).
 
@@ -349,22 +394,38 @@ to end up **working in their own region**. The lifecycle ended at credit granted
 so there was nowhere to put the answer either way.
 
 An `Outcome` is one follow-up observation about one learner, and optionally about
-the experience it followed. Six answers:
+the experience it followed. Four answers:
 
 | | Counts as |
 |---|---|
-| Hired by the host employer | Regional employment |
-| Employed in the region | Regional employment |
-| Employed outside the region | Employment, not retention |
+| Employed | Employment. Whether it is *regional* employment is derived from where |
 | Continued in education | Positive, not employment |
 | Entered training or an apprenticeship | Positive, not employment |
 | Still looking | A recorded result |
 
-**Employed in the region and employed elsewhere are separate values, not one
-"employed".** That distinction is the entire argument the venture rests on: a
-programme that reliably produces graduates who leave is a talent pipeline out of
-the county, and a board funding it should be able to see that. Folding them
-together would give a number that always looks good.
+**Whether they stayed is derived, not recorded.** The kind used to carry the
+place — `employed_by_host`, `employed_in_region`, `employed_elsewhere` — which
+made "in region" a judgement whoever picked from the list had to make, with no
+definition of region stored anywhere to make it against. Pittsburg is twenty
+miles from Joplin across a state line, and two colleges will draw that line
+differently. A comparison broken that way still renders as a clean chart.
+
+So an employment outcome carries the **county and state the work is in**, and
+`inRegion` derives the answer against the counties the market's region declared
+*at the moment the observation was made*. That
+distinction is the entire argument the venture rests on — a programme that
+reliably produces graduates who leave is a talent pipeline out of the county, and
+a board funding it should be able to see that — which is exactly why it should
+not depend on who filled in the form. One captured county also answers county,
+workforce-area and state roll-ups; a boolean answers none of them, and cannot be
+re-derived when the boundary you meant turns out to be wrong.
+
+Two cases the shape has to allow for. **A hire by the host needs no county**:
+`employedByHost` says so, and the host is by definition an employer in this
+market. And **the county is optional**, because a follow-up that established
+somebody is working without establishing where is a real half-answer, not a form
+to refuse — it counts as `placeUnknown`, separately from having left, on the same
+principle as the section below.
 
 **It is not a state machine, and that is the design.** There is no status, no
 version, and no update path — an outcome is an *observation*, so a learner
@@ -372,6 +433,92 @@ followed up again six months later gets a second row. Nothing supersedes anythin
 because the follow-up history is the evidence being offered. `summarizeOutcomes`
 counts one observation per learner, the most recent, so a diligent officer cannot
 inflate the denominator by doing their job.
+
+### When it is asked
+
+Two windows per placement: the **2nd and the 4th calendar quarter after the
+quarter it ended in**. That is the shape workforce reporting already uses, so
+the resulting number lands beside figures a board recognises instead of needing
+a translation nobody performs.
+
+Calendar quarters rather than elapsed months, and the difference is the point. A
+placement ending 20 February and one ending 28 March are both in Q1, so both are
+measured in Jul–Sep — while one ending 2 April is measured in Oct–Dec. Elapsed
+time therefore varies from about three months to six, which looks arbitrary and
+is exactly what makes two cohorts comparable: they are measured against the same
+calendar rather than against their own end dates. Every screen says "covers
+Jul–Sep 2026"; the arithmetic is the product's job.
+
+**Two rather than one**, because each alone is misleading. Somebody employed
+three months after an internship may simply be finishing the summer, so the
+second quarter is a weak retention signal on its own. The fourth alone misses
+the people who were reachable early and gone later — and misses the movement
+between them, which is itself a finding: regional at Q2 and gone at Q4 is a
+different story about a town than never having stayed.
+
+**The queue stopped being one-shot.** It used to clear a placement the first
+time anybody recorded anything, which is why a second observation was supported
+and never prompted — there was no date that made one *due* rather than merely
+possible. Now a placement re-enters when its next window opens and leaves again
+when that window is answered, by `observedOn` rather than `recordedOn`: a
+follow-up written up a fortnight after the call still describes the day of the
+call.
+
+**A window that closed unanswered stays closed.** Nobody can be phoned in
+February and asked where they were last August with any confidence, and a queue
+offering impossible work teaches its operator to ignore the queue. Those are
+reported as *missed* rather than queued — the running cost of having had no
+clock, and the reason the seed ships with one.
+
+All of it measures from `Application.exitedOn`, written once when the placement
+ends and never moved. `statusSince` is overwritten by every later transition, so
+a clock reading it slides forward with the credit paperwork — by 55 days on one
+seeded fixture, which is enough to file an observation in the wrong quarter.
+
+### The region is a dated record, not a field
+
+A market's counties started life as a column, which meant they were always
+whatever they are now. That is fine until a boundary moves — local workforce
+areas get redesignated and MSAs are redrawn after each census — and then a single
+mutable list does something quietly catastrophic: the 2026 retention rate
+recomputed in 2029 comes back different, measured against a map nobody had in
+2026, and nothing on the screen says so. A figure already sent to a board is the
+worst possible thing to be silently wrong.
+
+So a boundary is a `RegionDefinition` — a market, a state, a list of counties,
+and the date it took effect. `regionInForce(definitions, marketId, at)` answers
+which one was real at a given moment, and every outcome is judged against the map
+that was real when it was observed. Null is a real answer rather than a failure:
+an observation predating every definition on record has no boundary to be judged
+against, and it lands in `placeUnknown` — counted apart — rather than being
+scored as having left.
+
+**Definitions are appended, never edited.** `redefineRegion` is the only writer
+and it has no update path, which is what makes the guarantee above hold rather
+than merely describe an intention. It refuses four things:
+
+| | Why |
+|---|---|
+| A boundary effective at or before the one in force | Backdating is a rewrite of history wearing an append's clothing, and two rows sharing a date make "in force" a coin toss the two data layers would each call differently |
+| A boundary identical to the one in force | A form submitted twice, not a redesignation. Recording it would put a row in the history that changes nothing and make the market look as though its map moved on a date it did not |
+| An empty county list | A region with no counties scores every outcome as having left |
+| Anyone but an administrator | Unusual, and deliberate — see below |
+
+The administrator alone, which is odd for something a board would hear about
+first. A redesignation is not this market's news, it is the state's, and it
+reaches every market in the network at once; it is also the only write in the
+product whose effect is retroactive in appearance, because every figure computed
+*after* it moves. That belongs on the desk that answers for the platform rather
+than on one that reports through it. The form shows the whole history above the
+fields, because somebody about to change a map should be able to see the map, and
+a mistake here is corrected by recording a third definition rather than by fixing
+the second.
+
+What this does **not** do is snapshot the totals. Those stay recomputable, and
+deliberately so — the retention purge anonymises rather than deletes, so an
+outcome keeps its kind and its county long after it stops naming anybody. A
+boundary nobody wrote down is the one thing that could not be reconstructed from
+anything, which is why it is the piece that was cheap now and impossible later.
 
 ### Absence is not a result
 
@@ -383,19 +530,36 @@ queue read as a programme that fails to place people, and a rate of zero over
 nothing measured would be worse — so the rate is blank until there is something
 to compute it from.
 
-The seed ships with the queue still half-worked, and with a learner who took a
-job in Kansas City, for the same reason the seeded college's brand colours
-collide twice: a measure that only ever reports good news on its own fixtures has
-not been tested against anything.
+The seed ships with the queue still half-worked, with a learner who took a job in
+Kansas City — Wyandotte County, the same state and not this market's, which is
+the case a rule that only checked the state would score as staying — and with one
+learner whose follow-up established that they are working and got no further. For
+the same reason the seeded college's brand colours collide twice: a measure that
+only ever reports good news on its own fixtures has not been tested against
+anything, and a figure no fixture produces is copy nobody ever reads.
 
 ### Who does it, and who sees it
 
+**Three channels, each bounded to what its party can actually know.**
+
 The college records them, because follow-up is local-operator work and it holds
 the relationship that makes the call get answered; an administrator can too, for
-the same reason they can do anything else here. The learner and the employer are
-deliberately absent and are the open question (Q23) — an employer is the only
-party that actually knows it made a hire, and a self-report is the commonest
-source in real workforce reporting, but each needs a rule about what it may claim.
+the same reason they can do anything else here. **A learner records their own** —
+their own disclosure about their own life, refused for anybody else's record —
+because a college phoning fourteen people who have left town is the bottleneck,
+and self-report is the commonest source in real workforce reporting.
+
+**An employer records none of these.** It answers a different question through
+[a host offer](#what-the-host-did), and an accepted offer writes the outcome from
+there. What it cannot do is file an outcome directly: continued education, still
+looking, or a job somewhere else is hearsay from where it sits.
+
+Self-report carries a bias that runs one way — people who landed a good job
+answer, and people who did not go quiet. Three things hold against it. `source`
+keeps a self-report distinguishable from a college's verified note, because the
+source is part of the evidence. `unmeasured` keeps the size of the silence
+visible. And the administrator's chase queue turns silence into a phone call
+rather than a gap in a chart.
 
 **The board reads the counts and never the free text.** Its obligation is how
 many were employed and how many stayed, which is exactly what the kind says; the
@@ -410,6 +574,104 @@ shown every placement it hosted as never followed up — work already done,
 presented as outstanding, with no way to discover otherwise. `canReadOutcomes`
 exists so a derived view can tell "no outcome exists" from "you may not see one",
 and `outcomeScope` is tested against it so the two cannot drift.
+
+## What the host did
+
+An outcome says where a learner went. It cannot say whether the employer who
+supervised the placement offered to keep them — and that is the strongest result
+the programme produces, the cheapest to collect, and the only fact here with
+exactly one party who knows it. A college can tell you somebody is working; what
+an employer decided about its own headcount is not something it observes.
+
+A `HostOffer` is one answer about one finished placement. **Three answers:**
+
+| | |
+|---|---|
+| We offered, and they took it | The hire. Also writes the outcome, in the same transaction |
+| We offered, and they turned it down | The work was here, and something else won |
+| We made no offer | No headcount, wrong fit, wrong timing |
+
+**The middle one is why this is a record rather than a boolean.** "We offered and
+they turned it down" and "we made no offer" are opposite findings about a town —
+the first says the work is there and something else pulled the learner away, the
+second says the work is not there. A programme asking why rural graduates leave
+has to tell those apart, and folded into one "did not convert" they are not
+merely hard to separate but unrecoverable: separating them later means asking an
+employer again about a placement that ended a year ago. `summarizeHostOffers`
+reports a hire rate and an offer rate side by side for exactly this reason — two
+towns with the same hire rate and different offer rates have opposite problems.
+
+### Silence is not an answer
+
+There is a fourth state and it is deliberately **not a value**: nobody has
+replied. That is the absence of a row, which is the whole reason this is a table
+rather than a column on `Application`. A three-valued column puts the absence of
+an answer in the same field as the answers, one mis-written query away from
+counting silence as "no offer" — understating the programme by the size of its
+own admin backlog.
+
+So the rate is computed over placements *answered*, the count nobody has been
+asked for travels beside it, and the administrator's console carries a **chase
+queue**: two lists, because they are two calls to two different people. The
+employer knows what it decided and cannot say where a learner it did not hire
+went; the learner knows where they are now and cannot answer for the employer.
+
+The same rule the outcome summary follows for unmeasured learners, applied to a
+different question. A recorded "we made no offer" is a finding. A placement
+nobody has answered for is a gap. The two are never added together.
+
+### Who answers, and who reads it
+
+The employer, and an administrator writing down what an employer said on the
+phone. Not the college, which does not observe another organization's hiring
+decision; not the learner, who says what happened to them through their own
+outcome. `source` records which of the two it was, so an answer given firsthand
+stays distinguishable from one transcribed — a report that cannot see that
+difference cannot tell a working process from a hand-worked one.
+
+Reading **inverts the outcome rule where it matters**. An employer reads no
+outcomes at all; it reads its own answers here, because it is the author, and a
+statement somebody cannot read back is one they cannot correct.
+
+**Everybody else gets the answer with the note stripped** by `redactHostOffer` —
+the learner, the board, and the college too, which works the same cases. Nobody
+is kept from what happened: a learner knows perfectly well whether they were
+offered a job, and hiding it from the person it happened to would be theatre.
+What they are kept from is the employer's candid sentence about why it did not
+keep a named person, which is the most useful line in the record for a town
+review and the most damaging one for its subject.
+
+The college is on the narrow side of that line deliberately. Widening access
+later costs nothing and un-disclosing is impossible, so the default is the
+smallest audience that can act on it — and an employer writing candidly about
+why it did not keep somebody is doing it on the understanding that it is not
+being circulated. **The note is never mailed anywhere**, which is the other half
+of the same rule; see below.
+
+### Working the queue
+
+Each row of the chase queue has a button that sends the party a short standing
+message: the employer is asked what it did, the learner is asked where they
+went. Both are templates, and there is deliberately **no compose box**.
+
+A free-text field there would be the only place in this product where a
+person's own prose leaves the building, and the rule every template obeys — no
+message names the learner it is about — cannot be enforced on a sentence
+somebody typed. `withoutParticipantPII` strips payload *keys*; a name inside a
+string is not a key. A nudge that says nothing needs no checking, and the
+conversation that follows happens in a reply, between two people, outside a
+system that would otherwise have to store it.
+
+The employer's note is not quoted in either message. It is readable by its
+author and the administrator and nobody else, and a product that mails it onward
+has undone that with one button.
+
+**A nudge is audited, and that entry is the only record it happened.** Nothing
+about the placement is different afterwards, so without it there is no way to
+answer "has anybody actually asked them?" — which is the question the queue
+exists to make answerable. Sending twice is allowed and untracked: a second
+nudge three weeks later is the normal way this works, and an "already asked"
+flag would turn the ordinary next action into one the screen fights.
 
 ## What leaves the building
 
@@ -496,6 +758,21 @@ active learner is never purged however old their record is — the rule is "no
 longer required for the purpose collected", and a live application is that
 purpose.
 
+**A purge reaches the free text on observations**, meaning `outcomes.detail` and
+`host_offers.note`. This did not, at first: the purge scrubbed the name on
+`users` and the profile on `students` and left every sentence anybody had
+written exactly as written. A sentence is the one field in either table that can
+carry a name without anybody noticing — "no headcount, but she was good" is an
+ordinary thing for an employer to write and a direct identifier sitting beside a
+record whose identity has just been erased. The test for it writes its own text
+first, because the learner the retention rules actually let through has no
+observations in the fixtures, and a test that passes because there was nothing
+to clear is not a test.
+
+The kind, the county and the host's answer survive, which is the same rule
+stated from the other side: what goes is what identifies, what stays is what
+aggregates.
+
 There is no unattended sweep, deliberately. Anonymisation is irreversible and the
 first automatic run would hit every record at once; a person pressing a button
 against a computed list is how you find out the schedule is wrong while that is
@@ -549,10 +826,26 @@ symbol mostly produces `Password1!`.
 self-serve signup: an administrator or an import creates the account, and the
 person chooses their own password after a code reaches the address their
 organization knows them by. "Forgot your password?" *is* that path — the same
-step whether you are replacing one or setting your first — which is also how the
-first administrator gets into a fresh deployment, and why nobody is ever told a
-password over the phone. Reset codes carry their own purpose, so asking for one
-does not invalidate a sign-in code somebody is already holding.
+step whether you are replacing one or setting your first — and it is why nobody
+is ever told a password over the phone. Reset codes carry their own purpose, so
+asking for one does not invalidate a sign-in code somebody is already holding.
+
+**With exactly one exception, and it is the bootstrap.** A fresh deployment has
+no administrator, and the only surface that creates an account is an
+administrator's console — so `npm run db:admin` stands the first one up from a
+terminal and prints a password it generated. That credential is stored
+`must_change`, which makes it the one password in the system somebody else
+chose.
+
+**A password somebody else chose is spent the first time it is used.** Signing
+in with one produces a real session — both factors proved, nothing
+half-authenticated about it — that may do exactly one thing: replace the
+password. The obligation rides on the resolved actor rather than on the form,
+because a person who types a portal URL instead of following the form has to
+land on it too; `actorForPortal` and `viewerActor` both turn that session back
+to the sign-in page, and `portal-gate.test.ts` fails if either stops. Choosing
+a password revokes every session including that one, so the new password is
+proved by using it.
 
 **One-time codes are eight characters** from an alphabet with no `0`, `O`, `1`,
 `I` or `L` in it, good for ten minutes, usable once, dead after five wrong
@@ -1101,7 +1394,8 @@ The outbox states plainly whether "delivered" means an email left the building o
   outcome was true as of from the date it was entered, which is what a windowed
   report would need; what is missing is the rule about when a follow-up becomes
   *due* rather than merely possible, and that decides whether the resulting
-  figure is comparable to the ones a board already reports (Q23).
+  figure is comparable to the ones a board already reports (Q23b — *who* records
+  one is settled, the interval is not).
 - **Editing an approved week.** Correction today runs through rejection: a supervisor sends a week back and the student logs it again. That covers the case before sign-off. Amending a week *after* approval changes a figure a board may already have reimbursed, so it needs a supersede-with-audit-trail rather than an edit, and a rule about who may initiate one.
 
 Assumptions standing in for unanswered questions are marked inline in the UI with the question number they resolve, and tracked in the user story doc.

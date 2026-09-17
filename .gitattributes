@@ -1,0 +1,26 @@
+# Line endings, and why this file is not cosmetic.
+#
+# `scripts/db.mjs` records a SHA-256 of each migration's *text* in the
+# `schema_migrations` ledger, and refuses to migrate a database whose recorded
+# checksum disagrees with the file on disk. That guard exists to catch somebody
+# editing an applied migration, which is a real and expensive mistake.
+#
+# Without this file it also catches something that is not a mistake at all. Git
+# on Windows checks out with CRLF by default, and the same migration hashes
+# differently from its LF form on Linux:
+#
+#   0001_initial.sql   LF   bf1403fd0f631670
+#                      CRLF b59616db8f49f38f
+#
+# So a database migrated from a laptop and then touched from CI — or from
+# Vercel, or from a second contributor — is refused on a difference nobody made.
+# The failure arrives late, at a deploy, reading as schema drift.
+#
+# Normalising to LF in the repository *and* on checkout makes the checksum a
+# property of the migration rather than of the machine that read it. Node,
+# Postgres and every editor this project needs read LF on Windows perfectly
+# well; nothing here depends on CRLF.
+* text=auto eol=lf
+
+# The one file in the tree that is bytes rather than text.
+*.ico binary

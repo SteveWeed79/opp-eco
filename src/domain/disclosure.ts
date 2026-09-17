@@ -13,6 +13,7 @@
 import type {
   Application,
   ApplicationStatus,
+  HostOffer,
   Outcome,
   Student,
   TimeEntry,
@@ -103,4 +104,24 @@ export function redactTimeEntry(entry: TimeEntry): TimeEntry {
  */
 export function redactOutcome(outcome: Outcome): Outcome {
   return { ...outcome, detail: undefined };
+}
+
+/**
+ * A host's answer with the employer's note removed.
+ *
+ * The answer itself is not sensitive to either role this strips it for. A board
+ * needs the count and nothing else, exactly as with an outcome. And a learner
+ * already knows whether they were offered a job — hiding the answer from the
+ * person it happened to would be theatre.
+ *
+ * The note is different. It is an employer writing down, candidly, why it did
+ * not keep a named person: no headcount this year, the fit was wrong, they were
+ * never going to stay. That sentence is the most useful thing in the record for
+ * a town review and the most damaging thing in it for the learner, and an
+ * employer who thinks the subject will read it writes nothing worth reading.
+ * The same trade the regional report makes when it keeps field notes naming
+ * local people out of what a customer can log in and see.
+ */
+export function redactHostOffer(offer: HostOffer): HostOffer {
+  return { ...offer, note: undefined };
 }

@@ -6,6 +6,7 @@ import {
   signInMethodForAddress,
   verifyPasswordSignIn,
 } from "./password-auth";
+import { finishSignIn, resolveSessionToken } from "./auth";
 import { authStore } from "@/auth/backend";
 import { resetAuthState } from "@/auth/memory-store";
 import { hashPassword } from "@/domain/password";
@@ -310,6 +311,61 @@ describe("resetting one", () => {
     await requestPasswordReset(COLLEGE, deps);
     await resetPassword(COLLEGE, delivered[0].code, "a whole new phrase", deps);
     expect((await store.findSession("session-before-reset"))?.revokedAt).not.toBeNull();
+  });
+});
+
+describe("what a session owing a password change can do", () => {
+  /**
+   * Sign in properly and hand back the cookie token.
+   *
+   * Through `finishSignIn` rather than a hand-built session row, because the
+   * point of these tests is what the resolver says about a session the product
+   * actually minted.
+   */
+  async function signedInToken(email: string) {
+    const store = authStore();
+    const user = (await store.findUserByEmail(email))!;
+    const membership = (await store.membershipForUser(user.id))!;
+    const result = await finishSignIn(user, membership, clock);
+    if (result.ok !== true) throw new Error("expected a session");
+    return result.token;
+  }
+
+  it("arrives with the obligation on it", async () => {
+    // The whole reason `must_change` is more than a column. The form that asks
+    // for a new password is client state, and somebody who types a portal URL
+    // instead never sees it — so the obligation has to reach the gate, which
+    // means it has to be a property of the resolved actor.
+    await givePassword(ADMIN, GOOD, true);
+    const actor = await resolveSessionToken(await signedInToken(ADMIN), deps);
+    expect(actor?.passwordChangeOwed).toBe(true);
+  });
+
+  it("carries nothing once the password is the person's own", async () => {
+    await givePassword(ADMIN, GOOD, false);
+    const actor = await resolveSessionToken(await signedInToken(ADMIN), deps);
+    expect(actor?.passwordChangeOwed).toBe(false);
+  });
+
+  it("never owes one on an account that holds no password at all", async () => {
+    // A public employee. This platform stores no password for them, so there is
+    // nothing that could have been set by somebody else — and a lookup that
+    // came back "owed" for a missing row would lock out the population the
+    // whole code path exists for.
+    const actor = await resolveSessionToken(await signedInToken(BOARD), deps);
+    expect(actor?.passwordChangeOwed).toBe(false);
+  });
+
+  it("stops owing it the moment the person chooses their own", async () => {
+    await givePassword(ADMIN, GOOD, true);
+    const owing = await resolveSessionToken(await signedInToken(ADMIN), deps);
+    expect(owing?.passwordChangeOwed).toBe(true);
+
+    // `setOwnPassword` revokes every session, so this is a fresh one — which is
+    // the product's own answer to "prove the new password works".
+    await setOwnPassword(owing!, "a phrase of my own choosing", deps);
+    const after = await resolveSessionToken(await signedInToken(ADMIN), deps);
+    expect(after?.passwordChangeOwed).toBe(false);
   });
 });
 

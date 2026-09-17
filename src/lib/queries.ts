@@ -24,7 +24,7 @@ import {
   daysInStatus,
   isTerminal,
 } from "@/domain/workflow";
-import type { ActorContext } from "@/domain/types";
+import type { ActorContext, RegionDefinition } from "@/domain/types";
 import { repositories } from "@/data/backend";
 import { DEMO_NOW } from "@/data/seed";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
@@ -40,12 +40,20 @@ import {
 } from "@/domain/funding";
 import {
   awaitsFollowUp,
+  followUpWindowDue,
   canReadOutcomes,
   daysSinceExit,
   hasExited,
   summarizeOutcomes,
   type OutcomeSummary,
 } from "@/domain/outcome";
+import type { WindowStatus } from "@/domain/window";
+import { currentRegion, regionInForce } from "@/domain/region";
+import {
+  offerAwaitsAnswer,
+  summarizeHostOffers,
+  type HostOfferSummary,
+} from "@/domain/offer";
 
 export interface StalledItem {
   application: Application;
@@ -118,6 +126,14 @@ export async function stalledApplications(
 
 export interface MarketHealth {
   market: Market;
+  /**
+   * The boundary in force for this market today, or null if it has none.
+   *
+   * Carried here because the counties stopped being a field on `Market` — a
+   * region is a dated definition now, and "which counties is this market"
+   * is a question with a date in it even when the answer is "today's".
+   */
+  region: RegionDefinition | null;
   activeStudents: number;
   activeBusinesses: number;
   openPostings: number;
@@ -138,6 +154,7 @@ export interface MarketHealth {
 export async function marketHealth(
   actor: ActorContext,
   market: Market,
+  region: RegionDefinition | null = null,
 ): Promise<MarketHealth> {
   const [allApplications, allCredits, students, businesses, published, funding] =
     await Promise.all([
@@ -163,6 +180,7 @@ export async function marketHealth(
 
   return {
     market,
+    region,
     activeStudents: students.filter(
       (s) => s.marketId === market.id && s.status === "verified",
     ).length,
@@ -194,8 +212,13 @@ export async function marketHealth(
 export async function allMarketHealth(
   actor: ActorContext,
 ): Promise<MarketHealth[]> {
-  const markets = await repositories.markets.list(actor);
-  return Promise.all(markets.map((m) => marketHealth(actor, m)));
+  const [markets, regions] = await Promise.all([
+    repositories.markets.list(actor),
+    repositories.regionDefinitions.list(actor),
+  ]);
+  return Promise.all(
+    markets.map((m) => marketHealth(actor, m, currentRegion(regions, m.id, DEMO_NOW))),
+  );
 }
 
 export interface MarketFunding {
@@ -419,6 +442,14 @@ export interface FollowUpItem {
   posting: Posting;
   /** How long the learner has been waiting to be asked. */
   days: number;
+  /**
+   * The quarter this row is asking about — "Jul–Sep 2026".
+   *
+   * Carried so the screen can say which window it means rather than making
+   * anybody work out that a placement ending in February is measured in July.
+   * The arithmetic is the product's job; the operator sees months.
+   */
+  window: WindowStatus;
 }
 
 /**
@@ -447,11 +478,69 @@ export async function followUpQueue(
     repositories.outcomes.list(actor),
   ]);
 
-  const candidates = applications.filter((a) => awaitsFollowUp(a, outcomes));
+  const candidates = applications
+    .map((a) => ({ a, window: followUpWindowDue(a, outcomes, DEMO_NOW) }))
+    .filter((c): c is { a: Application; window: WindowStatus } => c.window !== null);
 
   // Resolved together rather than one after another, for the reason
   // `stalledApplications` does it: against Postgres this loop would otherwise
   // be two sequential round trips per row.
+  const resolved = await Promise.all(
+    candidates.map(async ({ a: application, window }) => {
+      const [student, posting] = await Promise.all([
+        repositories.students.find(actor, application.studentId),
+        repositories.postings.find(actor, application.postingId),
+      ]);
+      if (!student || !posting) return null;
+      return {
+        application,
+        student,
+        posting,
+        days: daysSinceExit(application, DEMO_NOW),
+        window,
+      };
+    }),
+  );
+
+  // Oldest open window first, then longest since exit. The window is the
+  // better key: a row whose quarter is about to close is the one that becomes
+  // unrecoverable first, and that is not always the one that exited longest ago.
+  return resolved
+    .filter((item): item is FollowUpItem => item !== null)
+    .sort((a, b) => a.window.closesOn.localeCompare(b.window.closesOn) || b.days - a.days);
+}
+
+export interface HostOfferItem {
+  application: Application;
+  student: Student;
+  posting: Posting;
+  /** How long the placement has been finished with nobody asked. */
+  days: number;
+}
+
+/**
+ * Finished placements nobody has answered the offer question for.
+ *
+ * The employer's own list when an employer asks, and the market's when the
+ * administrator does — one function, because the narrowing is the repository's
+ * job and duplicating it in a query is how the two drift.
+ *
+ * No `canRead` guard, unlike `followUpQueue`. That one refuses an employer
+ * outright because an employer reads no outcomes at all, so subtracting one
+ * list from another would report work already done as outstanding. Here every
+ * role reads host answers, narrowed to what concerns them, so the subtraction
+ * is sound for all of them — and for the employer it is the point.
+ */
+export async function hostOfferQueue(
+  actor: ActorContext,
+): Promise<HostOfferItem[]> {
+  const [applications, offers] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.hostOffers.list(actor),
+  ]);
+
+  const candidates = applications.filter((a) => offerAwaitsAnswer(a, offers));
+
   const resolved = await Promise.all(
     candidates.map(async (application) => {
       const [student, posting] = await Promise.all([
@@ -469,8 +558,25 @@ export async function followUpQueue(
   );
 
   return resolved
-    .filter((item): item is FollowUpItem => item !== null)
+    .filter((item): item is HostOfferItem => item !== null)
     .sort((a, b) => b.days - a.days);
+}
+
+/**
+ * What the hosts said, and how much of it nobody has been asked for.
+ *
+ * Both numbers, for the reason `outcomeReport` returns both: a hire rate over
+ * three answered placements and a hire rate over three answered out of eleven
+ * finished are different claims, and only one of them is the programme's.
+ */
+export async function hostOfferReport(
+  actor: ActorContext,
+): Promise<HostOfferSummary> {
+  const [applications, offers] = await Promise.all([
+    repositories.applications.list(actor),
+    repositories.hostOffers.list(actor),
+  ]);
+  return summarizeHostOffers(applications, offers);
 }
 
 /**
@@ -486,15 +592,26 @@ export async function outcomeReport(
 ): Promise<OutcomeSummary> {
   // Same refusal as the queue, and for the same reason: a zeroed report and a
   // report the caller may not have are different answers.
-  if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0);
+  const none = () => null;
+  if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0, none);
 
-  const [applications, outcomes] = await Promise.all([
+  const [applications, outcomes, regions] = await Promise.all([
     repositories.applications.list(actor),
     repositories.outcomes.list(actor),
+    // Read through the actor's own scope, so a college resolves its own market
+    // and an administrator resolves all of them — which is exactly the
+    // difference that makes the lookup necessary.
+    repositories.regionDefinitions.list(actor),
   ]);
 
-  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes)).length;
-  return summarizeOutcomes(outcomes, unmeasured);
+  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes, DEMO_NOW)).length;
+  // Each observation judged against the boundary that was in force when it was
+  // made. A redesignation next year must not reach back and change a figure
+  // that has already been reported — which is the whole reason a definition is
+  // a dated row rather than a column.
+  return summarizeOutcomes(outcomes, unmeasured, (marketId, observedOn) =>
+    regionInForce(regions, marketId, observedOn),
+  );
 }
 
 /** Every finished experience, measured or not. The denominator behind the rate. */

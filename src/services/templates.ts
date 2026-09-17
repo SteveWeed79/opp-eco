@@ -101,6 +101,41 @@ function week(value: unknown): string {
 }
 
 export const TEMPLATES: Record<string, Template> = {
+  // --- Working the chase queue ---------------------------------------------
+  //
+  // The two messages the administrator sends by pressing a button, one per
+  // list on their console. Deliberately templates rather than a compose box,
+  // and the reason is not convenience.
+  //
+  // A free-text field here would be the one place in this product where a
+  // person's prose leaves the building, and the rule every other template obeys
+  // — no message names the learner it is about — cannot be enforced on a
+  // sentence somebody typed. `withoutParticipantPII` strips payload *keys*; a
+  // name inside a string is not a key. So the nudge says nothing that needs
+  // checking, and the conversation that follows happens in a reply, between two
+  // people, outside a system that would otherwise have to store it.
+  //
+  // The employer's note is not quoted in either of these. It is readable by its
+  // author and the administrator and nobody else, and a product that mails it
+  // onward has undone that with one button.
+  "followup.employer": (p) => ({
+    subject: `Did this placement lead anywhere? — ${ref(p)}`,
+    body:
+      `${str(p.postingTitle, "A placement")} with you has finished, and we have not recorded what happened at the end of it (${ref(p)}).\n\n` +
+      `One question: did you offer them a job? Whether the answer is yes, no, or "we offered and they went elsewhere", all three are worth as much to us — the last one especially, because nobody else can tell us it happened.\n\n` +
+      `It is one click in your portal, and replying to this email reaches us directly if it is easier.`,
+    action: { label: "Answer in one click", path: PORTAL_PATH.business },
+    notice: FERPA_NOTICE,
+  }),
+  "followup.learner": (p) => ({
+    subject: `Where did you land? — ${ref(p)}`,
+    body:
+      `Your placement has finished (${ref(p)}) and nobody has asked you where you went next.\n\n` +
+      `Whatever the answer is, it helps — including "still looking", which is counted apart from the people nobody asked, so saying it never makes anything look worse than staying quiet.\n\n` +
+      `It takes about thirty seconds, and you can add to it later if things change.`,
+    action: { label: "Tell us where you are", path: PORTAL_PATH.student },
+  }),
+
   // --- Application received ------------------------------------------------
   "application.submitted.student": (p) => ({
     subject: `Application sent: ${str(p.postingTitle)}`,

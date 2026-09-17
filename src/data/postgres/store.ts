@@ -30,6 +30,8 @@ import type {
   MentorshipPairing,
   Membership,
   Organization,
+  HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -75,7 +77,7 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       INSERT INTO applications (
         id, market_id, posting_id, student_id, track, status, furthest_status,
-        submitted_on, status_since, match_score, match_algorithm_version,
+        submitted_on, status_since, exited_on, match_score, match_algorithm_version,
         match_factors, interview_slot_id, funding_authorized_hours,
         funding_authorized_rate_cents, hours_logged, hours_approved,
         deliverable_submitted, deliverable_accepted, version
@@ -83,7 +85,8 @@ class PostgresUnitOfWork implements UnitOfWork {
         ${application.id}, ${application.marketId}, ${application.postingId},
         ${application.studentId}, ${application.track}, ${application.status},
         ${application.furthestStatus ?? null}, ${application.submittedOn},
-        ${application.statusSince}, ${application.matchScore.score},
+        ${application.statusSince}, ${application.exitedOn ?? null},
+        ${application.matchScore.score},
         ${application.matchScore.algorithmVersion},
         ${JSON.stringify(application.matchScore.factors)}::jsonb,
         ${application.interviewSlotId ?? null},
@@ -96,6 +99,15 @@ class PostgresUnitOfWork implements UnitOfWork {
       )`);
   }
 
+  /**
+   * `exited_on` is never cleared once set.
+   *
+   * The service writes it on the first transition into a terminal status and
+   * leaves it; the COALESCE below is the second lock, so a caller holding an
+   * application it loaded before the column existed cannot blank a real exit
+   * date by saving a stale copy. Every other column here is last-write-wins,
+   * which is right for state that moves and wrong for a date that happened.
+   */
   saveApplication(application: Application, expectedVersion: number) {
     this.add(
       sql`
@@ -103,6 +115,7 @@ class PostgresUnitOfWork implements UnitOfWork {
           status = ${application.status},
           furthest_status = ${application.furthestStatus ?? null},
           status_since = ${application.statusSince},
+          exited_on = COALESCE(${application.exitedOn ?? null}, applications.exited_on),
           interview_slot_id = ${application.interviewSlotId ?? null},
           funding_authorized_hours = ${application.fundingAuthorizedHours ?? null},
           funding_authorized_rate_cents = ${optionalCents(application.fundingAuthorizedRate)},
@@ -425,6 +438,13 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       UPDATE users SET name = ${student.name}, email = ${student.email}
       WHERE id = ${student.userId}`);
+    // The free text on every observation about them, for the reason the
+    // contract gives. Nulled rather than deleted: the row is the figure, and
+    // the sentence is the only part of it that can name somebody.
+    this.add(sql`
+      UPDATE outcomes SET detail = NULL WHERE student_id = ${student.id}`);
+    this.add(sql`
+      UPDATE host_offers SET note = NULL WHERE student_id = ${student.id}`);
   }
 
   changeUserEmail(userId: string, email: string) {
@@ -562,13 +582,43 @@ class PostgresUnitOfWork implements UnitOfWork {
     this.add(sql`
       INSERT INTO outcomes (
         id, market_id, student_id, application_id, kind,
+        employed_by_host, employment_county, employment_state,
+        asserted_in_region,
         observed_on, recorded_on, recorded_by, source, detail
       ) VALUES (
         ${outcome.id}, ${outcome.marketId}, ${outcome.studentId},
         ${outcome.applicationId}, ${outcome.kind},
+        ${outcome.employedByHost}, ${outcome.employmentCounty},
+        ${outcome.employmentState}, ${outcome.assertedInRegion},
         ${outcome.observedOn}, ${outcome.recordedOn},
         ${outcome.recordedByUserId}, ${outcome.source},
         ${outcome.detail ?? null}
+      )`);
+  }
+
+  createRegionDefinition(definition: RegionDefinition) {
+    this.add(sql`
+      INSERT INTO region_definitions (
+        id, market_id, state, counties, effective_from, source,
+        recorded_by, recorded_on
+      ) VALUES (
+        ${definition.id}, ${definition.marketId}, ${definition.state},
+        ${definition.counties}, ${definition.effectiveFrom},
+        ${definition.source ?? null}, ${definition.recordedByUserId},
+        ${definition.recordedOn}
+      )`);
+  }
+
+  createHostOffer(offer: HostOffer) {
+    this.add(sql`
+      INSERT INTO host_offers (
+        id, market_id, application_id, business_id, student_id,
+        answer, recorded_by, recorded_on, source, note
+      ) VALUES (
+        ${offer.id}, ${offer.marketId}, ${offer.applicationId},
+        ${offer.businessId}, ${offer.studentId}, ${offer.answer},
+        ${offer.recordedByUserId}, ${offer.recordedOn}, ${offer.source},
+        ${offer.note ?? null}
       )`);
   }
 

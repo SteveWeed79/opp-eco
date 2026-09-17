@@ -33,10 +33,13 @@ test("the college records where a learner went, and the administrator sees it", 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  // "Still looking" is a real answer and the one a demo would leave out. It is
-  // also the one that proves the report counts a measured learner rather than
-  // an employed one.
-  await dialog.getByRole("radio", { name: /Employed in the region/ }).click();
+  // One "Employed", with the county recorded beside it — "employed in the
+  // region" stopped being a thing you could pick when the place became
+  // something captured rather than judged. Cherokee is the next county over and
+  // is one of this market's, which is what makes the detail below true.
+  await dialog.getByText("Employed", { exact: true }).first().click();
+  await dialog.getByLabel("County they work in").fill("Cherokee");
+  await dialog.getByLabel("State").fill("KS");
   await dialog
     .getByLabel("Detail")
     .fill("Working for a manufacturer in the next county.");
@@ -64,13 +67,19 @@ test("the queue refuses to measure a placement that is still running", async ({
   // Nothing in the follow-up card may be a live placement. The guard is
   // server-side, but a queue offering the row at all is a promise the action
   // then breaks.
-  const followUp = page
+  // `following::ul[1]`, not an ancestor lookup. This read
+  // `ancestor::*[contains(@class,'card')][1]`, which matches nothing — `Card`
+  // puts no such class on its outer element — so the count guard below was
+  // always zero and the assertion never ran. A test that cannot fail is not a
+  // test, and this one is guarding a real promise: a queue offering a live
+  // placement is an action the server then refuses.
+  const rows = page
     .getByRole("heading", { name: "Follow-up" })
-    .locator("xpath=ancestor::*[contains(@class,'card')][1]");
+    .locator("xpath=following::ul[1]")
+    .locator("li");
 
-  if ((await followUp.count()) > 0) {
-    await expect(followUp.first()).not.toContainText("In progress");
-  }
+  await expect(rows).not.toHaveCount(0);
+  await expect(rows.filter({ hasText: "In progress" })).toHaveCount(0);
 });
 
 test("the workforce board is never shown the free text of an outcome", async ({

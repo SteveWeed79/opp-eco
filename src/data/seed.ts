@@ -24,7 +24,9 @@ import type {
   MentorshipOffer,
   MentorshipPairing,
   Organization,
+  HostOffer,
   Outcome,
+  RegionDefinition,
   Posting,
   Student,
   TimeEntry,
@@ -65,7 +67,6 @@ export const markets: Market[] = [
     id: "mkt-pittsburg",
     name: "Southeast Kansas",
     city: "Pittsburg",
-    counties: ["Crawford", "Cherokee", "Labette", "Neosho"],
     stage: "live",
     boardId: "org-sekwp",
     collegeIds: ["org-verdigris"],
@@ -76,7 +77,6 @@ export const markets: Market[] = [
     id: "mkt-emporia",
     name: "Flint Hills",
     city: "Emporia",
-    counties: ["Lyon", "Chase", "Coffey"],
     stage: "configuring",
     boardId: "org-fhwp",
     collegeIds: ["org-cottonwood"],
@@ -87,7 +87,6 @@ export const markets: Market[] = [
     id: "mkt-hays",
     name: "Smoky Hill",
     city: "Hays",
-    counties: ["Ellis", "Russell", "Trego"],
     // The board has committed and the college is in conversation, which is
     // why `collegeIds` is still empty — a college joins that list when it
     // commits, not when it takes a meeting.
@@ -116,7 +115,6 @@ export const markets: Market[] = [
     id: "mkt-beloit",
     name: "North Central",
     city: "Beloit",
-    counties: ["Mitchell", "Lincoln", "Cloud"],
     stage: "board_engaged",
     boardId: null,
     collegeIds: [],
@@ -124,6 +122,72 @@ export const markets: Market[] = [
     programYear: "PY2026",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Region definitions — the boundary each market's figures are measured against
+// ---------------------------------------------------------------------------
+
+/**
+ * How far back the first definition of a boundary reaches.
+ *
+ * Deliberately earlier than anything this system holds. Nobody recorded when
+ * these county sets took effect — they were a column on `markets`, and a column
+ * has no start date — so claiming they began on the market's launch date would
+ * be inventing one, and would leave any outcome observed before that launch
+ * unjudgeable. Claiming they have always been in force asserts nothing about
+ * the world and is true of every record here.
+ *
+ * What matters is not this date. It is that every change **after** it is dated.
+ */
+const BEGINNING_OF_RECORD = "2000-01-01T00:00:00.000Z";
+
+/**
+ * One definition per market, migrated out of the columns that used to hold them.
+ *
+ * No market has a second yet, which is the honest state of a platform that has
+ * not seen a redesignation. The shape is what matters: when Crawford County
+ * moves between workforce areas, that is a new row rather than an edit, and
+ * every figure already reported keeps the boundary it was computed against.
+ */
+export const regionDefinitions: RegionDefinition[] = [
+  {
+    id: "region-pittsburg",
+    marketId: "mkt-pittsburg",
+    state: "KS",
+    counties: ["Crawford", "Cherokee", "Labette", "Neosho"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-emporia",
+    marketId: "mkt-emporia",
+    state: "KS",
+    counties: ["Lyon", "Chase", "Coffey"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-hays",
+    marketId: "mkt-hays",
+    state: "KS",
+    counties: ["Ellis", "Russell", "Trego"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+  {
+    id: "region-beloit",
+    marketId: "mkt-beloit",
+    state: "KS",
+    counties: ["Mitchell", "Lincoln", "Cloud"],
+    effectiveFrom: BEGINNING_OF_RECORD,
+    recordedByUserId: null,
+    recordedOn: BEGINNING_OF_RECORD,
+  },
+];
+
 
 // ---------------------------------------------------------------------------
 // Organizations
@@ -1131,6 +1195,15 @@ interface AppSeed {
   furthestStatus?: ApplicationStatus;
   submittedDaysAgo: number;
   statusSinceDaysAgo: number;
+  /**
+   * When the placement itself ended, where that is not when the row last moved.
+   *
+   * Set on the fixtures that carried on moving after the work stopped — credit
+   * pending, credit granted, closed — because those are the ones where the two
+   * dates differ, and a fixture set where they never differ would let the bug
+   * this column exists to fix come back unnoticed.
+   */
+  exitedDaysAgo?: number;
   fundingHours?: number;
   hoursLogged?: number;
   hoursApproved?: number;
@@ -1267,8 +1340,9 @@ const appSeeds: AppSeed[] = [
     postingId: "post-bluestem-research",
     studentId: "stu-jordan",
     status: "placement_completed",
-    submittedDaysAgo: 18,
+    submittedDaysAgo: 230,
     statusSinceDaysAgo: 2,
+    exitedDaysAgo: 200,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1306,6 +1380,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_pending",
     submittedDaysAgo: 70,
     statusSinceDaysAgo: 9,
+    exitedDaysAgo: 24,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1314,8 +1389,9 @@ const appSeeds: AppSeed[] = [
     postingId: "post-utilities-billing",
     studentId: "stu-hana",
     status: "credit_pending",
-    submittedDaysAgo: 55,
+    submittedDaysAgo: 400,
     statusSinceDaysAgo: 9,
+    exitedDaysAgo: 380,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1328,6 +1404,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_granted",
     submittedDaysAgo: 190,
     statusSinceDaysAgo: 26,
+    exitedDaysAgo: 178,
     fundingHours: 280,
     hoursLogged: 268,
     hoursApproved: 268,
@@ -1340,6 +1417,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_granted",
     submittedDaysAgo: 200,
     statusSinceDaysAgo: 31,
+    exitedDaysAgo: 190,
     fundingHours: 210,
     hoursLogged: 205,
     hoursApproved: 205,
@@ -1352,6 +1430,7 @@ const appSeeds: AppSeed[] = [
     status: "credit_pending",
     submittedDaysAgo: 180,
     statusSinceDaysAgo: 12,
+    exitedDaysAgo: 30,
     fundingHours: 252,
     hoursLogged: 240,
     hoursApproved: 240,
@@ -1363,8 +1442,9 @@ const appSeeds: AppSeed[] = [
     postingId: "post-bluestem-research",
     studentId: "stu-omar",
     status: "placement_completed",
-    submittedDaysAgo: 48,
+    submittedDaysAgo: 220,
     statusSinceDaysAgo: 27,
+    exitedDaysAgo: 195,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1373,8 +1453,9 @@ const appSeeds: AppSeed[] = [
     postingId: "post-utilities-billing",
     studentId: "stu-omar",
     status: "placement_completed",
-    submittedDaysAgo: 33,
+    submittedDaysAgo: 205,
     statusSinceDaysAgo: 14,
+    exitedDaysAgo: 185,
     deliverableSubmitted: true,
     deliverableAccepted: true,
   },
@@ -1389,6 +1470,7 @@ const appSeeds: AppSeed[] = [
     furthestStatus: "credit_granted",
     submittedDaysAgo: 260,
     statusSinceDaysAgo: 40,
+    exitedDaysAgo: 240,
     fundingHours: 210,
     hoursLogged: 198,
     hoursApproved: 198,
@@ -1438,6 +1520,37 @@ function trackOf(postingId: string): Track {
   return postings.find((p) => p.id === postingId)?.track ?? "standard";
 }
 
+/**
+ * Whether a seeded application had a placement that is over.
+ *
+ * Duplicated from `hasExited` rather than imported, because this file builds
+ * the `Application` objects that predicate takes — importing it would mean
+ * constructing one to ask about the thing being constructed.
+ */
+function hasFinished(
+  status: ApplicationStatus,
+  furthest: ApplicationStatus | undefined,
+): boolean {
+  const reached: ApplicationStatus[] = [
+    "placement_active",
+    "placement_completed",
+    "terminated_early",
+    "credit_pending",
+    "credit_granted",
+    "credit_denied",
+  ];
+  const over: ApplicationStatus[] = [
+    "placement_completed",
+    "terminated_early",
+    "credit_pending",
+    "credit_granted",
+    "credit_denied",
+    "closed",
+  ];
+  const started = reached.includes(furthest ?? status) || reached.includes(status);
+  return started && over.includes(status);
+}
+
 export const applications: Application[] = appSeeds.map((a) => {
   const posting = postings.find((p) => p.id === a.postingId)!;
   const student = students.find((s) => s.id === a.studentId)!;
@@ -1451,6 +1564,11 @@ export const applications: Application[] = appSeeds.map((a) => {
     furthestStatus: a.furthestStatus,
     submittedOn: daysAgo(a.submittedDaysAgo),
     statusSince: daysAgo(a.statusSinceDaysAgo),
+    // Falls back to `statusSince` for a placement that stopped where it ended,
+    // which is exactly what the two dates mean for one that never moved again.
+    exitedOn: hasFinished(a.status, a.furthestStatus)
+      ? daysAgo(a.exitedDaysAgo ?? a.statusSinceDaysAgo)
+      : undefined,
     matchScore: scoreMatch(student, posting, "Crawford"),
     interviewSlotId: a.interviewSlotId,
     fundingAuthorizedHours: a.fundingHours,
@@ -1829,7 +1947,14 @@ export const outcomes: Outcome[] = [
     marketId: "mkt-pittsburg",
     studentId: "stu-derek",
     applicationId: "app-26",
-    kind: "employed_by_host",
+    kind: "employed",
+    // The host took him on, so this is regional by construction — the host is
+    // an employer in this market — and the county is recorded anyway, because
+    // the report rolls up by county and "derivable" is not the same as "there".
+    employedByHost: true,
+    employmentCounty: "Crawford",
+    employmentState: "KS",
+    assertedInRegion: null,
     observedOn: daysAgo(21),
     recordedOn: daysAgo(20),
     recordedByUserId: "u-ellen",
@@ -1841,7 +1966,11 @@ export const outcomes: Outcome[] = [
     marketId: "mkt-pittsburg",
     studentId: "stu-priya",
     applicationId: "app-20",
-    kind: "employed_in_region",
+    kind: "employed",
+    employedByHost: false,
+    employmentCounty: "Crawford",
+    employmentState: "KS",
+    assertedInRegion: null,
     observedOn: daysAgo(16),
     recordedOn: daysAgo(15),
     recordedByUserId: "u-ellen",
@@ -1856,6 +1985,10 @@ export const outcomes: Outcome[] = [
     studentId: "stu-jordan",
     applicationId: "app-19",
     kind: "still_seeking",
+    employedByHost: false,
+    employmentCounty: null,
+    employmentState: null,
+    assertedInRegion: null,
     observedOn: daysAgo(24),
     recordedOn: daysAgo(24),
     recordedByUserId: "u-ellen",
@@ -1866,7 +1999,14 @@ export const outcomes: Outcome[] = [
     marketId: "mkt-pittsburg",
     studentId: "stu-jordan",
     applicationId: "app-19",
-    kind: "employed_elsewhere",
+    kind: "employed",
+    employedByHost: false,
+    // Wyandotte is in Kansas and is not one of this market's counties, which is
+    // the case that matters: leaving is not about crossing a state line, and a
+    // rule that only checked the state would score this as staying.
+    employmentCounty: "Wyandotte",
+    employmentState: "KS",
+    assertedInRegion: null,
     observedOn: daysAgo(4),
     recordedOn: daysAgo(3),
     recordedByUserId: "u-ellen",
@@ -1879,11 +2019,115 @@ export const outcomes: Outcome[] = [
     studentId: "stu-hana",
     applicationId: "app-17",
     kind: "continued_education",
+    employedByHost: false,
+    employmentCounty: null,
+    employmentState: null,
+    assertedInRegion: null,
     observedOn: daysAgo(9),
     recordedOn: daysAgo(8),
     recordedByUserId: "u-ellen",
     source: "college",
     detail: "Enrolled in the bachelor's completion programme.",
+  },
+  {
+    id: "out-6",
+    marketId: "mkt-pittsburg",
+    studentId: "stu-omar",
+    applicationId: "app-24",
+    kind: "employed",
+    employedByHost: false,
+    // The half-answer, which is the commonest thing a follow-up call actually
+    // produces: they are working, and the officer did not get as far as where.
+    // Seeded deliberately so the administrator's console renders the
+    // place-unknown figure on a fresh checkout. A fixture set where every
+    // employment has a tidy county would leave the one number that exists to
+    // stop a gap being read as a departure showing zero forever, and nobody
+    // would ever see the copy that explains it.
+    employmentCounty: null,
+    employmentState: null,
+    assertedInRegion: null,
+    observedOn: daysAgo(6),
+    recordedOn: daysAgo(5),
+    recordedByUserId: "u-ellen",
+    source: "college",
+    detail: "Working full time. Did not say where — asking again next call.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// What the hosts did — the one fact only the employer knows
+// ---------------------------------------------------------------------------
+
+/**
+ * Three answered and the rest outstanding, which is what a real programme looks
+ * like a month after a cohort ends.
+ *
+ * Each of the three answers is a different one, because a fixture set where
+ * every employer hired is not a fixture set that tests a conversion figure. And
+ * they are deliberately not aligned with "good" and "bad": Apex made Priya no
+ * offer and she is working in Crawford County anyway, which is the case that
+ * stops anybody reading "no offer" as a failed placement.
+ *
+ * One is firsthand and two were chased. Neither Cherokee Steel nor the grain
+ * co-op has anybody with an account here, so the administrator rang them and
+ * wrote down what they said — `source` is what keeps that distinguishable from
+ * an employer who replied on its own, and a report that could not tell them
+ * apart could not tell a working process from a hand-worked one.
+ *
+ * What is missing matters as much. Several finished placements have no row at
+ * all, which is the administrator's queue on a fresh checkout and the reason a
+ * conversion rate is computed over the three that answered rather than over
+ * everything that ended. **One of those is the demo employer's own**, left
+ * deliberately: an employer who opens this portal has a placement waiting on
+ * them, because a feature that only ever renders an empty queue on a fresh
+ * checkout is a feature nobody sees.
+ */
+export const hostOffers: HostOffer[] = [
+  {
+    id: "hoff-1",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-26",
+    businessId: "org-apex",
+    studentId: "stu-derek",
+    answer: "accepted",
+    recordedByUserId: "u-dana",
+    recordedOn: daysAgo(22),
+    source: "business",
+    // A note on the one answer that did not need one, because the employer's
+    // own words about its own decision are a different record from the
+    // college's note about where the learner ended up — `out-1` says he is a
+    // junior controls technician, and this says why Apex made the offer. Also
+    // the fixture that lets the parity suite check the note reaches the
+    // employer unredacted while the learner and the board see it stripped.
+    note: "Offered him the junior controls role two weeks before he finished. Easiest hire we have made.",
+  },
+  {
+    // The middle answer, and the only one nobody else could have given. Jordan
+    // had a local offer in hand and took a job in Kansas City instead — which
+    // `out-4` records the other half of. An area losing people who were offered
+    // work has a different problem from one with no work to offer.
+    id: "hoff-2",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-19",
+    businessId: "org-cherokee",
+    studentId: "stu-jordan",
+    answer: "declined",
+    recordedByUserId: "u-admin",
+    recordedOn: daysAgo(6),
+    source: "admin",
+    note: "Offered him a maintenance tech role at the start of June. He had already taken something in Kansas City.",
+  },
+  {
+    id: "hoff-3",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-21",
+    businessId: "org-heartland",
+    studentId: "stu-luis",
+    answer: "none",
+    recordedByUserId: "u-admin",
+    recordedOn: daysAgo(11),
+    source: "admin",
+    note: "Seasonal role, and they do not carry it through the winter. Would host again in the spring.",
   },
 ];
 

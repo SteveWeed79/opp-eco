@@ -135,6 +135,54 @@ export function outcomeScope(actor: ActorContext): Sql {
 }
 
 /**
+ * Restrict a region definition to its market, and no further.
+ *
+ * The loosest scope in this file, and deliberately. A definition is a list of
+ * counties and a date — it names nobody and holds no figure — and every role in
+ * a market is entitled to know what "in region" means there. A learner asked
+ * where they work, an employer deciding whether hosting counts locally, and a
+ * board reading a retention rate all need it, and a boundary somebody cannot
+ * see is a figure they cannot check.
+ */
+export function regionDefinitionScope(actor: ActorContext): Sql {
+  return marketScope(actor, "region_definitions");
+}
+
+/**
+ * Restrict a host's answer to the parties with a reason to read one.
+ *
+ * The asymmetry with `outcomeScope` is the whole point. An employer reads **no
+ * outcomes at all** — where a different employer's intern ended up is not its
+ * business — but it reads its own answers here, because it is the author, and a
+ * statement somebody cannot read back is one they cannot correct.
+ *
+ * `business_id` is on the row so this needs no join through postings, and the
+ * college, the board and the administrator are narrowed by market alone: the
+ * queue of placements nobody has answered for is market-wide work.
+ *
+ * The learner is narrowed to their own, and what they and the board are kept
+ * from is not the answer but the note — stripped by `redactHostOffer` on the
+ * way out, the same way an outcome's detail is. A learner already knows whether
+ * they were offered a job; hiding the answer from the person it happened to
+ * would be theatre.
+ */
+export function hostOfferScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "host_offers")];
+
+  if (actor.membership.role === "business") {
+    parts.push(sql`host_offers.business_id = ${actor.membership.organizationId}`);
+  }
+  if (actor.membership.role === "student") {
+    parts.push(
+      sql`host_offers.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
+/**
  * Restrict draws against a fund to the parties with a reason to read one.
  *
  * An employer sees the commitments against placements it hosts — it is the

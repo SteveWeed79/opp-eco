@@ -53,7 +53,9 @@ describe("who may record an outcome", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -76,17 +78,61 @@ describe("who may record an outcome", () => {
   it.each([
     ["the board", board],
     ["an employer", business],
-    ["a learner", student],
   ])("refuses %s", async (_label, actor) => {
     const application = unmeasuredPlacement();
     const result = await recordOutcome(actor(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("forbidden");
+  });
+
+  it("lets a learner record about their own placement", async () => {
+    // Their own disclosure about their own life, and the cheapest way past a
+    // college phoning fourteen people who have left town.
+    const self = seed.students.find((s) => s.userId === student().user.id);
+    if (!self) throw new Error("the demo learner has no student record");
+    const measured = new Set(seed.outcomes.map((o) => o.applicationId));
+    const own = seed.applications.find(
+      (a) =>
+        a.studentId === self.id &&
+        !measured.has(a.id) &&
+        (a.status === "placement_completed" || a.status === "credit_granted"),
+    );
+    if (!own) throw new Error("the demo learner has no unmeasured finished placement");
+
+    const result = track(
+      await recordOutcome(student(), {
+        studentId: self.id,
+        applicationId: own.id,
+        kind: "still_seeking",
+        observedOn: yesterday(),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.created.source).toBe("student");
+  });
+
+  it("refuses a learner recording about somebody else", async () => {
+    // Unreachable through the repositories, which scope the read — the point of
+    // the assertion is that the refusal says so rather than claiming the record
+    // does not exist. A learner told their own record is missing has been told
+    // something false; a learner told it is not theirs has been told the truth.
+    const self = seed.students.find((s) => s.userId === student().user.id);
+    const other = seed.applications.find((a) => a.studentId !== self?.id);
+    if (!other) throw new Error("no other learner's placement in the seed");
+
+    const result = await recordOutcome(student(), {
+      studentId: other.studentId,
+      applicationId: other.id,
+      kind: "employed",
+      observedOn: yesterday(),
+    });
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -96,7 +142,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: running.studentId,
       applicationId: running.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
@@ -122,7 +169,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: new Date(Date.now() + 86_400_000).toISOString(),
     });
     expect(result.ok).toBe(false);
@@ -135,7 +183,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: other.id,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: yesterday(),
     });
     expect(result.ok).toBe(false);
@@ -149,7 +198,8 @@ describe("what it refuses", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_by_host",
+        kind: "employed",
+        employedByHost: true,
         observedOn,
       }),
     );
@@ -158,7 +208,8 @@ describe("what it refuses", () => {
     const second = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn,
     });
     expect(second.ok).toBe(false);
@@ -170,7 +221,8 @@ describe("what it refuses", () => {
     const result = await recordOutcome(college(), {
       studentId: application.studentId,
       applicationId: application.id,
-      kind: "employed_by_host",
+      kind: "employed",
+      employedByHost: true,
       observedOn: "not a date",
     });
     expect(result.ok).toBe(false);
@@ -186,7 +238,9 @@ describe("what it writes", () => {
       await recordOutcome(admin(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -204,7 +258,8 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_by_host",
+        kind: "employed",
+        employedByHost: true,
         observedOn: yesterday(),
       }),
     );
@@ -219,7 +274,9 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_elsewhere",
+        kind: "employed",
+        employmentCounty: "Wyandotte",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );
@@ -229,7 +286,7 @@ describe("what it writes", () => {
     const event = seed.auditEvents.find((e) => e.entityId === result.created.id);
     expect(event).toBeDefined();
     expect(event!.entityType).toBe("outcome");
-    expect(event!.to).toBe("employed_elsewhere");
+    expect(event!.to).toBe("employed");
     expect(event!.viaOverride).toBe(false);
   });
 
@@ -281,7 +338,9 @@ describe("what it writes", () => {
       await recordOutcome(college(), {
         studentId: application.studentId,
         applicationId: application.id,
-        kind: "employed_in_region",
+        kind: "employed",
+        employmentCounty: "Crawford",
+        employmentState: "KS",
         observedOn: yesterday(),
       }),
     );

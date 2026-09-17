@@ -39,6 +39,8 @@ import type {
   FundingSource,
   MentorshipPairing,
   Organization,
+  HostOffer,
+  RegionDefinition,
   Outcome,
   Posting,
   Student,
@@ -169,7 +171,6 @@ export function toMarket(row: Row): import("@/domain/types").Market {
     id: text(row.id),
     name: text(row.name),
     city: text(row.city),
-    counties: list(row.counties),
     stage: text(row.stage) as MarketStage,
     boardId: row.board_id === null || row.board_id === undefined ? null : text(row.board_id),
     collegeIds: list(row.college_ids),
@@ -359,6 +360,16 @@ export function toOutcome(row: Row): Outcome {
     id: text(row.id),
     marketId: text(row.market_id),
     studentId: text(row.student_id),
+    employedByHost: Boolean(row.employed_by_host),
+    // Nullable together. The column pair is constrained so that a place is
+    // both parts or neither, and reading them the same way keeps the in-memory
+    // layer and this one answering the same question.
+    employmentCounty: nullableText(row.employment_county),
+    employmentState: nullableText(row.employment_state),
+    assertedInRegion:
+      row.asserted_in_region === null || row.asserted_in_region === undefined
+        ? null
+        : Boolean(row.asserted_in_region),
     // `nullableText` rather than `optionalText`: the domain declares this
     // `string | null` because a learner with no application is a real case, not
     // a field somebody forgot to fill in, and `undefined` would say the
@@ -370,6 +381,43 @@ export function toOutcome(row: Row): Outcome {
     recordedByUserId: text(row.recorded_by),
     source: text(row.source) as Outcome["source"],
     detail: optionalText(row.detail),
+  };
+}
+
+export function toRegionDefinition(row: Row): RegionDefinition {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    state: text(row.state),
+    counties: list(row.counties),
+    effectiveFrom: timestamp(row.effective_from),
+    source: optionalText(row.source),
+    // `nullableText` rather than `optionalText`: null is what the definitions
+    // migrated out of `markets` carry, and it means something — a column has no
+    // author — which is not the same as a field somebody left blank.
+    recordedByUserId: row.recorded_by === null || row.recorded_by === undefined
+      ? null
+      : text(row.recorded_by),
+    recordedOn: timestamp(row.recorded_on),
+  };
+}
+
+export function toHostOffer(row: Row): HostOffer {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    applicationId: text(row.application_id),
+    businessId: text(row.business_id),
+    studentId: text(row.student_id),
+    answer: text(row.answer) as HostOffer["answer"],
+    recordedByUserId: text(row.recorded_by),
+    recordedOn: timestamp(row.recorded_on),
+    source: text(row.source) as HostOffer["source"],
+    // `optionalText` rather than `nullableText`: the domain declares the note
+    // optional, because an employer who answered without explaining has still
+    // answered. That is not the same shape as `Outcome.applicationId`, where
+    // null is a real case the type has to name.
+    note: optionalText(row.note),
   };
 }
 
@@ -386,6 +434,7 @@ export function toApplication(row: Row): Application {
       : undefined,
     submittedOn: timestamp(row.submitted_on),
     statusSince: timestamp(row.status_since),
+    exitedOn: optionalTimestamp(row.exited_on),
     matchScore: {
       score: number(row.match_score),
       algorithmVersion: text(row.match_algorithm_version),

@@ -22,6 +22,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { repositories } from "@/data/backend";
+import { currentRegion } from "@/domain/region";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal, getActor } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
@@ -73,6 +74,13 @@ export default async function CollegePage() {
   const college = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const hoursPerCredit = college.hoursPerCredit ?? 45;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
+  // The boundary in force today. A county list is no longer a property of a
+  // market — it is a dated definition, and this is the current one.
+  const region = currentRegion(
+    await repositories.regionDefinitions.forMarket(actor, market.id),
+    market.id,
+    DEMO_NOW,
+  );
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
   const remainingBudget = (await marketFunding(actor, market.id)).wage?.remaining ?? 0;
@@ -688,7 +696,7 @@ export default async function CollegePage() {
           <Empty>Every finished placement has an outcome on record.</Empty>
         ) : (
           <ul className="row-list divide-y divide-line">
-            {followUps.map(({ application, student, posting, days }) => (
+            {followUps.map(({ application, student, posting, days, window }) => (
               <li
                 key={application.id}
                 className="px-6 py-4 flex flex-wrap items-start justify-between gap-3"
@@ -705,6 +713,10 @@ export default async function CollegePage() {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
+                  {/* The quarter being asked about, not a countdown. A
+                      placement that ended in February is measured in July, and
+                      the arithmetic behind that is the product's job. */}
+                  <Badge tone="brand">Covers {window.label}</Badge>
                   <span className="text-xs text-ink-500 whitespace-nowrap">
                     Finished {days} day{days === 1 ? "" : "s"} ago
                   </span>
@@ -713,6 +725,9 @@ export default async function CollegePage() {
                     applicationId={application.id}
                     studentName={student.name}
                     placementTitle={posting.title}
+                    hostName={organizationName(posting.businessId)}
+                    regionCounties={region?.counties ?? []}
+                    regionState={region?.state ?? ""}
                     choices={OUTCOME_KINDS.map((kind) => ({
                       value: kind.value,
                       label: kind.label,
@@ -728,10 +743,7 @@ export default async function CollegePage() {
         )}
         <div className="px-6 pb-5">
           <Assumption>
-            The college records these because follow-up is local-operator work.
-            The learner and the employer both know things the college does not —
-            an employer is the only party that knows it made a hire — and giving
-            each of them a say is still open (Q23).
+            Asked on a clock rather than whenever somebody gets round to it: the 2nd and 4th calendar quarter after the placement ended, which is the shape workforce reporting uses. A learner records their own and an employer answers what it decided; what is still open is nothing about who, and everything about what happens to a window that closes unanswered — it stays unanswered (Q23b).
           </Assumption>
         </div>
       </Card>
