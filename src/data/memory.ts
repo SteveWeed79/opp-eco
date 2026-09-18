@@ -38,7 +38,6 @@ import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
-import { DEMO_NOW } from "./seed";
 
 /** Postings an organization owns, for narrowing application access. */
 function postingIdsOwnedBy(organizationId: string | null): Set<string> {
@@ -329,7 +328,14 @@ export const repositories: Repositories = {
       const blocked = disclosureBlockReason(
         seed.consents,
         { studentId: student.id, sourceOrgId: student.collegeId },
-        DEMO_NOW,
+        // Real time, not the demo's frozen anchor, because the SQL layer asks
+        // `consents.expires_on > now()` and the two must reach the same answer.
+        // They could differ: a consent expiring between process start and the
+        // request read as valid here and expired there — with this layer the
+        // permissive one, on whether an employer may have a learner's contact
+        // details. Expiry is a cliff rather than a creeping figure, so the
+        // demonstration's numbers do not move for using the real clock.
+        new Date(),
       );
       const level = blocked ? "summary" : disclosureFor(application);
       return redactStudent(student, level);

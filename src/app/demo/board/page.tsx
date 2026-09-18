@@ -33,7 +33,7 @@ import { actorForPortal } from "@/auth/session";
 import { PublishSlots } from "./PublishSlots";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "@/lib/clock";
 import { availableTransitions, daysInStatus } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 import { marketFunding } from "@/lib/queries";
@@ -43,6 +43,8 @@ import { adjustAllocation } from "./actions";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(actor);
   const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   const board = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
@@ -290,7 +292,7 @@ export default async function BoardPage() {
             {unbooked.map((application) => {
               const student = studentById.get(application.studentId)!;
               const posting = postingById.get(application.postingId)!;
-              const days = daysInStatus(application, DEMO_NOW);
+              const days = daysInStatus(application, now);
               return (
                 <li
                   key={application.id}
@@ -360,7 +362,7 @@ export default async function BoardPage() {
                   (application) => {
                     const student = studentById.get(application.studentId)!;
                     const posting = postingById.get(application.postingId)!;
-                    const days = daysInStatus(application, DEMO_NOW);
+                    const days = daysInStatus(application, now);
                     // The proposed commitment: what the board would authorize
                     // if it approved the posting's full hours at market rate.
                     const hours = application.fundingAuthorizedHours ?? postingTotalHours(posting);

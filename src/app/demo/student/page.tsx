@@ -30,7 +30,7 @@ import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "@/lib/clock";
 import { LogHours } from "./LogHours";
 import { followUpQueue, marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
@@ -52,6 +52,8 @@ import { opportunityPath } from "@/routes";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(actor);
   const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   // Through the repository, not the fixtures.
@@ -83,7 +85,7 @@ export default async function StudentPage() {
   const region = currentRegion(
     await repositories.regionDefinitions.forMarket(actor, student.marketId),
     student.marketId,
-    DEMO_NOW,
+    now,
   );
   const [progress, funding, followUps] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
@@ -116,7 +118,7 @@ export default async function StudentPage() {
       ...row,
       openWeeks: openWeeksFor(
         new Date(row.application.statusSince),
-        DEMO_NOW,
+        now,
         row.entries,
       ),
     }));
@@ -284,7 +286,7 @@ export default async function StudentPage() {
           <ul className="row-list divide-y divide-line">
             {needsAction.map((application) => {
               const posting = postingById.get(application.postingId)!;
-              const days = daysInStatus(application, DEMO_NOW);
+              const days = daysInStatus(application, now);
               const options = optionsFor(application);
               // Show the booking panel only when booking is a move the state
               // machine will actually accept — a student the board found

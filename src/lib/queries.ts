@@ -26,7 +26,7 @@ import {
 } from "@/domain/workflow";
 import type { ActorContext, RegionDefinition } from "@/domain/types";
 import { repositories } from "@/data/backend";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "./clock";
 import { creditProgress, DEFAULT_HOURS_PER_CREDIT } from "@/domain/credit";
 import {
   retentionStatusFor,
@@ -84,6 +84,7 @@ export async function stalledApplications(
   actor: ActorContext,
   thresholdDays = 5,
 ): Promise<StalledItem[]> {
+  const now = await asOf(actor);
   const applications = await repositories.applications.list(actor);
 
   // Filter before reading anything else, so the per-application lookups below
@@ -92,7 +93,7 @@ export async function stalledApplications(
     (application) =>
       !isTerminal(application.status) &&
       WAITING_STATUSES.includes(application.status) &&
-      daysInStatus(application, DEMO_NOW) >= thresholdDays,
+      daysInStatus(application, now) >= thresholdDays,
   );
 
   // Resolved together rather than in sequence. Against the in-memory store the
@@ -109,7 +110,7 @@ export async function stalledApplications(
         application,
         posting,
         student,
-        days: daysInStatus(application, DEMO_NOW),
+        days: daysInStatus(application, now),
         blockedOn: BLOCKED_ON[application.status] ?? "—",
         inPause: PAUSE_STATUSES.includes(application.status),
       };
@@ -212,12 +213,13 @@ export async function marketHealth(
 export async function allMarketHealth(
   actor: ActorContext,
 ): Promise<MarketHealth[]> {
+  const now = await asOf(actor);
   const [markets, regions] = await Promise.all([
     repositories.markets.list(actor),
     repositories.regionDefinitions.list(actor),
   ]);
   return Promise.all(
-    markets.map((m) => marketHealth(actor, m, currentRegion(regions, m.id, DEMO_NOW))),
+    markets.map((m) => marketHealth(actor, m, currentRegion(regions, m.id, now))),
   );
 }
 
@@ -293,11 +295,12 @@ export async function marketRemainingBudget(
  * submission dates would look precise while meaning nothing.
  */
 export async function averagePauseDays(actor: ActorContext): Promise<number> {
+  const now = await asOf(actor);
   const inPause = (await repositories.applications.list(actor)).filter((a) =>
     PAUSE_STATUSES.includes(a.status),
   );
   if (inPause.length === 0) return 0;
-  const total = inPause.reduce((sum, a) => sum + daysInStatus(a, DEMO_NOW), 0);
+  const total = inPause.reduce((sum, a) => sum + daysInStatus(a, now), 0);
   return Math.round(total / inPause.length);
 }
 
@@ -472,6 +475,7 @@ export async function followUpQueue(
   // subtracting one from the other would report every placement it hosted as
   // never followed up — work already done, shown as outstanding.
   if (!canReadOutcomes(actor.membership.role)) return [];
+  const now = await asOf(actor);
 
   const [applications, outcomes] = await Promise.all([
     repositories.applications.list(actor),
@@ -479,7 +483,7 @@ export async function followUpQueue(
   ]);
 
   const candidates = applications
-    .map((a) => ({ a, window: followUpWindowDue(a, outcomes, DEMO_NOW) }))
+    .map((a) => ({ a, window: followUpWindowDue(a, outcomes, now) }))
     .filter((c): c is { a: Application; window: WindowStatus } => c.window !== null);
 
   // Resolved together rather than one after another, for the reason
@@ -496,7 +500,7 @@ export async function followUpQueue(
         application,
         student,
         posting,
-        days: daysSinceExit(application, DEMO_NOW),
+        days: daysSinceExit(application, now),
         window,
       };
     }),
@@ -534,6 +538,7 @@ export interface HostOfferItem {
 export async function hostOfferQueue(
   actor: ActorContext,
 ): Promise<HostOfferItem[]> {
+  const now = await asOf(actor);
   const [applications, offers] = await Promise.all([
     repositories.applications.list(actor),
     repositories.hostOffers.list(actor),
@@ -552,7 +557,7 @@ export async function hostOfferQueue(
         application,
         student,
         posting,
-        days: daysSinceExit(application, DEMO_NOW),
+        days: daysSinceExit(application, now),
       };
     }),
   );
@@ -594,6 +599,7 @@ export async function outcomeReport(
   // report the caller may not have are different answers.
   const none = () => null;
   if (!canReadOutcomes(actor.membership.role)) return summarizeOutcomes([], 0, none);
+  const now = await asOf(actor);
 
   const [applications, outcomes, regions] = await Promise.all([
     repositories.applications.list(actor),
@@ -604,7 +610,7 @@ export async function outcomeReport(
     repositories.regionDefinitions.list(actor),
   ]);
 
-  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes, DEMO_NOW)).length;
+  const unmeasured = applications.filter((a) => awaitsFollowUp(a, outcomes, now)).length;
   // Each observation judged against the boundary that was in force when it was
   // made. A redesignation next year must not reach back and change a figure
   // that has already been reported — which is the whole reason a definition is
@@ -663,6 +669,7 @@ export async function retentionHorizon(
   actor: ActorContext,
 ): Promise<RetentionItem[]> {
   if (actor.membership.role !== "admin") return [];
+  const now = await asOf(actor);
 
   const [students, applications] = await Promise.all([
     repositories.students.list(actor),
@@ -673,7 +680,7 @@ export async function retentionHorizon(
   for (const student of students) {
     if (student.purgedOn) continue;
     const mine = applications.filter((a) => a.studentId === student.id);
-    const status = retentionStatusFor(student, applications, DEMO_NOW);
+    const status = retentionStatusFor(student, applications, now);
     // Undateable records are skipped rather than listed: one the platform
     // cannot date is something to investigate by hand, not something to offer
     // an irreversible button against.
