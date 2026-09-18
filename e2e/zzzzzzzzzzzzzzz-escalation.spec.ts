@@ -27,6 +27,19 @@ test.describe.configure({ mode: "serial" });
 
 const SECRET = "no guard on the press and my supervisor has been out";
 
+/**
+ * The toast carrying this text, however many are on screen.
+ *
+ * Not `getByRole("status").first()`, which is what this file had and what CI
+ * caught: every toast is its own `role="status"` and they stack, so after two
+ * actions in a row `.first()` is the **earlier** one. It passed locally because
+ * the first toast had faded before the second assertion ran, and failed on a
+ * slower runner where both were still up — a race in the test rather than
+ * anything wrong with the page.
+ */
+const toast = (page: import("@playwright/test").Page, text: string) =>
+  page.getByRole("status").filter({ hasText: text });
+
 test("a learner reports a problem and an administrator receives it", async ({ page }) => {
   await page.goto("/demo/student");
 
@@ -45,7 +58,7 @@ test("a learner reports a problem and an administrator receives it", async ({ pa
   await dialog.locator("textarea").fill(`There is ${SECRET} for two weeks.`);
   await dialog.getByRole("button", { name: /Send to an administrator/ }).click();
 
-  await expect(page.getByRole("status").first()).toContainText("Reported");
+  await expect(toast(page, "Reported")).toBeVisible();
 
   await page.goto("/demo/admin");
   const queue = page.getByText("Reported to you").locator("..");
@@ -75,7 +88,7 @@ test("the administrator closes it out, and it leaves the queue", async ({ page }
   await expect(page.locator("main")).toContainText(SECRET);
 
   await page.getByRole("button", { name: "Pick it up" }).first().click();
-  await expect(page.getByRole("status").first()).toContainText("Picked up");
+  await expect(toast(page, "Picked up")).toBeVisible();
 
   await page.getByRole("button", { name: "Close it out" }).first().click();
   const dialog = page.getByRole("dialog");
@@ -89,7 +102,7 @@ test("the administrator closes it out, and it leaves the queue", async ({ page }
     .locator("textarea")
     .fill("Machine is tagged out and a new supervisor starts Monday.");
   await dialog.getByRole("button", { name: "Close it out" }).click();
-  await expect(page.getByRole("status").first()).toContainText("Closed out");
+  await expect(toast(page, "Closed out")).toBeVisible();
 
   await page.reload();
   await expect(page.locator("main")).not.toContainText(SECRET);
