@@ -10,6 +10,7 @@ import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { publishInterviewSlots } from "@/services/creation";
 import { PORTAL_PATH } from "@/routes";
 import { changeAllocation } from "@/app/_actions/funding";
+import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
 import { postingTotalHours } from "@/domain/types";
@@ -223,4 +224,24 @@ export async function publishSlots(
   if (!result.ok) return result;
   for (const path of Object.values(PORTAL_PATH)) revalidatePath(path);
   return { ok: true };
+}
+
+/**
+ * Report a problem with a placement.
+ *
+ * The role is hardcoded here rather than taken from the request — see
+ * `_actions/escalation.ts`. Everybody may raise one; whether this actor can
+ * see the placement they named is the repository's answer, not this file's.
+ */
+export async function boardRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("board", applicationId, kind, summary);
+}
+
+/** Take back a report they raised themselves. */
+export async function boardWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
+  return withdrawProblem("board", escalationId);
 }

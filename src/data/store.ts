@@ -16,6 +16,7 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -300,6 +301,15 @@ export interface UnitOfWork {
    * a later effective date, and the row it supersedes is left untouched.
    */
   createRegionDefinition(definition: RegionDefinition): void;
+  createEscalation(escalation: Escalation): void;
+  /**
+   * Pick one up, close it, or withdraw it.
+   *
+   * Unlike most `save*` here, the kind and the summary are not in the SET list
+   * on the Postgres side: they are what somebody reported, and an escalation
+   * edited into being about something else is worse than none at all.
+   */
+  saveEscalation(escalation: Escalation, expectedVersion: number): void;
   appendAuditEvent(event: Omit<AuditEvent, "id">): void;
   enqueueNotification(intent: NotificationIntent): void;
 }

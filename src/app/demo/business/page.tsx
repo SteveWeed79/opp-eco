@@ -27,6 +27,7 @@ import {
   ToneCard,
   TrackBadge,
 } from "@/components/ui";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import {
   TransitionActions,
   MENTORSHIP_CONFIRM,
@@ -49,6 +50,7 @@ import { hostOfferQueue, marketFunding } from "@/lib/queries";
 import {
   answerPlacementOffer,
   businessCloseIntroduction,
+  businessRaiseProblem,
   businessTransition,
 } from "./actions";
 import { AnswerOffer } from "@/components/AnswerOffer";
@@ -509,6 +511,18 @@ export default async function BusinessPage() {
                             unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                           }).map((t) => ({ to: t.to, label: t.label }))}
                         />
+                        {/* The path runs both ways: an employer with a learner
+                            who has stopped turning up has the same problem
+                            from the other side, and the same route to it. */}
+                        {application.status === "placement_active" && (
+                          <div className="mt-2">
+                            <RaiseProblem
+                              applicationId={application.id}
+                              placementTitle={`${student.name} — ${posting.title}`}
+                              action={businessRaiseProblem}
+                            />
+                          </div>
+                        )}
                       </Td>
                     </tr>
                   );

@@ -11,6 +11,7 @@ import type {
   ActorContext,
   Application,
   ConsentRecord,
+  Escalation,
   FundingCommitment,
   MentorshipOffer,
   HostOffer,
@@ -35,6 +36,7 @@ import { byOfferOrder } from "@/domain/offer";
 import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
+import { byEscalationOrder, isLive } from "@/domain/escalation";
 import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
@@ -118,6 +120,23 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
  * agreement, and what consent buys it is a wider view of the learner, not sight
  * of the paperwork.
  */
+/**
+ * Escalations this actor may read: their own, or every one in the market if
+ * they are the administrator.
+ *
+ * **Not the parties the problem is about**, which is the whole design and not a
+ * narrowing bolted on afterwards — see `EscalationRepository`. An employer
+ * asking for its own placement's escalations gets an empty list, and that is
+ * the correct answer rather than a missing case.
+ *
+ * Matched clause for clause by `escalationScope` on the SQL side.
+ */
+function visibleEscalations(actor: ActorContext): Escalation[] {
+  const rows = inScope(actor, seed.escalations);
+  if (actor.membership.role === "admin") return rows;
+  return rows.filter((e) => e.raisedByUserId === actor.user.id);
+}
+
 function visibleConsents(actor: ActorContext): ConsentRecord[] {
   const { role, organizationId } = actor.membership;
   if (role === "business") return [];
@@ -445,6 +464,16 @@ export const repositories: Repositories = {
       visibleConsents(actor)
         .filter((c) => c.studentId === studentId)
         .sort(byConsentOrder),
+  },
+
+  escalations: {
+    list: async (actor) => visibleEscalations(actor).slice().sort(byEscalationOrder),
+    find: async (actor, id) => visibleEscalations(actor).find((e) => e.id === id) ?? null,
+    forApplication: async (actor, applicationId) =>
+      visibleEscalations(actor)
+        .filter((e) => e.applicationId === applicationId)
+        .sort(byEscalationOrder),
+    live: async (actor) => visibleEscalations(actor).filter(isLive).sort(byEscalationOrder),
   },
 
   fundingSources: {

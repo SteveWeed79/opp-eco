@@ -46,6 +46,7 @@ import {
   studentLifecycle,
 } from "@/app/_actions/lifecycle";
 import { postingTotalHours, type MentorshipPairing, type Posting } from "@/domain/types";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import {
   TransitionActions,
   POSTING_CONFIRM,
@@ -57,6 +58,7 @@ import {
   collegeIntroduceStudent,
   collegeRecordConsent,
   collegeRecordOutcome,
+  collegeRaiseProblem,
   collegeTransition,
 } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
@@ -563,6 +565,16 @@ export default async function CollegePage() {
                                   postingOwnerId: posting.businessId,
                                   unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                                 }).map((t) => ({ to: t.to, label: t.label }))}
+                              />
+                              {/* The college is an intermediary rather than a
+                                  party to the placement, and hears about
+                                  trouble from both sides. Its report is its
+                                  own — the learner's and the employer's stay
+                                  invisible to it, as its own is to them. */}
+                              <RaiseProblem
+                                applicationId={application.id}
+                                placementTitle={`${student.name} — ${posting.title}`}
+                                action={collegeRaiseProblem}
                               />
                             </span>
                           </li>

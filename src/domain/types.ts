@@ -1236,6 +1236,87 @@ export interface Outcome {
 }
 
 // ---------------------------------------------------------------------------
+// Escalations — somebody says a placement has gone wrong
+// ---------------------------------------------------------------------------
+
+/**
+ * What kind of problem, declared worst first.
+ *
+ * The order is load-bearing twice over: Postgres sorts an enum in declaration
+ * order, which is what lets the administrator's queue put safety at the top
+ * without a CASE expression, and `escalation_kind` is declared in this same
+ * order for the two layers to agree.
+ *
+ * Six rather than a free-text subject line, because the administrator's first
+ * question is which of these it is and a sentence cannot be sorted on. Six
+ * rather than twenty, because a list nobody can hold in their head gets
+ * answered with `other` and stops meaning anything.
+ */
+export type EscalationKind =
+  | "safety"
+  | "pay"
+  | "hours"
+  | "supervision"
+  | "academic"
+  | "other";
+
+/**
+ * `withdrawn` is the raiser's; `resolved` is the administrator's.
+ *
+ * Kept apart because they record different things. A learner saying "it sorted
+ * itself out" and an administrator saying "I dealt with it" are not the same
+ * event, and a programme asked later how many problems it resolved must not be
+ * able to count the first as the second.
+ */
+export type EscalationStatus = "open" | "acknowledged" | "resolved" | "withdrawn";
+
+/**
+ * A problem somebody raised about a placement.
+ *
+ * **Deliberately not an application status.** A placement can be in trouble and
+ * still be running — that is the normal case, and the whole point of raising
+ * one early. Folding this into the workflow would mean every existing status
+ * needing an escalated twin, and it would make reporting a transition that
+ * somebody could refuse. It runs alongside instead: the application moves as it
+ * always did, and this says somebody is unhappy about it.
+ *
+ * **Who may read one is the design.** An escalation is visible to whoever
+ * raised it and to the administrator, and to nobody else — not to the employer
+ * it may be about, not to the college, not to the board. A learner who knows
+ * their supervisor will read it does not report an absent supervisor, and a
+ * channel that only carries what is safe to say in front of the other party is
+ * not an escalation path, it is a comment box. The administrator is the route
+ * precisely because they are outside the placement.
+ */
+export interface Escalation {
+  id: string;
+  marketId: string;
+  /** The placement this is about. */
+  applicationId: string;
+  raisedByUserId: string;
+  /**
+   * The capacity they raised it in, stored rather than resolved at read time.
+   *
+   * Same reasoning as `Outcome.source`: who was speaking is part of what was
+   * said. A supervisor moving to the college later must not silently turn a
+   * complaint an employer made into one the college made.
+   */
+  raisedByRole: ActorRole;
+  kind: EscalationKind;
+  /** What is wrong, in their words. Required — see `raiseBlockReason`. */
+  summary: string;
+  raisedOn: string;
+  status: EscalationStatus;
+  /** When an administrator picked it up, or null while nobody has. */
+  acknowledgedOn: string | null;
+  acknowledgedByUserId: string | null;
+  /** What was done about it. Required to resolve, absent until then. */
+  resolution?: string;
+  resolvedOn: string | null;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
 
@@ -1273,6 +1354,12 @@ export interface AuditEvent {
     | "funding_source"
     | "funding_commitment"
     | "consent"
+    // Somebody reported a problem with a placement. Audited so the market's log
+    // shows that a report was made and what became of it, while the report's own
+    // text stays where only the raiser and the administrator can read it — the
+    // log is wider-readable than the escalation, and copying the summary into it
+    // would undo the visibility rule the feature rests on.
+    | "escalation"
     // An account: added to an organization, or moved to a new work address.
     // Both are identity rather than work, and both are the answer to "who was
     // this account when it signed that" — which is the question attribution

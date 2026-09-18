@@ -20,6 +20,7 @@ import type {
   ConsentRecord,
   AuditEvent,
   CreditAward,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -215,6 +216,27 @@ export interface OutcomeRepository {
 }
 
 /**
+ * Escalations, read by the person who raised one and by the administrator.
+ *
+ * **Nobody else, including the parties the problem is about.** That refusal is
+ * the feature rather than a restriction on it: a learner who knows their
+ * supervisor will read it does not report an absent supervisor, and a channel
+ * carrying only what is safe to say in front of the other party is a comment
+ * box. Both layers implement it — `visibleEscalations` and `escalationScope` —
+ * and the parity suite checks they agree, including that an employer reading
+ * its own placement's escalations gets an empty list rather than an error.
+ *
+ * `live` is the administrator's queue and the reason the partial index exists.
+ */
+export interface EscalationRepository {
+  list(actor: ActorContext): Promise<Escalation[]>;
+  find(actor: ActorContext, id: string): Promise<Escalation | null>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<Escalation[]>;
+  /** Still open or being looked at, worst kind first, oldest first within a kind. */
+  live(actor: ActorContext): Promise<Escalation[]>;
+}
+
+/**
  * What each host said at the end of a placement.
  *
  * Narrowed differently from outcomes, because the parties differ. **The
@@ -273,6 +295,7 @@ export interface Repositories {
   fundingCommitments: FundingCommitmentRepository;
   consents: ConsentRepository;
   outcomes: OutcomeRepository;
+  escalations: EscalationRepository;
   hostOffers: HostOfferRepository;
   regionDefinitions: RegionDefinitionRepository;
   auditEvents: AuditEventRepository;

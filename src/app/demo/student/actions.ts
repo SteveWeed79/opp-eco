@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
+import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
 import { executeTransition } from "@/services/transitions";
@@ -345,4 +346,24 @@ export async function studentRecordOwnOutcome(
     employmentCounty,
     employmentState,
   );
+}
+
+/**
+ * Report a problem with a placement.
+ *
+ * The role is hardcoded here rather than taken from the request — see
+ * `_actions/escalation.ts`. Everybody may raise one; whether this actor can
+ * see the placement they named is the repository's answer, not this file's.
+ */
+export async function studentRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("student", applicationId, kind, summary);
+}
+
+/** Take back a report they raised themselves. */
+export async function studentWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
+  return withdrawProblem("student", escalationId);
 }

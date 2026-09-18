@@ -3,6 +3,7 @@
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { recordFollowUp } from "@/app/_actions/outcome";
+import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
 import { addConsent, revokeConsent } from "@/app/_actions/privacy";
 
 /**
@@ -117,4 +118,24 @@ export async function collegeWithdrawConsent(
   reason: unknown,
 ): Promise<ActionResult> {
   return revokeConsent("college", consentId, reason);
+}
+
+/**
+ * Report a problem with a placement.
+ *
+ * The role is hardcoded here rather than taken from the request — see
+ * `_actions/escalation.ts`. Everybody may raise one; whether this actor can
+ * see the placement they named is the repository's answer, not this file's.
+ */
+export async function collegeRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("college", applicationId, kind, summary);
+}
+
+/** Take back a report they raised themselves. */
+export async function collegeWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
+  return withdrawProblem("college", escalationId);
 }

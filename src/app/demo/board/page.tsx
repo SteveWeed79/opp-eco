@@ -25,7 +25,8 @@ import {
 } from "@/components/ui";
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
-import { boardTransition, publishSlots } from "./actions";
+import { boardRaiseProblem, boardTransition, publishSlots } from "./actions";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
@@ -458,6 +459,14 @@ export default async function BoardPage() {
                                 to: t.to,
                                 label: t.label,
                               }))}
+                            />
+                            {/* The board pays for these placements and is the
+                                party most likely to notice a claim nobody is
+                                answering. Its report is its own. */}
+                            <RaiseProblem
+                              applicationId={application.id}
+                              placementTitle={`${student.name} — ${posting.title}`}
+                              action={boardRaiseProblem}
                             />
                           </div>
                         </Td>

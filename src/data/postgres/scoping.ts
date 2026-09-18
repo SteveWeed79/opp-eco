@@ -248,6 +248,27 @@ export function fundingCommitmentScope(actor: ActorContext): Sql {
  * asymmetry worth naming: consent is what widens what an employer may see about
  * a learner, and it is still not a record the employer is party to.
  */
+/**
+ * Escalations: the raiser's own, or every one in the market for an
+ * administrator.
+ *
+ * **The parties an escalation is about are deliberately not on this list** —
+ * not the employer it may concern, not the college, not the board. The refusal
+ * is the feature: a learner who knows their supervisor will read it does not
+ * report an absent supervisor. Written as an explicit clause rather than an
+ * omitted join so a reviewer sees the decision in the statement.
+ *
+ * Matches `visibleEscalations` clause for clause; the parity suite compares
+ * them accessor by accessor and role by role.
+ */
+export function escalationScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "escalations")];
+  if (actor.membership.role !== "admin") {
+    parts.push(sql`escalations.raised_by = ${actor.user.id}`);
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function consentScope(actor: ActorContext): Sql {
   if (actor.membership.role === "business") return sql`FALSE`;
 

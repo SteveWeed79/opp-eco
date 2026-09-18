@@ -241,6 +241,8 @@ withDatabase("parity with the in-memory layer", () => {
       hostOffers: await repos.hostOffers.list(actor),
       regionDefinitions: await repos.regionDefinitions.list(actor),
       consents: await repos.consents.list(actor),
+      escalations: await repos.escalations.list(actor),
+      liveEscalations: await repos.escalations.live(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
       // Without their ids: the log's primary key is a bigserial the database
@@ -384,6 +386,13 @@ withDatabase("parity with the in-memory layer", () => {
       expect(await postgres.hostOffers.forApplication(actor, application.id)).toEqual(
         await memoryRepositories.hostOffers.forApplication(actor, application.id),
       );
+      // Ordered worst-kind-first rather than by id, and the only list here
+      // whose order is not newest-first, so a disagreement between the enum's
+      // declaration order in the migration and ESCALATION_KINDS in the domain
+      // shows up as an order mismatch rather than silently.
+      expect(
+        await postgres.escalations.forApplication(actor, application.id),
+      ).toEqual(await memoryRepositories.escalations.forApplication(actor, application.id));
       expect(
         byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
       ).toEqual(

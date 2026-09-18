@@ -31,6 +31,7 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Escalation,
   InterviewSlot,
   MarketStage,
   MatchFactor,
@@ -317,6 +318,27 @@ export function toConsentRecord(row: Row): ConsentRecord {
     status: text(row.status) as ConsentRecord["status"],
     recordedByUserId: text(row.recorded_by),
     note: optionalText(row.note),
+    version: number(row.version),
+  };
+}
+
+export function toEscalation(row: Row): Escalation {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    applicationId: text(row.application_id),
+    raisedByUserId: text(row.raised_by),
+    raisedByRole: text(row.raised_by_role) as Escalation["raisedByRole"],
+    kind: text(row.kind) as Escalation["kind"],
+    summary: text(row.summary),
+    raisedOn: timestamp(row.raised_on),
+    status: text(row.status) as Escalation["status"],
+    // Nullable rather than optional on both: "nobody has picked this up" is a
+    // state the administrator's queue reads, not a field somebody forgot.
+    acknowledgedOn: nullableTimestamp(row.acknowledged_on),
+    acknowledgedByUserId: nullableText(row.acknowledged_by),
+    resolution: optionalText(row.resolution),
+    resolvedOn: nullableTimestamp(row.resolved_on),
     version: number(row.version),
   };
 }

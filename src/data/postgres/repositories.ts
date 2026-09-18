@@ -47,6 +47,7 @@ import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   consentScope,
+  escalationScope,
   fundingCommitmentScope,
   marketScope,
   hostOfferScope,
@@ -65,6 +66,7 @@ import {
   toMarket,
   toMentorshipOffer,
   toConsentRecord,
+  toEscalation,
   toFundingCommitment,
   toFundingSource,
   toHostOffer,
@@ -210,6 +212,22 @@ export function postgresRepositories(db: SqlClient): Repositories {
     const where = joinSql([consentScope(actor), extra], " AND ");
     return sql`SELECT * FROM consents WHERE ${where}
                ORDER BY consents.granted_on DESC, consents.id COLLATE "C"`;
+  }
+
+  /**
+   * Worst kind first, then oldest first within a kind, then the id.
+   *
+   * Oldest first is the opposite of every other list here and matches
+   * `byEscalationOrder`: elsewhere the newest row is the interesting one, and
+   * here the oldest unanswered problem is the one that has waited longest.
+   * `escalation_kind` is declared worst-first in the migration, so Postgres
+   * sorts it correctly with no CASE expression.
+   */
+  function escalationsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([escalationScope(actor), extra], " AND ");
+    return sql`SELECT * FROM escalations WHERE ${where}
+               ORDER BY escalations.kind, escalations.raised_on,
+                        escalations.id COLLATE "C"`;
   }
 
   function fundsWhere(actor: ActorContext, extra: Sql): Sql {
@@ -568,6 +586,22 @@ export function postgresRepositories(db: SqlClient): Repositories {
         one(consentsWhere(actor, sql`consents.id = ${id}`), toConsentRecord),
       forStudent: (actor, studentId) =>
         all(consentsWhere(actor, sql`consents.student_id = ${studentId}`), toConsentRecord),
+    },
+
+    escalations: {
+      list: (actor) => all(escalationsWhere(actor, sql`TRUE`), toEscalation),
+      find: (actor, id) =>
+        one(escalationsWhere(actor, sql`escalations.id = ${id}`), toEscalation),
+      forApplication: (actor, applicationId) =>
+        all(
+          escalationsWhere(actor, sql`escalations.application_id = ${applicationId}`),
+          toEscalation,
+        ),
+      live: (actor) =>
+        all(
+          escalationsWhere(actor, sql`escalations.status IN ('open', 'acknowledged')`),
+          toEscalation,
+        ),
     },
 
     fundingSources: {

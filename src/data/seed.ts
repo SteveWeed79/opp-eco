@@ -17,6 +17,7 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -2316,5 +2317,77 @@ export const auditEvents: AuditEvent[] = [
     reason:
       "Board allocation exhausted for this quarter; business agreed to proceed at full cost",
     viaOverride: false,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Escalations
+// ---------------------------------------------------------------------------
+
+/**
+ * Three problems somebody raised, chosen to exercise the three things about
+ * this record that are easy to get wrong.
+ *
+ * `esc-1` is the case the feature exists for: a placement whose statuses are
+ * all healthy — `app-1` is active, on time, hours flowing — and which is going
+ * wrong anyway. Nothing derived from dwell time can see it, and it is invisible
+ * to the employer it is about, which is the only reason the learner raised it.
+ *
+ * `esc-2` is raised by an employer rather than about one, so the fixtures do
+ * not quietly teach that escalations flow in one direction.
+ *
+ * `esc-3` is closed, so the resolution path has something to render and the
+ * parity suite has a row where `resolution` and `resolvedOn` are set.
+ */
+export const escalations: Escalation[] = [
+  {
+    id: "esc-1",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-1",
+    raisedByUserId: "u-alex",
+    raisedByRole: "student",
+    kind: "supervision",
+    summary:
+      "My supervisor has been out for three weeks and nobody has given me anything to do. I have been sitting in the break room logging hours I do not think I should be logging.",
+    raisedOn: daysAgo(4),
+    status: "open",
+    acknowledgedOn: null,
+    acknowledgedByUserId: null,
+    resolvedOn: null,
+    version: 1,
+  },
+  {
+    id: "esc-2",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-2",
+    raisedByUserId: "u-dana",
+    raisedByRole: "business",
+    kind: "academic",
+    summary:
+      "Priya's lab schedule changed this term and she can only make Tuesdays now. We can work around it but the placement will not reach the hours the credit needs at this rate.",
+    raisedOn: daysAgo(9),
+    status: "acknowledged",
+    acknowledgedOn: daysAgo(7),
+    acknowledgedByUserId: "u-admin",
+    resolvedOn: null,
+    version: 1,
+  },
+  {
+    id: "esc-3",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-14",
+    raisedByUserId: "u-marcia",
+    raisedByRole: "board",
+    kind: "pay",
+    summary:
+      "Reimbursement claim for April has been sitting with no timesheet attached and the employer says they submitted one.",
+    raisedOn: daysAgo(26),
+    status: "resolved",
+    acknowledgedOn: daysAgo(25),
+    acknowledgedByUserId: "u-admin",
+    resolution:
+      "The timesheet was submitted against the wrong placement. Re-filed against this one and the claim went through on the May run.",
+    resolvedOn: daysAgo(21),
+    version: 1,
   },
 ];

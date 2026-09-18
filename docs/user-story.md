@@ -338,7 +338,11 @@ Every day spent in `mutual_interest` or `interview_scheduled` is a day the place
 
 **Micro:** student submits the deliverable, business accepts or requests revision. Acceptance *is* the evaluation.
 
-An **escalation path** exists on both tracks — any party raises a problem, it routes to Admin.
+An **escalation path** exists on both tracks — any party raises a problem, it routes to Admin. Built as `Escalation`, and three decisions in it are worth knowing:
+
+- **It is not an application status.** A placement in trouble is usually still running, and reporting one must not be a transition somebody could refuse.
+- **Only the raiser and the administrator can read one.** Not the employer it may be about, not the college, not the board. A learner who knows their supervisor will read it does not report an absent supervisor, and a channel carrying only what is safe to say in front of the other party is a comment box. The administrator is the route precisely because they sit outside the placement.
+- **Withdrawing and resolving are different events.** The raiser withdraws their own; the administrator resolves, and cannot close one without saying what was done.
 
 ```mermaid
 stateDiagram-v2
@@ -394,9 +398,11 @@ Phase 5 says the student submits the deliverable and the business accepts it or 
 
 The file machinery for it already exists and is reachable from nowhere: `UPLOAD_PURPOSES` in `src/services/uploads/validation.ts` declares exactly two purposes, `resume` and `deliverable`, with magic-byte checking, size caps, a Postgres store, a retrieval route and access rules. The design system has a `FileUpload` component. The only screen that renders it is the design gallery. So the resume the master profile is supposed to carry, and the deliverable the micro track turns on, are the same missing wiring twice.
 
-### No one can raise a problem
+### ~~No one can raise a problem~~ — built
 
-Phase 5 ends "an escalation path exists on both tracks — any party raises a problem, it routes to Admin." No portal has that action, and nothing in the codebase implements it. The administrator's **What's stuck** is derived from dwell time — real, and load-bearing, and only able to see a placement that has gone quiet. A placement going wrong loudly, where somebody knows and wants to say so, has nowhere to be said.
+This was the first gap closed after the walk. Every portal now has **Report a problem** on a live placement, and the administrator's console opens with **Reported to you** above *What's stuck* — the two queues answer different questions, and the ordering says which wins on the day both have rows. *What's stuck* is derived from dwell time and remains the better signal most days; it can only ever see a placement that has gone **quiet**, and one going wrong loudly moves through its statuses on time and looks healthy from every screen.
+
+What is **not** built is notification. Escalations reach the administrator's queue and nothing rings: the platform has no concept of an administrator on duty, `NotificationIntent` addresses a user or an organization, and neither can express "whoever is operating this market today". Hardcoding the seeded administrator's id would put a fixture inside a service. That wants an operator's answer to who gets rung at two in the morning about a safety report, not a guess from the code.
 
 ### A minor still cannot be recognised
 

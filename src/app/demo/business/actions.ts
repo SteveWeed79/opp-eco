@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction } from "@/app/_actions/mentorship";
 import { answerHostOffer } from "@/app/_actions/offer";
+import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
 import { actorForPortal } from "@/auth/session";
 import { reviewHours } from "@/services/timesheet";
 import { reviewHoursInput, validate } from "@/services/validation";
@@ -102,4 +103,24 @@ export async function answerPlacementOffer(
   note?: unknown,
 ): Promise<ActionResult> {
   return answerHostOffer("business", applicationId, answer, note);
+}
+
+/**
+ * Report a problem with a placement.
+ *
+ * The role is hardcoded here rather than taken from the request — see
+ * `_actions/escalation.ts`. Everybody may raise one; whether this actor can
+ * see the placement they named is the repository's answer, not this file's.
+ */
+export async function businessRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("business", applicationId, kind, summary);
+}
+
+/** Take back a report they raised themselves. */
+export async function businessWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
+  return withdrawProblem("business", escalationId);
 }

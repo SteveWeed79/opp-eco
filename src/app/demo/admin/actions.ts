@@ -6,6 +6,11 @@ import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { nudgeForFollowUp } from "@/app/_actions/outreach";
+import {
+  acknowledgeProblem,
+  raiseProblem,
+  resolveProblem,
+} from "@/app/_actions/escalation";
 import { redefineMarketRegion } from "@/app/_actions/region";
 import { overrideInput, validate } from "@/services/validation";
 import { cookies } from "next/headers";
@@ -198,4 +203,32 @@ export async function setDemoView(next: boolean): Promise<void> {
   // Every figure on the console is derived from the scope this changes, so the
   // cached render is wrong the moment it flips.
   revalidatePath(DEMO_ROOT, "layout");
+}
+
+/**
+ * The administrator picks up a reported problem, or closes it out.
+ *
+ * No role parameter on either: these are the administrator's alone, so there is
+ * nothing for a caller to assert. Raising one is different — every portal has
+ * its own wrapper for that, including this one, because an administrator
+ * writing down a phone call is recording it in their own voice rather than the
+ * caller's.
+ */
+export async function adminAcknowledgeProblem(escalationId: unknown): Promise<ActionResult> {
+  return acknowledgeProblem(escalationId);
+}
+
+export async function adminResolveProblem(
+  escalationId: unknown,
+  resolution: unknown,
+): Promise<ActionResult> {
+  return resolveProblem(escalationId, resolution);
+}
+
+export async function adminRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("admin", applicationId, kind, summary);
 }

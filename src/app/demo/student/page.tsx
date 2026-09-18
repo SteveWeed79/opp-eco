@@ -41,10 +41,12 @@ import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
 import {
   saveProfile,
+  studentRaiseProblem,
   studentRecordOwnOutcome,
   studentTransition,
 } from "./actions";
 import { RecordOutcome } from "@/components/RecordOutcome";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import { OUTCOME_KINDS } from "@/domain/outcome";
 import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
@@ -395,6 +397,22 @@ export default async function StudentPage() {
                             />
                           </div>
                         )}
+                      {/*
+                        Quiet, and last. Nobody should be nudged into reporting
+                        a problem — a prominent control on a healthy placement
+                        invites the noise that makes the administrator's queue
+                        worthless — but a learner who needs it must not have to
+                        go looking, and this is the only page they have.
+                      */}
+                      {!isTerminal(application.status) && (
+                        <div className="mt-3">
+                          <RaiseProblem
+                            applicationId={application.id}
+                            placementTitle={posting.title}
+                            action={studentRaiseProblem}
+                          />
+                        </div>
+                      )}
                     </li>
                   );
                 })}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  Siren,
   Building2,
   ClipboardCheck,
   Compass,
@@ -33,6 +34,8 @@ import {
 import { HOST_OFFER_ANSWERS } from "@/domain/offer";
 import { NudgeButton } from "@/components/NudgeButton";
 import { RedefineRegion } from "@/components/RedefineRegion";
+import { ResolveProblem } from "@/components/ResolveProblem";
+import { escalationKindLabel, daysWaiting } from "@/domain/escalation";
 import { regionHistory } from "@/domain/region";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
@@ -43,10 +46,15 @@ import {
   ORGANIZATION_CONFIRM,
 } from "@/components/TransitionActions";
 import { actorForPortal } from "@/auth/session";
+import { asOf } from "@/lib/clock";
 import { healthReport } from "@/services/health";
 import { mfaStatus } from "@/services/mfa";
 import { demoSignOnEnabled } from "@/auth/config";
-import { setDemoView } from "./actions";
+import {
+  adminAcknowledgeProblem,
+  adminResolveProblem,
+  setDemoView,
+} from "./actions";
 import { SecondFactor } from "./SecondFactor";
 import { Access } from "./Access";
 import {
@@ -121,6 +129,8 @@ export default async function AdminPage() {
   // Cheap enough to run on every load: four of the five checks are reading
   // configuration, and the two that touch the database are a `SELECT 1` and a
   // single-row lookup.
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(admin);
   const system = await healthReport();
   const secondFactor = await mfaStatus(admin);
   const { organizationName, marketName } = await nameLookups(admin);
@@ -141,6 +151,32 @@ export default async function AdminPage() {
   const verified = (await repositories.students.list(admin)).filter(
     (student) => student.status === "verified",
   );
+  // Problems somebody reported, which is the one queue here that is not derived
+  // from dwell time. `What's stuck` below can only see a placement that has gone
+  // quiet; this sees the ones going wrong loudly, and it is deliberately the
+  // first thing on the page.
+  const reported = await repositories.escalations.live(admin);
+  const reportedContext = new Map<
+    string,
+    { title: string; student: string } | undefined
+  >();
+  for (const escalation of reported) {
+    const application = await repositories.applications.find(
+      admin,
+      escalation.applicationId,
+    );
+    const posting = application
+      ? await repositories.postings.find(admin, application.postingId)
+      : null;
+    const learner = application
+      ? await repositories.students.find(admin, application.studentId)
+      : null;
+    reportedContext.set(escalation.id, {
+      title: posting?.title ?? "a placement",
+      student: learner?.name ?? "a learner",
+    });
+  }
+
   /** Verified students in one market — an introduction never crosses one. */
   const introducibleIn = (marketId: string) =>
     verified
@@ -348,6 +384,71 @@ export default async function AdminPage() {
           tone="brand"
         />
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Reported — the queue somebody filled deliberately                   */}
+      {/* ------------------------------------------------------------------ */}
+      {/*
+        Above `What's stuck` on purpose. That queue is derived from dwell time
+        and is the better signal most days; this one is a person going out of
+        their way to say something is wrong, and on the day it has a row in it
+        it outranks everything else on the page.
+
+        The summary is rendered here and nowhere else in the product, because
+        this console and the raiser are the only two places entitled to it.
+      */}
+      {reported.length > 0 && (
+        <Card>
+          <CardHeader
+            icon={<Siren className="w-5 h-5" />}
+            title="Reported to you"
+            subtitle="Somebody said a placement has gone wrong. Worst first, then longest waiting."
+          />
+          <div className="divide-y divide-line">
+            {reported.map((escalation) => {
+              const context = reportedContext.get(escalation.id);
+              const waiting = daysWaiting(escalation, now);
+              return (
+                <div
+                  key={escalation.id}
+                  className={`px-6 py-5 ${escalation.kind === "safety" ? "bg-crit-50/40" : ""}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge tone={escalation.kind === "safety" ? "crit" : "warn"}>
+                      {escalationKindLabel(escalation.kind)}
+                    </Badge>
+                    <span className="text-sm font-semibold text-ink-950">
+                      {context?.student} · {context?.title}
+                    </span>
+                    <span className="text-xs text-ink-500">
+                      raised by the {escalation.raisedByRole}
+                      {waiting > 0
+                        ? ` · ${waiting} day${waiting === 1 ? "" : "s"} ${
+                            escalation.status === "acknowledged" ? "since pick-up" : "unanswered"
+                          }`
+                        : " · today"}
+                    </span>
+                    {escalation.status === "acknowledged" && (
+                      <Badge tone="neutral">Being looked at</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-ink-700 whitespace-pre-line">
+                    {escalation.summary}
+                  </p>
+                  <div className="mt-3">
+                    <ResolveProblem
+                      escalationId={escalation.id}
+                      acknowledged={escalation.status === "acknowledged"}
+                      acknowledge={adminAcknowledgeProblem}
+                      resolve={adminResolveProblem}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* What's stuck — the administrator's actual job                       */}

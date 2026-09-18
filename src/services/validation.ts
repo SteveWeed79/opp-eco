@@ -428,3 +428,26 @@ export function validate<T>(
     error: field ? `${field}: ${first.message}` : (first?.message ?? "Invalid request"),
   };
 }
+
+/**
+ * Raising a problem about a placement.
+ *
+ * The role is deliberately absent: it comes from the actor, because who was
+ * speaking is part of what was said and a caller must not be able to file a
+ * complaint in somebody else's voice. Same reasoning as `recordHostOfferInput`.
+ *
+ * `longText` rather than `shortText` for the summary, and the floor that makes
+ * it useful lives in `raiseBlockReason` rather than here — the schema says what
+ * shape the field is, and the domain says what makes it worth acting on.
+ */
+export const raiseEscalationInput = z.object({
+  applicationId: id,
+  kind: z.enum(["safety", "pay", "hours", "supervision", "academic", "other"]),
+  summary: longText,
+});
+
+/** Closing one out. The resolution is required, which the domain repeats. */
+export const resolveEscalationInput = z.object({
+  escalationId: id,
+  resolution: reason,
+});

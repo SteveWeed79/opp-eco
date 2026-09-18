@@ -98,6 +98,7 @@ export const TABLES = [
   "audit_events",
   "region_definitions",
   "host_offers",
+  "escalations",
   "outcomes",
   "consents",
   "funding_commitments",
@@ -286,6 +287,8 @@ export const DEMO_DELETES = [
   byMarket("notification_outbox"),
   byMarket("region_definitions"),
   byMarket("host_offers"),
+  // Before `applications`, which they RESTRICT from.
+  byMarket("escalations"),
   byMarket("outcomes"),
   byMarket("consents"),
   byMarket("funding_commitments"),
@@ -890,6 +893,33 @@ export async function seedInto(tx, { auditEvents = true } = {}) {
     );
   }
 
+  // A report points at a market, an application and whoever raised it — and,
+  // once somebody has picked it up, at the administrator who did. All are in.
+  for (const escalation of seed.escalations) {
+    await insert(
+      `INSERT INTO escalations (id, market_id, application_id, raised_by,
+         raised_by_role, kind, summary, raised_on, status, acknowledged_on,
+         acknowledged_by, resolution, resolved_on, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        escalation.id,
+        escalation.marketId,
+        escalation.applicationId,
+        escalation.raisedByUserId,
+        escalation.raisedByRole,
+        escalation.kind,
+        escalation.summary,
+        escalation.raisedOn,
+        escalation.status,
+        escalation.acknowledgedOn,
+        escalation.acknowledgedByUserId,
+        escalation.resolution ?? null,
+        escalation.resolvedOn,
+        escalation.version,
+      ],
+    );
+  }
+
   // Skipped on a re-seed that found history already there — `audit_events`
   // refuses deletes, so writing a second copy could never be undone.
   for (const event of auditEvents ? seed.auditEvents : []) {
@@ -973,6 +1003,7 @@ try {
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
        (SELECT count(*) FROM host_offers)        AS host_offers,
+       (SELECT count(*) FROM escalations)        AS escalations,
        (SELECT count(*) FROM region_definitions) AS region_definitions,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
