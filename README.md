@@ -10,7 +10,22 @@ The program launches city by city: the administrator secures a local workforce b
 
 `/` is the **venture**: what this organization is, who it serves, what a partnership includes, and what has actually been tested. Indexed, and every figure on it is real.
 
-`/demo` is the **prototype**: five portals over one workflow, running on invented organizations, carrying a demonstration banner and `noindex` on every page.
+`/demo` is the **prototype**: five portals over one workflow, running on invented organizations, `noindex` on every page, and carrying a demonstration banner for everyone except a real person signed in with a real account.
+
+That exception is the whole difficulty in one line. The portals are not a copy of the product — they *are* the product, pointed at invented rows. So a college coordinator signing in to verify a real learner arrives at the same URL a visitor browses, and used to be met with a banner reading "every organization, student, and figure shown is fictional" above a switcher offering one-click entry to four portals she does not hold. The chrome now asks whether this is a real person working in the product — signed in **and** on a deployment that authenticates — and stands down when it is. A visitor handed an account by the role picker keeps the banner, because that is the demonstration doing exactly what it exists for.
+
+`/` also carries a **sign-in button** next to the prototype link, which it did not for some time: the only route to the login form was knowing the URL.
+
+### Which rows are the demonstration
+
+The banner is a claim about **rows**, and until recently it was decided by `AUTH_MODE` — a property of the process, which cannot know whether the claim is true. A deployment running real sign-on over seeded fixtures is telling the truth when it says they are invented, and had no way to say so.
+
+So markets carry `is_demo_data`, and nothing else needs to: every other table in the schema has `market_id`, so one flag answers "is this fictional" for a posting, a learner, a placement and a dollar figure alike.
+
+Two things about its shape are load-bearing and neither is incidental:
+
+- **The fake is flagged, not the real**, defaulting to `false`. A market is real because nobody did anything to it, so forgetting the flag hides the demonstration rather than serving a learner's record to an anonymous visitor. The other polarity fails the other way, and silently.
+- **Nothing in the application can write it**, because `markets` has no write path at all — no `INSERT`, no `UPDATE`, no unit-of-work entry, anywhere outside the operator scripts. Every market in existence came from `db:seed`. That was true by accident and is now checked: [`markets.test.ts`](src/data/postgres/markets.test.ts) fails if a market write appears in application source, so whoever adds the market-creation path this codebase still lacks has to decide deliberately what happens to the flag.
 
 They used to be the same page, and that page had to be honest and impressive at once. It opened with a program pitch and four statistics computed from seeded fixtures, under a black bar explaining that every figure above it was fictional — so a reader had to hold two contradictory frames simultaneously, and a funder given the address had nowhere to land. Splitting them is what lets the demonstration labelling stay loud without it being the first thing anybody reads.
 
@@ -830,10 +845,13 @@ and reveals nothing about which of its officers have accounts. Anything else
 answers `password`, which is the majority case and the one that fails generically
 a step later.
 
-**Passwords are scrypt, not a hash function.** `N=65536, r=8, p=1`, a 16-byte
+**Passwords are scrypt, not a hash function.** `N=131072, r=8, p=1`, a 16-byte
 random salt and a 32-byte key, stored as `scrypt$N$r$p$salt$key` so the
 parameters travel with the hash and raising the cost is a rehash on the next
 successful sign-in rather than a migration that locks everybody out at once.
+That mechanism has already been used once: `N` was `65536` and moved to OWASP's
+2¹⁷ baseline without anybody being locked out, which is the whole argument for
+storing the parameters alongside the key.
 scrypt rather than Argon2id for one deployment reason, stated plainly: it is in
 `node:crypto`, so there is no native module to fail to build on a platform
 nobody tested. Policy is NIST 800-63B's: at least twelve characters, no
