@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Building2, GraduationCap, Landmark, Mail } from "lucide-react";
 import { Card } from "@/components/ui";
 import { PageIntro, Section } from "@/app/_site/parts";
-import { brand, publicAddress, siteTitle } from "@/brand";
+import { brand, contactEmail, siteTitle } from "@/brand";
 import { DEMO_ROOT } from "@/routes";
 
 export const metadata: Metadata = {
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
  * edit — see the note on `contactMailbox` there.
  */
 export default function ContactPage() {
-  const email = publicAddress(brand.contactMailbox);
+  const email = contactEmail();
 
   return (
     <div>

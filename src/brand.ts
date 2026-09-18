@@ -78,6 +78,12 @@ export const brand = {
    */
   contactMailbox: "contact",
 
+  /**
+   * Where mail actually arrives, while `contact@` on the public domain does
+   * not exist. Overrides the composed address; clear it when it does.
+   */
+  contactAddress: "steve@swbuild.dev" as string | null,
+
   /** Who to ask for. */
   founderName: "Melissa Weed",
 
@@ -140,4 +146,9 @@ export function siteTitle(page?: string): string {
 /** An address at the venture's public domain. */
 export function publicAddress(mailbox: string): string {
   return `${mailbox}@${brand.publicDomain}`;
+}
+
+/** The address the site publishes, which is not always on the public domain. */
+export function contactEmail(): string {
+  return brand.contactAddress ?? publicAddress(brand.contactMailbox);
 }

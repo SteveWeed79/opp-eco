@@ -2,16 +2,13 @@
 
 ## Reporting a vulnerability
 
-Email **security@careerconnectedlearningnetwork.com** with what you found, how
-to reproduce it, and what you think the impact is. We aim to acknowledge within
-two business days.
+Email **steve@swbuild.dev** with what you found, how to reproduce it, and what
+you think the impact is. We aim to acknowledge within two business days.
 
 <!--
-  This address was `security@opportunityecosystem.example` — a domain RFC 2606
-  reserves so that nothing can be delivered to it. A reporting address that
-  silently discards mail is worse than none, because somebody who found
-  something believes they told us. Confirm this mailbox exists and routes to a
-  person before relying on it.
+  This was `security@opportunityecosystem.example` — a domain RFC 2606 reserves
+  so that nothing can be delivered to it. Move it to a `security@` on the
+  venture's own domain when that mailbox exists.
 -->
 
 
