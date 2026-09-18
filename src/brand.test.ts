@@ -111,6 +111,23 @@ describe("derived strings", () => {
     expect(pageTitle("Component library")).toMatch(/^\[Demo\] Component library/);
   });
 
+  it("marks by default, so a caller that has not decided says the cautious thing", () => {
+    // A missing disclaimer and a false one are both failures. This is the one
+    // that fails toward the reader.
+    expect(pageTitle("Anything", {})).toMatch(/^\[Demo\]/);
+    expect(pageTitle("Anything", { demonstration: undefined })).toMatch(/^\[Demo\]/);
+  });
+
+  it("drops the marker when the rows are not the demonstration's", () => {
+    // `/demo` is where the portals live, not a claim about what is in them. A
+    // coordinator working a real placement should not have "[Demo]" in her
+    // browser tab, and every link she forwards carries that tab's title.
+    expect(pageTitle(undefined, { demonstration: false })).not.toContain("[Demo]");
+    expect(pageTitle("Roster", { demonstration: false })).not.toContain("[Demo]");
+    // Still a title, not an empty one.
+    expect(pageTitle("Roster", { demonstration: false })).toContain("Roster");
+  });
+
   it("does not put the demo marker on a venture page", () => {
     // The other half of the same rule. `/` and the pages beside it describe
     // real work at a real address, and a "[Demo]" on them would be a false

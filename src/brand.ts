@@ -124,11 +124,25 @@ export function defaultEmailFrom(): string {
 /**
  * Title for a page inside the prototype. `[Demo]` leads so a forwarded link
  * preview says so first.
+ *
+ * Conditional for the same reason the banner is: the marker is a claim about
+ * the **rows** on the page, and `/demo` is the address of the portals rather
+ * than a statement about what is in them. A coordinator working a real
+ * placement should not have `[Demo]` in her browser tab, and every link she
+ * forwards carries that tab's title.
+ *
+ * Defaults to marking, so a caller that has not worked out which rows it is
+ * showing says the cautious thing. A missing disclaimer and a false one are
+ * both failures; this is the one that fails toward the reader.
  */
-export function pageTitle(page?: string): string {
+export function pageTitle(
+  page?: string,
+  { demonstration = true }: { demonstration?: boolean } = {},
+): string {
+  const mark = demonstration ? "[Demo] " : "";
   return page
-    ? `[Demo] ${page} — ${brand.name}`
-    : `[Demo] ${brand.name} — ${brand.programme}`;
+    ? `${mark}${page} — ${brand.name}`
+    : `${mark}${brand.name} — ${brand.programme}`;
 }
 
 /**

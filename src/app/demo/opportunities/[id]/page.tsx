@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
+import { showsDemonstrationData } from "@/lib/demonstration";
 import { viewerActor } from "@/auth/session";
 import { isSelfSufficientForCredit } from "@/domain/credit";
 import { canApply } from "@/domain/lifecycle";
@@ -77,14 +78,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const actor = await viewerActor();
+  // A posting under a real market is a real vacancy, and its link is the one
+  // most likely to be forwarded to somebody outside this system.
+  const demonstration = await showsDemonstrationData(actor);
   const posting = await visiblePosting(actor, id);
-  if (!posting) return { title: pageTitle("Opportunity") };
+  if (!posting) return { title: pageTitle("Opportunity", { demonstration }) };
 
   // A forwarded link's preview is often all the context a second-hand reader
   // gets, so it names the role and the employer rather than the product.
   const { organizationName } = await nameLookups(actor);
   return {
-    title: pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`),
+    title: pageTitle(`${posting.title} — ${organizationName(posting.businessId)}`, {
+      demonstration,
+    }),
   };
 }
 
