@@ -264,6 +264,11 @@ const byUser = (table) => ({
 });
 
 export const DEMO_DELETES = [
+  // The demonstration's own history. Deletable only because migration 0019
+  // exempts rows in a market flagged `is_demo_data` — a real programme's audit
+  // trail is refused as absolutely as it ever was, and an UPDATE is refused on
+  // every row in the table including these.
+  byMarket("audit_events"),
   // Credentials, first, because they hang off accounts rather than markets.
   //
   // These used to be reached by the cascade from `users`, and are named now
@@ -336,7 +341,7 @@ export const DEMO_DELETES = [
  * history accumulates rather than resetting**, and `seedInto` declines to write
  * a second copy of the same fixture history on top of it.
  */
-export const PRESERVED_TABLES = ["audit_events", "markets", "users"];
+export const PRESERVED_TABLES = ["markets", "users"];
 
 /** The markets this database says are the demonstration. */
 export async function demonstrationMarketIds(tx) {
@@ -400,14 +405,7 @@ export async function reseedInto(tx, { replaceAdmins = false } = {}) {
     users: [...FIXTURE_IDS.users, ...replaced.map((a) => a.id)],
   });
 
-  // Written once and never again. The table refuses deletes, so a re-seed that
-  // wrote them unconditionally would stack a second identical history on the
-  // first, every time, with no way to take it back off.
-  const { rows } = await tx.query(
-    `SELECT count(*)::int AS count FROM audit_events WHERE market_id = ANY($1)`,
-    [markets],
-  );
-  await seedInto(tx, { auditEvents: (rows[0]?.count ?? 0) === 0 });
+  await seedInto(tx);
 
   const untouched = await surveyForeignRows(tx, {
     exceptUsers: admins.map((a) => a.id),

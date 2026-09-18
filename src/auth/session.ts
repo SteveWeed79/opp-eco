@@ -5,6 +5,7 @@ import type { ActorContext, ActorRole } from "@/domain/types";
 import { contextFor, demoAccounts } from "@/data/session";
 import { PORTAL_PATH, SIGN_IN_PATH } from "@/routes";
 import { anonymousFallbackAllowed, authConfig } from "./config";
+import { markAnonymousVisitor } from "./visitor";
 
 /**
  * Session resolution.
@@ -225,9 +226,17 @@ async function demonstrationFallback(
 ): Promise<ActorContext | null> {
   const candidate = contextFor(role);
 
-  // The deployment *is* the demonstration. No database needs asking, and there
-  // may not be one.
+  // The deployment *is* the demonstration: its own database, disposable, and
+  // clicking through it is the entire point. Writes stay open — `writes.spec.ts`
+  // applies to a posting from a bare link without signing on, and a prototype
+  // you cannot click is a screenshot.
   if (anonymousFallbackAllowed()) return candidate;
+
+  // Real sign-on. The same account, and now reads only: this database holds
+  // real programmes beside the demonstration, and a write made through an
+  // account nobody authenticated for is an anonymous write to it. `store`
+  // refuses them — see `auth/visitor.ts`.
+  markAnonymousVisitor();
 
   const marketId = candidate.membership.marketId;
   if (!marketId) return null;

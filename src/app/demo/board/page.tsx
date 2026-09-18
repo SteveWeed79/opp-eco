@@ -6,7 +6,6 @@ import {
   Wallet,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Button,
   Card,
@@ -471,12 +470,6 @@ export default async function BoardPage() {
           </TableWrap>
         )}
         <div className="px-6 pb-5 pt-4">
-          <Assumption>
-            Clearance is per applicant per job (Q2), so your interview volume tracks
-            applications rather than students — a student pursuing three roles books three
-            interviews. Funding is then authorized per placement against a finite
-            allocation (Q20).
-          </Assumption>
         </div>
       </Card>
 
@@ -560,12 +553,6 @@ export default async function BoardPage() {
             </table>
           </TableWrap>
           <div className="px-6 py-4">
-            <Assumption>
-              Hours are approved by the supervising employer, who is the party
-              that can attest the student was there. This board sees the hours
-              and the periods; it does not see what the student worked on, which
-              it has no need of to price a claim.
-            </Assumption>
           </div>
         </Card>
       )}

@@ -10,7 +10,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -263,12 +262,6 @@ export default async function StudentPage() {
             ))}
           </ul>
           <div className="px-6 pb-5">
-            <Assumption>
-              Your college and the workforce board see the answer. Neither sees
-              the detail box, and &ldquo;still looking&rdquo; is counted apart
-              from the people nobody asked — so saying so never makes anything
-              look worse than staying quiet.
-            </Assumption>
           </div>
         </Card>
       )}
@@ -483,10 +476,6 @@ export default async function StudentPage() {
                   ? `${progress.microCredits} credit ready to claim`
                   : `${progress.hoursToNextCredit} more hours to your next credit`}
               </p>
-              <Assumption>
-                A single micro-internship runs 5–40 hours, short of the ~45 needed for one
-                credit, so they stack (Q21). Change that and this panel changes with it.
-              </Assumption>
             </div>
           </Card>
 

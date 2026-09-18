@@ -13,7 +13,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -646,10 +645,6 @@ export default async function AdminPage() {
                 </div>
               );
             })}
-            <Assumption>
-              Boards hold a fixed annual allocation that placements draw down (Q20). If
-              funding is uncapped, the budget rail on each market comes out.
-            </Assumption>
           </div>
         </Card>
 
@@ -727,12 +722,6 @@ export default async function AdminPage() {
               </div>
             )}
 
-            <Assumption>
-              One observation per learner, most recent first — a learner followed
-              up twice is one learner. The rate is over learners measured, not
-              over everyone who finished, so an unworked queue never reads as a
-              programme that fails to place people. Asked on a clock — the 2nd and 4th quarter after exit — so two cohorts are measured against the same calendar rather than against their own end dates.
-            </Assumption>
           </div>
         </Card>
 
@@ -822,12 +811,6 @@ export default async function AdminPage() {
               </div>
             )}
 
-            <Assumption>
-              A recorded &ldquo;we made no offer&rdquo; is a finding. A placement
-              nobody has answered for is a gap, and the two are never added
-              together — the rate is over what was answered, and what was not is
-              the count beside it.
-            </Assumption>
           </div>
         </Card>
       </div>
@@ -979,11 +962,6 @@ export default async function AdminPage() {
             </ul>
           )}
           <div className="px-6 pb-5">
-            <Assumption>
-              Wage subsidy is reported separately from everything else rather
-              than summed with it. A total mixing public and philanthropic
-              dollars is the one number neither funder would accept.
-            </Assumption>
           </div>
         </Card>
       </PageSection>
@@ -1025,13 +1003,6 @@ export default async function AdminPage() {
                   </p>
                 </div>
               ))}
-              <Assumption>
-                These figures are a starting position rather than a legal
-                conclusion. They are concrete anyway — a schedule expressed as
-                &ldquo;to be determined&rdquo; is the same as no schedule, and
-                the useful thing to hand a district&rsquo;s counsel is a number
-                to argue with.
-              </Assumption>
             </div>
           </Card>
 

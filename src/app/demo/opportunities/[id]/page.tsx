@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Building2, CalendarClock, MapPin } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -263,12 +262,6 @@ export default async function OpportunityPage({
         </Card>
       )}
 
-      <Assumption>
-        The description is the employer&rsquo;s own words. Attaching a job
-        description document for download is not built — the upload pipeline
-        exists but every file in it is scoped to a student, and a posting&rsquo;s
-        attachment needs its own access rule.
-      </Assumption>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Palette, CircleAlert, Info, Check } from "lucide-react";
-import { Assumption, Button, Card, Modal } from "@/components/ui";
+import { Button, Card, Modal } from "@/components/ui";
 import { analyzeTheme, type Severity } from "@/theme/analyze";
 
 /**
@@ -200,11 +200,6 @@ export function ThemeChecker({
             ))}
           </ul>
 
-          <Assumption>
-            A preview. Saving a partner&rsquo;s branding needs a write path that
-            does not exist yet — the colours above come from the seeded record.
-            The checks and the generated palette are real.
-          </Assumption>
         </div>
       </Modal>
     </>

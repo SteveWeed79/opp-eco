@@ -9,7 +9,6 @@ import {
   UserCheck,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Button,
   Card,
@@ -603,11 +602,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            {hoursPerCredit} hours per credit is your institution&rsquo;s configurable
-            policy (Q11), enforced when a posting is published rather than discovered
-            after the work is done.
-          </Assumption>
         </div>
       </Card>
 
@@ -668,13 +662,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Who had to sign is recorded rather than worked out. FERPA rights
-            transfer at 18 or on enrolment at the college at any age, so a
-            dual-credit learner may consent for themselves here while a parent
-            still holds what their school knows — and no field on this screen
-            can tell which applies.
-          </Assumption>
         </div>
       </Card>
 
@@ -744,9 +731,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Asked on a clock rather than whenever somebody gets round to it: the 2nd and 4th calendar quarter after the placement ended, which is the shape workforce reporting uses. A learner records their own and an employer answers what it decided; what is still open is nothing about who, and everything about what happens to a window that closes unanswered — it stays unanswered (Q23b).
-          </Assumption>
         </div>
       </Card>
 
@@ -861,12 +845,6 @@ export default async function CollegePage() {
           )}
 
           <div className="px-6 pb-5">
-            <Assumption>
-              The college and an administrator make introductions; a student cannot
-              ask a mentor directly, because nothing else stands between an adult
-              and a student here (Q22). Closing one records whether it happened and
-              gives the mentor their place back.
-            </Assumption>
           </div>
         </Card>
       </PageSection>

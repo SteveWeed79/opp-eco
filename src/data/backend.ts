@@ -19,6 +19,7 @@ import { repositories as memoryRepositories } from "./memory";
 import { memoryNotificationQueue, memoryStore } from "./memory-store";
 import type { Repositories } from "./repositories";
 import type { NotificationQueue, Store } from "./store";
+import { isAnonymousVisitor } from "@/auth/visitor";
 import { databaseConfig } from "./postgres/config";
 import { postgresRepositories } from "./postgres/repositories";
 import { postgresStore } from "./postgres/store";
@@ -42,6 +43,23 @@ export class ReadOnlyError extends Error {
         "Everything you see is real seeded data — browse freely.",
     );
     this.name = "ReadOnlyError";
+  }
+}
+
+/**
+ * Refused because nobody is signed in.
+ *
+ * Its own message rather than `ReadOnlyError`'s, because the two are different
+ * facts and a visitor deserves the one that is true of them: the deployment is
+ * writable, they simply are not the one writing.
+ */
+export class VisitorError extends Error {
+  constructor() {
+    super(
+      "You are browsing the demonstration as a visitor, so nothing you do here is saved. " +
+        "Sign in to work in the product.",
+    );
+    this.name = "VisitorError";
   }
 }
 
@@ -135,8 +153,33 @@ export const repositories: Repositories = new Proxy({} as Repositories, {
   get: (_target, key) => backend().repositories[key as keyof Repositories],
 });
 
+/**
+ * Every write in the application, and the two things that can refuse one.
+ *
+ * A read-only deployment is refused by the store `backend()` hands back. A
+ * visitor with no session is refused here, and the check is a session's
+ * presence rather than anything about the actor: a signed-out caller reaching
+ * a portal is handed the demonstration's own account so the prototype stays
+ * walkable from a bare link, and that account is a working actor. Reads are
+ * exactly what it is for. Writes are not — on a deployment that authenticates,
+ * they would be anonymous writes to a production database.
+ *
+ * Here rather than in the actions, for the reason `readOnlyStore` gives: this
+ * is the only layer every write actually passes through, including a Server
+ * Action invoked straight from a fetch. Eleven action files each remembering
+ * to call a guard is eleven chances to forget.
+ *
+ * The import is dynamic because `auth/session` reads this module back; it is
+ * the same shape `session.ts` already uses to reach the data layer.
+ */
 export const store: Store = {
-  transaction: (work) => backend().store.transaction(work),
+  // `async` so this rejects rather than throwing synchronously, which is what
+  // `readOnlyStore` does and what a caller reaching for `.catch()` without an
+  // `await` expects. The two refusals should not behave differently.
+  transaction: async (work) => {
+    if (isAnonymousVisitor()) throw new VisitorError();
+    return backend().store.transaction(work);
+  },
 };
 
 /** The queue the dispatcher drains, whichever data layer filled it. */

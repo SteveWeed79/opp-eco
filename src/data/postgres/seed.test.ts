@@ -309,20 +309,26 @@ describe("what a re-seed is allowed to remove", () => {
     expect(TABLES.filter((t: string) => !handled.has(t))).toEqual([]);
   });
 
-  it("deletes no audit event, and so cannot delete a market or a user either", () => {
+  it("clears audit events only through the market that permits it", () => {
     // `audit_events` has a BEFORE UPDATE OR DELETE trigger that raises —
-    // deliberately, since SECURITY.md names audit tampering as one of the most
+    // deliberately, since SECURITY.md names audit tampering among the most
     // serious findings here. The old TRUNCATE was getting around that guard
     // rather than respecting it, because truncation does not fire row triggers.
     //
-    // `markets` and `users` follow: audit rows reference both ON DELETE
-    // RESTRICT, so once the application has written one, neither can be
-    // deleted at all. The fixtures upsert them instead.
+    // Migration 0019 exempts exactly one case: a DELETE of a row whose market is
+    // flagged `is_demo_data`. So the statement has to go through the market —
+    // and `markets` and `users` still cannot be deleted at all, because audit
+    // rows reference both ON DELETE RESTRICT and a real programme's rows are
+    // still refused.
+    const audit = DEMO_DELETES.find(
+      (d: { table: string }) => d.table === "audit_events",
+    )!;
+    expect(audit.sql).toMatch(/market_id = ANY/);
+
     const tables = DEMO_DELETES.map((d: { table: string }) => d.table);
-    expect(tables).not.toContain("audit_events");
     expect(tables).not.toContain("markets");
     expect(tables).not.toContain("users");
-    expect(PRESERVED_TABLES.sort()).toEqual(["audit_events", "markets", "users"]);
+    expect(PRESERVED_TABLES.sort()).toEqual(["markets", "users"]);
   });
 
   it("removes the organizations last, because everything else restricts to them", () => {

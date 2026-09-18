@@ -10,7 +10,6 @@ import {
   Zap,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -662,10 +661,6 @@ export default async function BusinessPage() {
           </div>
         </div>
         <div className="px-6 pb-5">
-          <Assumption>
-            Micro-internships are unsubsidized here (Q13) — a fixed project fee has no
-            hours for an hourly reimbursement to attach to.
-          </Assumption>
         </div>
       </Card>
 
@@ -770,12 +765,6 @@ export default async function BusinessPage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Mentorship carries no credit and no reimbursement, so nothing here goes to
-            the college for review — there is no academic claim to underwrite. Who
-            starts a pairing is unsettled (Q22), so the introduction still happens
-            off-platform through {organizationName(market.collegeIds[0])}.
-          </Assumption>
         </div>
       </Card>
       </div>

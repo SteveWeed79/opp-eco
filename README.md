@@ -128,13 +128,17 @@ Left alone — not the demonstration's:
 administrator could sign in with. There is no `--force` any more, because there
 is nothing left to force past.
 
-**Two things the seed deliberately cannot do**, both following from the same
-constraint. `audit_events` is append-only, enforced by a trigger — so a
-demonstration's audit history accumulates rather than resetting, and the seed
-declines to write a second copy of the fixture history on top of it. And
-because audit rows reference `markets` and `users` with `ON DELETE RESTRICT`,
-neither can be deleted once the application has written one: the fixtures
-upsert them in place instead.
+`audit_events` is append-only, enforced by a trigger that raises — which is
+why the old `TRUNCATE` was a problem rather than a convenience: truncation does
+not fire row triggers, so the seed had been going *around* the guard rather
+than respecting it. Migration `0019` grants one exemption, and where it is
+keyed is the whole of its safety: a `DELETE` only, of a row whose market is
+flagged `is_demo_data`. A real programme's audit trail is exactly as immutable
+as it was, an `UPDATE` is still refused on every row in the table, and the
+application cannot reach the exemption because it cannot write `markets`.
+
+`markets` and `users` themselves still cannot be deleted — audit rows reference
+both `ON DELETE RESTRICT` — so the fixtures upsert them in place.
 
 The password it prints is spent the first time it is used. Signing in with it
 produces a real session that may do exactly one thing: replace it. Typing a
