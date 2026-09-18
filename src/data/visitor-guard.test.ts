@@ -2,17 +2,16 @@
  * The write every anonymous visitor does not get to make.
  *
  * Its own file because it has to mock `@/auth/visitor`, and mocking is
- * module-wide. The flag it mocks is genuinely request-scoped — React's `cache`
- * hands a fresh object to anything running outside a request — so a test cannot
- * set it for real, and a guard nothing exercises is a guard nobody notices
- * losing.
+ * module-wide. The predicate it mocks answers false without touching a cookie
+ * whenever `AUTH_MODE` is unset, which is every unit test — so a test cannot
+ * make it true for real, and a guard nothing exercises is a guard nobody
+ * notices losing.
  */
 
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@/auth/visitor", () => ({
-  isAnonymousVisitor: () => true,
-  markAnonymousVisitor: () => {},
+  isDemonstrationVisitor: async () => true,
 }));
 
 const { store, VisitorError } = await import("./backend");

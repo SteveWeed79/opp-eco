@@ -3,35 +3,42 @@
  *
  * A signed-out caller reaching a portal is handed the demonstration's own
  * account, so the prototype stays walkable from a bare link. That account is a
- * working actor, which is the point for reads — and exactly the problem for
+ * working actor, which is the point for reads and exactly the problem for
  * writes: on a deployment that authenticates, a write made through it is an
- * anonymous write to a production database.
+ * anonymous write to a database that also holds real programmes.
  *
- * So the session layer says when it has done that, and the store refuses.
+ * Two conditions, and both matter:
  *
- * **Why a flag rather than asking who is signed in.** The store is the only
- * layer every write passes through — `readOnlyStore` is there for the same
- * reason — but it cannot call `getActor`, which reads cookies and therefore
- * needs a request. Every service test drives the real store outside one, so a
- * guard that asked would fail 118 of them, and a guard that swallowed the
- * failure would be one that fails open.
+ *  - **The deployment authenticates.** On the demonstration's own deployment
+ *    writes stay open — separate database, disposable, and clicking through it
+ *    is the entire point. `writes.spec.ts` applies to a posting from a bare
+ *    link without signing on, and a prototype nobody can click is a screenshot.
+ *  - **Nobody is signed in.** A visitor has no session; the fallback account is
+ *    minted per request and never stored.
  *
- * **Why this is request-scoped and not module state.** `cache` is React's
- * per-request memo, so each request gets its own object and two visitors
- * cannot see each other's flag. Outside a request — a unit test — it simply
- * calls the factory, which returns a fresh `false`. That is not a loophole:
- * a test has no anonymous visitor in it.
+ * **This was a request-scoped flag and that was wrong.** The first version had
+ * the session layer set a `cache()`-backed boolean when it handed out the
+ * fallback, and the store read it. It worked in a page render and silently did
+ * not in a Server Action — the two are separate requests, and the flag set
+ * while rendering is not the flag read while acting. A browser driving the
+ * Apply button wrote a real row to Postgres and the guard never fired. Derived
+ * from the request rather than remembered about it, so there is no window
+ * between setting and reading for the answer to get lost in.
+ *
+ * The mode check comes first deliberately: with `AUTH_MODE` unset — every unit
+ * test, and the demonstration's own deployment — this returns false without
+ * ever reaching for a cookie, so nothing outside a request has to pretend to be
+ * in one.
  */
 
-import { cache } from "react";
+import { anonymousFallbackAllowed } from "./config";
 
-const state = cache(() => ({ anonymous: false }));
+export async function isDemonstrationVisitor(): Promise<boolean> {
+  if (anonymousFallbackAllowed()) return false;
 
-/** Called when the session layer hands out the demonstration's own account. */
-export function markAnonymousVisitor(): void {
-  state().anonymous = true;
-}
-
-export function isAnonymousVisitor(): boolean {
-  return state().anonymous;
+  // Imported here rather than at module scope because `@/data/backend` reads
+  // this module back, and because a module on the path of every request should
+  // not pull the session resolver in behind it.
+  const { getActor } = await import("./session");
+  return (await getActor()) === null;
 }

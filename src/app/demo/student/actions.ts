@@ -15,6 +15,8 @@ import { logHours } from "@/services/timesheet";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { submitApplication } from "@/services/creation";
+import { isDemonstrationVisitor } from "@/auth/visitor";
+import { recordApplied } from "@/demo/overlay";
 import { drainPending } from "@/services/outbox";
 import { updateProfile } from "@/services/profile";
 import { recordFollowUp } from "@/app/_actions/outcome";
@@ -217,6 +219,21 @@ export async function applyToPosting(postingId: unknown): Promise<ActionResult> 
       ok: false,
       error: `Too many attempts. Try again in ${limit.retryAfterSeconds} seconds.`,
     };
+  }
+
+  // A visitor walking the demonstration cannot write, and should still be able
+  // to press the button — an inert prototype is a screenshot. Their action is
+  // recorded in their own cookie and the repositories render the consequence,
+  // so nothing reaches the database and every other visitor still meets the
+  // demonstration exactly as seeded. See `src/demo/overlay.ts`.
+  if (await isDemonstrationVisitor()) {
+    const posting = await repositories.postings.find(actor, input.data.postingId);
+    if (!posting || posting.status !== "published") {
+      return { ok: false, error: "That opportunity is no longer listed." };
+    }
+    await recordApplied(posting.id);
+    revalidatePath("/demo/student");
+    return { ok: true };
   }
 
   const result = await attemptWrite(() =>

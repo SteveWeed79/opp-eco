@@ -19,7 +19,8 @@ import { repositories as memoryRepositories } from "./memory";
 import { memoryNotificationQueue, memoryStore } from "./memory-store";
 import type { Repositories } from "./repositories";
 import type { NotificationQueue, Store } from "./store";
-import { isAnonymousVisitor } from "@/auth/visitor";
+import { isDemonstrationVisitor } from "@/auth/visitor";
+import { withVisitorOverlay } from "@/demo/repositories";
 import { databaseConfig } from "./postgres/config";
 import { postgresRepositories } from "./postgres/repositories";
 import { postgresStore } from "./postgres/store";
@@ -149,8 +150,18 @@ export function resetBackend(): void {
  * of at import time — which keeps a missing or malformed `DATABASE_URL` from
  * breaking modules that never read anything.
  */
+/**
+ * Wrapped once, here, so every reader gets the same view.
+ *
+ * The overlay is a no-op for everybody but an anonymous visitor walking the
+ * demonstration — `isAnonymousVisitor` is false for a signed-in person and
+ * false outside a request altogether, so the unit suite and every real session
+ * read straight through. See `src/demo/repositories.ts`.
+ */
+const withOverlay = (base: Repositories) => withVisitorOverlay(base);
+
 export const repositories: Repositories = new Proxy({} as Repositories, {
-  get: (_target, key) => backend().repositories[key as keyof Repositories],
+  get: (_target, key) => withOverlay(backend().repositories)[key as keyof Repositories],
 });
 
 /**
@@ -177,7 +188,7 @@ export const store: Store = {
   // `readOnlyStore` does and what a caller reaching for `.catch()` without an
   // `await` expects. The two refusals should not behave differently.
   transaction: async (work) => {
-    if (isAnonymousVisitor()) throw new VisitorError();
+    if (await isDemonstrationVisitor()) throw new VisitorError();
     return backend().store.transaction(work);
   },
 };

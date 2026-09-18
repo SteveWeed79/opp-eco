@@ -5,7 +5,6 @@ import type { ActorContext, ActorRole } from "@/domain/types";
 import { contextFor, demoAccounts } from "@/data/session";
 import { PORTAL_PATH, SIGN_IN_PATH } from "@/routes";
 import { anonymousFallbackAllowed, authConfig } from "./config";
-import { markAnonymousVisitor } from "./visitor";
 
 /**
  * Session resolution.
@@ -232,12 +231,9 @@ async function demonstrationFallback(
   // you cannot click is a screenshot.
   if (anonymousFallbackAllowed()) return candidate;
 
-  // Real sign-on. The same account, and now reads only: this database holds
-  // real programmes beside the demonstration, and a write made through an
-  // account nobody authenticated for is an anonymous write to it. `store`
-  // refuses them — see `auth/visitor.ts`.
-  markAnonymousVisitor();
-
+  // Real sign-on. The same account, and now reads only — `isDemonstrationVisitor`
+  // derives that from the request rather than being told it here, because a
+  // Server Action is a different request from the render that handed this out.
   const marketId = candidate.membership.marketId;
   if (!marketId) return null;
 
