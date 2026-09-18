@@ -114,7 +114,7 @@ export function Shell({
     return (
       <ToastProvider>
         <div className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col">
-          <SiteHeader pathname={pathname} />
+          <SiteHeader pathname={pathname} signedInRole={signedInRole} />
           <main className="flex-1">{children}</main>
           <SiteFooter />
         </div>
@@ -160,6 +160,21 @@ function DemoChrome({
   const active = PORTALS.find((p) => pathname.startsWith(p.href));
 
   /**
+   * A real person working in the product, rather than a visitor being shown it.
+   *
+   * Both halves matter. `signedInRole` alone is true of somebody the role
+   * picker handed an account to, which is the demonstration doing exactly what
+   * it is for — so the demonstration's own chrome has to stay up around them.
+   * `!demoSignOn` alone is true of a signed-out visitor on a real deployment,
+   * who is about to be sent to the sign-in page anyway.
+   *
+   * Together they mean: this deployment authenticates, and this person is
+   * authenticated. That is the only case where the notice, the switcher and
+   * the prototype footer are furniture rather than information.
+   */
+  const inProduct = Boolean(signedInRole) && !demoSignOn;
+
+  /**
    * Which portals this session can open.
    *
    * Signed in, only your own. An administrator signing in used to be handed
@@ -199,13 +214,19 @@ function DemoChrome({
         style={themed ? (theme.variables as React.CSSProperties) : undefined}
         className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
       >
-        <DemoNotice readOnly={readOnly} />
+        {!inProduct && <DemoNotice readOnly={readOnly} />}
         {/* A shadow rather than only a hairline: the header has to read as
             floating above the page it is pinned over, or a card scrolling
             under it looks like it is passing through it. */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-line shadow-[0_1px_3px_rgb(15_23_42/0.04),0_8px_24px_-12px_rgb(15_23_42/0.12)]">
           <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
-            <Link href={DEMO_ROOT} className="flex items-center gap-3 group shrink-0">
+            {/* Home is your own portal once you have one. `/demo` is where the
+                demonstration starts, and sending a signed-in college
+                coordinator there is sending her out of the product. */}
+            <Link
+              href={inProduct && signedInRole ? PORTAL_PATH[signedInRole] : DEMO_ROOT}
+              className="flex items-center gap-3 group shrink-0"
+            >
               <span
                 className={`w-10 h-10 rounded-card bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center font-bold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_2px_6px_-1px_rgb(3_105_161/0.5)] group-hover:from-ink-700 group-hover:to-ink-950 transition-all overflow-hidden ${markTextSize(
                   themed ? theme.monogram : brand.monogram,
@@ -243,6 +264,11 @@ function DemoChrome({
               </span>
             </Link>
 
+            {/* The switcher is how a demonstration gets walked through. Signed
+                in for real you hold exactly one portal, so it renders as your
+                own tab beside four dead ones — furniture that says "demo" and
+                nothing else. */}
+            {!inProduct && (
             <nav
               aria-label="Demo portal switcher"
               // A recessed track with a raised pill riding in it, rather than
@@ -293,6 +319,7 @@ function DemoChrome({
                 );
               })}
             </nav>
+            )}
 
             {themed && (
               /* Says whose colours these are. A themed page that does not
@@ -362,6 +389,7 @@ function DemoChrome({
           )}
 
           {/* Small screens get the switcher as a scrolling row rather than losing it */}
+          {!inProduct && (
           <div className="lg:hidden border-t border-line overflow-x-auto">
             <div className="flex gap-1 px-4 py-2 min-w-max">
               {PORTALS.map((portal) => {
@@ -394,6 +422,7 @@ function DemoChrome({
               })}
             </div>
           </div>
+          )}
         </header>
 
         {/* Bottom padding belongs to each page, not to the frame. A blanket
@@ -402,7 +431,11 @@ function DemoChrome({
             footer directly. */}
         <main className="flex-1">{children}</main>
 
-        <DemoFooter />
+        {/* The prototype's own footer — "the colleges, workforce boards,
+            employers, students, placements and dollar figures are invented".
+            True of the demonstration, and a strange thing to print under a
+            coordinator's working session. */}
+        {!inProduct && <DemoFooter />}
 
         {signOnOpen && demoSignOn && (
           <SignOnDialog onClose={() => setSignOnOpen(false)} />
@@ -453,7 +486,14 @@ function SignOnMasthead() {
   );
 }
 
-function SiteHeader({ pathname }: { pathname: string }) {
+function SiteHeader({
+  pathname,
+  signedInRole,
+}: {
+  pathname: string;
+  /** Absent when signed out. */
+  signedInRole?: ActorRole;
+}) {
   return (
     <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-line">
       <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
@@ -498,12 +538,41 @@ function SiteHeader({ pathname }: { pathname: string }) {
           })}
         </nav>
 
-        <Link
-          href={DEMO_ROOT}
-          className="shrink-0 bg-surface border border-line-strong text-ink-700 px-4 py-2.5 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all"
-        >
-          See the prototype
-        </Link>
+        {/* Two doors, and the weighting says which is which. The prototype is
+            what a funder or a partner asks to be shown; signing in is what
+            somebody who already belongs here does, and until now this header
+            offered them nothing at all — the only way to the form was to know
+            the URL. It drops below `sm` because a phone cannot hold both and
+            the sign-in button is the one a real person needs. */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href={DEMO_ROOT}
+            className="hidden sm:inline-flex bg-surface border border-line-strong text-ink-700 px-4 py-2.5 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all"
+          >
+            See the prototype
+          </Link>
+
+          {signedInRole ? (
+            /* Offering "Sign in" to somebody already signed in is a dead
+               control: the sign-in page reads the session and sends them
+               straight back here. Send them where they were going. */
+            <Link
+              href={PORTAL_PATH[signedInRole]}
+              className="bg-gradient-to-b from-ink-700 to-ink-950 text-white px-4 py-2.5 rounded-card font-semibold text-sm shadow-[0_1px_0_rgb(255_255_255/0.14)_inset,0_2px_6px_-1px_rgb(2_6_23/0.4)] hover:from-brand-600 hover:to-brand-700 active:translate-y-px transition-all flex items-center gap-2"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-brand-400" aria-hidden="true" />
+              Your portal
+            </Link>
+          ) : (
+            <Link
+              href={SIGN_IN_PATH}
+              className="bg-gradient-to-b from-ink-700 to-ink-950 text-white px-4 py-2.5 rounded-card font-semibold text-sm shadow-[0_1px_0_rgb(255_255_255/0.14)_inset,0_2px_6px_-1px_rgb(2_6_23/0.4)] hover:from-brand-600 hover:to-brand-700 active:translate-y-px transition-all flex items-center gap-2"
+            >
+              <LogIn className="w-4 h-4 text-brand-400" aria-hidden="true" />
+              Sign in
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Small screens keep the nav as a scrolling row rather than losing it
