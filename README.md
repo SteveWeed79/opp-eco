@@ -79,6 +79,14 @@ server left on port 3000 is silently reused and the suite runs against `next
 dev` while appearing to test the production build. The tell is the wall clock —
 the suite takes about half as long against `next start`.
 
+A third, if you are testing file attachments: `UPLOAD_URL_SECRET` must be set
+to 32 characters or more for a production build to issue a download link at
+all, and **a file uploaded on the fixtures cannot be served back** — it is
+written by a Server Action and read by the route handler at
+`/api/files/[key]`, and in a production build those do not share the in-memory
+store. `next dev` does share it, so the same click works there. A deployment
+with a database reads both sides from the same table and has no such seam.
+
 ### Trying real sign-on
 
 `npm run dev` gives you the role picker, which makes you anybody. To walk the

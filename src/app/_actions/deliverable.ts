@@ -24,6 +24,8 @@ import {
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { PORTAL_PATH } from "@/routes";
+import { repositories } from "@/data/backend";
+import { receiveUpload } from "@/services/uploads";
 
 /**
  * Three surfaces, and the college is the one worth naming.
@@ -34,11 +36,26 @@ import { PORTAL_PATH } from "@/routes";
  */
 const AFFECTED = [PORTAL_PATH.student, PORTAL_PATH.business, PORTAL_PATH.college];
 
-export async function handInWork(
-  applicationId: unknown,
-  summary: unknown,
-): Promise<ActionResult> {
-  const input = validate(submitDeliverableInput, { applicationId, summary });
+/**
+ * Takes `FormData` rather than plain arguments, because one of the fields is a
+ * file and bytes do not survive being flattened into a string.
+ *
+ * The upload happens **before** the hand-in is recorded and outside its
+ * transaction, deliberately. A file lands in a store, gets scanned, and may be
+ * refused for reasons the record knows nothing about — so it resolves to a key
+ * or to an error first, and only then does a deliverable get written. The
+ * alternative, writing the row and attaching the file afterwards, leaves a
+ * hand-in claiming an attachment that is not there.
+ *
+ * The reverse — a stored file with no row pointing at it, when the hand-in is
+ * then refused — is the harmless direction: the retention sweep collects
+ * unreferenced files, and nobody is shown a promise that was not kept.
+ */
+export async function handInWork(form: FormData): Promise<ActionResult> {
+  const input = validate(submitDeliverableInput, {
+    applicationId: form.get("applicationId"),
+    summary: form.get("summary"),
+  });
   if (!input.ok) return { ok: false, error: input.error };
 
   const actor = await actorForPortal("student");
@@ -50,7 +67,37 @@ export async function handInWork(
     };
   }
 
-  const result = await attemptWrite(() => submitDeliverable(actor, input.data));
+  let fileKey: string | null = null;
+  const file = form.get("file");
+  if (file instanceof File && file.size > 0) {
+    const student = await repositories.students.forUser(actor, actor.user.id);
+    if (!student) {
+      return { ok: false, error: "No learner record for this account." };
+    }
+    const upload = await receiveUpload(
+      actor,
+      "deliverable",
+      file.name,
+      new Uint8Array(await file.arrayBuffer()),
+      // Both, because access to the file follows the thing it is attached to:
+      // `canRetrieve` reads the application to decide whether an employer is
+      // the one hosting this placement.
+      { studentId: student.id, applicationId: input.data.applicationId },
+    );
+    if (!upload.ok) {
+      // Surfaced rather than swallowed. The commonest refusal is a deployment
+      // holding real records with no malware scanner configured, which is a
+      // sentence an operator needs to read rather than a silent missing
+      // attachment.
+      logger.warn("deliverable.upload_refused", {});
+      return { ok: false, error: upload.error };
+    }
+    fileKey = upload.file.key;
+  }
+
+  const result = await attemptWrite(() =>
+    submitDeliverable(actor, { ...input.data, fileKey }),
+  );
   if (!result.ok) {
     logger.warn("deliverable.refused", { code: result.code });
     return { ok: false, error: result.error };

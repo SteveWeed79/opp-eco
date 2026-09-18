@@ -30,6 +30,7 @@ import {
 } from "@/components/ui";
 import { RaiseProblem } from "@/components/RaiseProblem";
 import { AnswerHandIn } from "@/components/AnswerHandIn";
+import { downloadUrlOrNull } from "@/services/uploads";
 import {
   TransitionActions,
   MENTORSHIP_CONFIRM,
@@ -359,6 +360,28 @@ export default async function BusinessPage() {
                   <p className="mt-2 text-sm text-ink-700 whitespace-pre-line">
                     {handIn.summary}
                   </p>
+                  {handIn.fileKey && (
+                    // A signed link, minted at render and short-lived. The
+                    // signature only stops somebody guessing keys; the route
+                    // checks authorization again on every request, because
+                    // links get forwarded. Null where the deployment has no
+                    // signing secret — said rather than silently dropped.
+                    <p className="mt-2 text-sm">
+                      {downloadUrlOrNull(handIn.fileKey) ? (
+                        <a
+                          className="font-semibold text-brand-700 underline hover:text-brand-800"
+                          href={downloadUrlOrNull(handIn.fileKey)!}
+                        >
+                          Open the attached file
+                        </a>
+                      ) : (
+                        <span className="text-ink-500">
+                          A file is attached and this deployment cannot issue
+                          download links — set UPLOAD_URL_SECRET.
+                        </span>
+                      )}
+                    </p>
+                  )}
                   <div className="mt-3">
                     <AnswerHandIn
                       deliverableId={handIn.id}

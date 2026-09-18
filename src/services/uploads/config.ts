@@ -70,5 +70,6 @@ export function uploadRefusalReason(env: ScannerEnv = process.env): string | nul
       "Set CLAMAV_HOST to point at a clamd instance."
     );
   }
+
   return null;
 }

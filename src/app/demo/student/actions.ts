@@ -376,9 +376,6 @@ export async function studentWithdrawProblem(escalationId: unknown): Promise<Act
  * `_actions/deliverable.ts`. The service checks again that this learner owns
  * the placement and that it is a running micro one.
  */
-export async function studentHandInWork(
-  applicationId: unknown,
-  summary: unknown,
-): Promise<ActionResult> {
-  return handInWork(applicationId, summary);
+export async function studentHandInWork(form: FormData): Promise<ActionResult> {
+  return handInWork(form);
 }

@@ -412,7 +412,11 @@ A learner now hands work in, and an employer accepts it or asks for a change, as
 
 The two booleans stay where they are, written in the same transaction as the record. They are what the state machine and the credit calculation read, both being pure functions of an application; the record is the history behind them. Denormalised deliberately, and the fixtures' agreement is asserted rather than assumed.
 
-**The file is still not wired.** `UPLOAD_PURPOSES` declares `resume` and `deliverable` with magic-byte checking, size caps, a Postgres store, a retrieval route, access rules and quarantine, and `UploadTarget.applicationId` is documented as being for exactly this — but nothing renders a file picker, so a hand-in is a written summary and `fileKey` is a column waiting for one. That and the learner's missing resume are the same wiring, twice, and are now the smallest remaining piece of this.
+**The file is wired, with one honest limit.** A learner can attach the work, the employer opens it through a short-lived signed link, and the retrieval route checks authorization again on every request — so the board, a stranger, and an unsigned link are all refused, while the employer, the college and the learner are not.
+
+What wiring it exposed is a seam nothing had touched before: **a file cannot be served back on the fixtures in a production build.** It is written by a Server Action and read by the route handler, and those do not share the in-memory `Map` — under `next dev` they do, which is what made the behaviour look fine until it was run against `next start`. A deployment with a database has no such seam, because both sides read the same table.
+
+That leaves a decision worth making deliberately rather than by default: the demonstration currently accepts a file it cannot hand back. `config.ts` says in a test that the stub scanner is "the honest choice" for the demo, so the existing position is that demo uploads are fine — and a link that 404s is arguably not fine. Refusing uploads where they cannot be served would make the demonstration honest at the cost of reversing that decision.
 
 ### ~~No one can raise a problem~~ — built
 

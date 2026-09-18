@@ -49,6 +49,7 @@ import {
 import { RecordOutcome } from "@/components/RecordOutcome";
 import { RaiseProblem } from "@/components/RaiseProblem";
 import { HandInWork } from "@/components/HandInWork";
+import { downloadUrlOrNull, uploadRefusalReason } from "@/services/uploads";
 import { OUTCOME_KINDS } from "@/domain/outcome";
 import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
@@ -84,6 +85,9 @@ export default async function StudentPage() {
   const handIns = new Map(
     (await repositories.deliverables.list(actor)).map((d) => [d.applicationId, d]),
   );
+  // Asked once, on the server, so the dialog can say why rather than letting a
+  // learner pick a file and discover it afterwards.
+  const uploadsRefused = uploadRefusalReason();
   // The vocabulary this market's employers already use, offered when a learner
   // edits their own tags. Free text sprawls into "JS", "Javascript" and
   // "JavaScript", and match scoring compares them literally — so the fix is the
@@ -425,6 +429,7 @@ export default async function StudentPage() {
                                   : undefined
                               }
                               round={handIns.get(application.id)?.round}
+                              uploadsRefused={uploadsRefused}
                               action={studentHandInWork}
                             />
                             {handIns.get(application.id)?.status === "revision_requested" && (
@@ -436,6 +441,24 @@ export default async function StudentPage() {
                         handIns.get(application.id)?.status === "submitted" && (
                           <p className="mt-3 text-xs text-ink-500">
                             Handed in — waiting on {organizationName(posting.businessId)}.
+                            {handIns.get(application.id)?.fileKey &&
+                              (downloadUrlOrNull(handIns.get(application.id)!.fileKey!) ? (
+                                <>
+                                  {" "}
+                                  <a
+                                    className="underline hover:text-brand-700"
+                                    href={
+                                      downloadUrlOrNull(
+                                        handIns.get(application.id)!.fileKey!,
+                                      )!
+                                    }
+                                  >
+                                    Your attachment
+                                  </a>
+                                </>
+                              ) : (
+                                " Your file was received; this deployment cannot issue download links."
+                              ))}
                           </p>
                         )}
                       {/*

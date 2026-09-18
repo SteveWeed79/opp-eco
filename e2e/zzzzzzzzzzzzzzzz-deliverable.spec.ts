@@ -41,8 +41,94 @@ test("the learner sees what was asked for, and hands in again", async ({ page })
   await expect(dialog).toContainText("the evaluation your college reads");
 
   await dialog.locator("textarea").fill(`${HANDED_IN}, with the payment paths at the top.`);
+
+  // **Both branches are asserted, because both are real.** A deployment
+  // holding records with no malware scanner refuses uploads, and the dialog is
+  // supposed to say so rather than offering a picker that fails. Which branch a
+  // run takes depends on the environment: CI has no `.env.local` and runs on
+  // the fixtures, so it takes the first; a checkout whose `.env.local` points
+  // at a writable database takes the second.
+  const picker = dialog.locator("input[type=file]");
+  const uploadsOffered = (await picker.count()) > 0;
+
+  if (uploadsOffered) {
+    await picker.setInputFiles({
+      name: "audit.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n"),
+    });
+    await expect(dialog.getByText("audit.pdf")).toBeVisible();
+  } else {
+    // Refused, and saying why — and the hand-in still works without a file,
+    // because the summary was always the required part.
+    await expect(dialog).toContainText("Uploads are turned off");
+  }
+
   await dialog.getByRole("button", { name: "Hand it in" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Handed in" })).toBeVisible();
+
+  if (uploadsOffered) {
+    // The file was taken and the link is offered.
+    //
+    // **Not asserted: that the link resolves.** On the fixtures it does not,
+    // and that is a property of the store rather than of this feature — a file
+    // is written by a Server Action and read by the route handler, and in a
+    // production build those do not share the in-memory `Map`. Under `next
+    // dev` the same click returns the PDF. A deployment with a database serves
+    // it from the database and has no such seam.
+    //
+    // Asserting a 200 here would either fail on the fixtures or quietly
+    // require the whole suite to run against Postgres, and asserting a 404
+    // would enshrine the limitation as if it were intended.
+    await page.reload();
+    await expect(page.getByRole("link", { name: "Your attachment" })).toBeVisible();
+  }
+});
+
+test("a signed link is refused to everyone it does not belong to", async ({
+  page,
+  browser,
+}) => {
+  // The assertion the retrieval route exists for, and the reason it checks
+  // authorization *as well as* the signature: links get forwarded, pasted into
+  // chat and left in browser history, so holding one proves only that it was
+  // issued.
+  await page.goto("/demo/business");
+  const link = page.getByRole("link", { name: "Open the attached file" });
+  // Skipped where the deployment refuses uploads — there is no file to forward
+  // a link to. See the note in the first test.
+  test.skip((await link.count()) === 0, "this deployment does not accept uploads");
+  const href = (await link.getAttribute("href"))!;
+
+  // **The entitled fetch first, and the test stands down if it fails.**
+  // Three refusals prove nothing on a store that refuses everybody — and on
+  // the fixtures in a production build it does, for the reason the first test
+  // explains. Establishing that the link works for the one caller entitled to
+  // it is what makes the three refusals below mean something.
+  const entitled = await page.request.get(href);
+  test.skip(
+    entitled.status() !== 200,
+    "this store cannot serve the file, so refusing it proves nothing",
+  );
+
+  // The board is not entitled. It does not fund micro-internships, so it reads neither
+  // the hand-in nor the file — `deliverableScope` and `canRetrieve` agreeing.
+  const board = await browser.newContext();
+  await board.addCookies([
+    { name: "oe_demo_role", value: "board", url: "http://localhost:3000" },
+  ]);
+  expect((await board.request.get(href)).status()).toBe(404);
+  await board.close();
+
+  // Nor is somebody with no session at all.
+  const stranger = await browser.newContext();
+  expect((await stranger.request.get(href)).status()).toBe(404);
+  await stranger.close();
+
+  // And the signature is load-bearing: the same key without it is refused even
+  // for the employer who just used it, so the store cannot be walked by
+  // guessing keys.
+  expect((await page.request.get(href.split("?")[0])).status()).toBe(404);
 });
 
 test("the employer reads it and accepts, which completes the placement", async ({ page }) => {
