@@ -24,7 +24,7 @@
  *     "$20/hour" before the board has cleared them will plan around it.
  */
 
-import { DEMO_ROOT, PORTAL_PATH } from "@/routes";
+import { DEMO_ROOT, PORTAL_PATH, SIGN_IN_PATH } from "@/routes";
 import { escalationKindLabel } from "@/domain/escalation";
 import type { EscalationKind } from "@/domain/types";
 
@@ -588,6 +588,26 @@ export const TEMPLATES: Record<string, Template> = {
       `Often it is a timetable clash, a transport problem, or cold feet about a placement nobody talked them through — all of which you can do something about, and none of which shows up anywhere else.`,
     action: { label: "Open your dashboard", path: PORTAL_PATH.college },
     notice: FERPA_NOTICE,
+  }),
+
+  // --- Somebody registered themselves --------------------------------------
+  /**
+   * The first message anybody here receives, and it has one job: tell them the
+   * next step, which is not obvious.
+   *
+   * Registering does not issue a password — no account in this system gets one
+   * any other way than by asking at the address it was registered with — so a
+   * learner who is not told that sits waiting for a credential nobody will
+   * send. It also says plainly that the college has to verify them, because the
+   * wait is otherwise silent and a silent wait reads as a broken form.
+   */
+  "student.registered": (p) => ({
+    subject: `You are registered with ${str(p.collegeName, "your college")}`,
+    body:
+      `Your account exists. Two things happen next, and the first one is yours: ` +
+      `go to the sign-in page, choose "Forgot your password?", and set a password using the code we send back — that is how every account here gets one. ` +
+      `The second is ${str(p.collegeName, "your college")}'s: they confirm you are their learner before you can apply for anything. Filling in your profile first makes that quicker.`,
+    action: { label: "Set your password", path: SIGN_IN_PATH },
   }),
 
   // --- The micro track's hand-in -------------------------------------------

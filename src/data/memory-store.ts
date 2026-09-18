@@ -318,6 +318,15 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createStudent(student: import("@/domain/types").Student) {
+    if (seed.students.some((s) => s.id === student.id)) {
+      throw new Error(`Student ${student.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.students.push(student);
+    });
+  }
+
   addOrganizationMember(
     user: import("@/domain/types").User,
     membership: import("@/domain/types").Membership,

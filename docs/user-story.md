@@ -394,11 +394,20 @@ Two things worth knowing that a reading of the code does not show:
 
 **The board can see the pause and cannot reach into it.** Its *Reached mutual interest but never booked* queue is the screen this whole document argues matters most, and the **Reach out** button beside it is disabled, with a tooltip saying there is no messaging path and that a nudge would go through the college, which owns the learner relationship. That is honest rather than broken — a disabled control that says why beats one that pretends — but it means the party watching the queue where placements die has no action attached to it.
 
-### Nobody can get in
+### ~~Nobody can get in~~ — learners can; businesses still cannot
 
-Phase 1 opens "students self-activate once their market is live" and Phase 2 with "a local business joins the market." Neither has a door. There is no registration route, no join form, and no self-service anything — a learner exists because the seed made one, and so does a business. `StudentStatus` carries `registered`, `profile_complete` and `pending_verification`, and no screen in the application can put a learner into any of the three; the product only ever sees `verified`.
+A learner registers at `/register`, and the three statuses no screen could reach are all reachable: `registered` on arrival, `profile_complete` once they have a programme and a skill, `pending_verification` when they ask to be checked. The college's queue — which until now could only be filled by the seed — fills from the front door.
 
-What *is* built is everything downstream of the door. The college has a verification queue with **Verify** and **Reject verification**, the administrator has vetting with **Begin vetting**, **Request more information**, **Information received**, **Approve** and **Reject**, and both work. The only way into the system is the administrator's **Add somebody to an organization**. Two reviewers, both waiting on a queue nothing can fill.
+Four rules decide who gets in, and each does real work:
+
+- **The market has to be live**, which is the story's own sequence: a board commits, then a college, then the market opens. Registering into a market with no board produces a learner who can apply for nothing.
+- **The address has to belong to the college.** `addressMatchesOrganization` already enforced this for work accounts and is the whole of the anti-abuse story: you cannot register as a Verdigris learner without a Verdigris address. Subdomains count, because that is how institutions address their learners.
+- **The demonstration is not registrable.** Its markets are live and flagged, so they would otherwise appear in the list — and a real person's name and address in rows marked `is_demo_data`, which the next `db:seed` deletes, is the one outcome worth refusing outright. The demonstration shows the form and takes nothing.
+- **Registering is not verifying.** The college still decides.
+
+Two things are deliberately absent. **No credential is issued** — every account here gets its password by asking for a code at its own address, and a second path for new learners would be a second way to become somebody. And **a duplicate address is answered exactly as a success is**, because this form is reachable by anybody and the alternative is an oracle for which addresses hold accounts. `addOrganizationMember` says the opposite in so many words and explains why *that* is safe: an administrator looking at their own people. The cost is that somebody who forgot they had registered is told to check their email and finds nothing; the remedy is the password request they would need anyway.
+
+**Businesses still have no door.** Phase 2's "a local business joins the market" is unbuilt, and the administrator's vetting queue is still fed only by the seed. That is the same shape as this and a smaller job now the pattern exists — the difference is that a business has no institutional address to check against, so the gate has to be something else.
 
 ### ~~The micro track cannot be completed~~ — built
 
