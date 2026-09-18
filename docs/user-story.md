@@ -384,7 +384,15 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 ## Where the product and this story diverge
 
-From walking all five portals in the running application, September 2026. Recorded here rather than as five per-role lists, because almost every gap below spans portals: the micro track is missing a step on the learner's side *and* the matching step on the employer's, and either one alone is half a feature. Read them whole.
+From walking all five portals in the running application against Postgres, September 2026 — pressing each control and then reading the row it claimed to write, because a toast is not an effect. Recorded here rather than as five per-role lists, because almost every gap below spans portals: the micro track is missing a step on the learner's side *and* the matching step on the employer's, and either one alone is half a feature. Read them whole.
+
+**Every control that exists, works.** Approving and sending back a timesheet, moving a candidate through the pipeline, verifying a learner, publishing a posting, granting credit, recording a consent, publishing interview slots, determining eligibility, authorising funding, vetting an organisation, nudging, and picking up a report each produced the row and the audit entry they claimed. Nothing lied about what it had done.
+
+Two things worth knowing that a reading of the code does not show:
+
+**There are three confirmation patterns, and the rule behind them is deliberate.** Some actions fire on one click (verify, publish, grant credit, approve), some expand inline into a required note (send back a timesheet), and some open a modal (record consent, publish slots, authorise funding, book an interview). That looks inconsistent and is not: `TransitionActions`' confirm policies require a reason for **endings and refusals** — the things the other party has to act on — and ask nothing for forward progress. The mentorship policy states the reasoning outright, that a dialog demanding somebody justify pausing their own listing is how a product turns a pause into a withdrawal.
+
+**The board can see the pause and cannot reach into it.** Its *Reached mutual interest but never booked* queue is the screen this whole document argues matters most, and the **Reach out** button beside it is disabled, with a tooltip saying there is no messaging path and that a nudge would go through the college, which owns the learner relationship. That is honest rather than broken — a disabled control that says why beats one that pretends — but it means the party watching the queue where placements die has no action attached to it.
 
 ### Nobody can get in
 
