@@ -10,6 +10,7 @@
  * text, which is how a missing predicate gets caught without a database.
  */
 
+import { viewsDemoData } from "@/domain/identity";
 import type { ActorContext } from "@/domain/types";
 import { joinSql, sql, type Sql } from "./client";
 
@@ -21,7 +22,22 @@ import { joinSql, sql, type Sql } from "./client";
  * cross-tenant leak, so it is written once and never inlined.
  */
 export function marketScope(actor: ActorContext, table: string): Sql {
-  if (actor.membership.role === "admin") return sql`TRUE`;
+  if (actor.membership.role === "admin") {
+    // The system reads on nobody's behalf and is narrowed by neither world.
+    if (actor.systemWide) return sql`TRUE`;
+    // Cross-market, but not across both worlds. This used to be `TRUE`, which
+    // is right about tenancy and wrong about truth: the administrator's console
+    // sums every market it can see, so a deployment holding the demonstration
+    // beside a real programme would report invented placements and invented
+    // money inside a figure somebody takes to a funder.
+    //
+    // A subquery rather than a join, because this fragment is composed into
+    // queries that already join what they need and cannot have a table added
+    // underneath them.
+    return sql`${raw(table)}.market_id IN (
+      SELECT id FROM markets WHERE is_demo_data = ${viewsDemoData(actor)}
+    )`;
+  }
   return sql`${raw(table)}.market_id = ${actor.membership.marketId}`;
 }
 
@@ -35,7 +51,12 @@ export function marketScope(actor: ActorContext, table: string): Sql {
  * database while passing every test that only inspected the generated text.
  */
 export function ownMarketScope(actor: ActorContext): Sql {
-  if (actor.membership.role === "admin") return sql`TRUE`;
+  // The `markets` table answers it directly rather than through a subquery
+  // against itself.
+  if (actor.membership.role === "admin") {
+    if (actor.systemWide) return sql`TRUE`;
+    return sql`markets.is_demo_data = ${viewsDemoData(actor)}`;
+  }
   return sql`markets.id = ${actor.membership.marketId}`;
 }
 
@@ -227,6 +248,62 @@ export function fundingCommitmentScope(actor: ActorContext): Sql {
  * asymmetry worth naming: consent is what widens what an employer may see about
  * a learner, and it is still not a record the employer is party to.
  */
+/**
+ * Escalations: the raiser's own, or every one in the market for an
+ * administrator.
+ *
+ * **The parties an escalation is about are deliberately not on this list** —
+ * not the employer it may concern, not the college, not the board. The refusal
+ * is the feature: a learner who knows their supervisor will read it does not
+ * report an absent supervisor. Written as an explicit clause rather than an
+ * omitted join so a reviewer sees the decision in the statement.
+ *
+ * Matches `visibleEscalations` clause for clause; the parity suite compares
+ * them accessor by accessor and role by role.
+ */
+/**
+ * Hand-ins, narrowed to the parties with a reason to read one.
+ *
+ * The learner's own, the employer's for placements it hosts, the market's for a
+ * college or an administrator — and **nothing at all for the board**, which
+ * does not fund micro-internships and has no workflow reason to read a
+ * student's work. `FALSE` rather than an omitted clause, so the refusal is in
+ * the statement where a reviewer can see it.
+ *
+ * Matches `visibleDeliverables` clause for clause.
+ */
+export function deliverableScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "deliverables")];
+  const { role, organizationId } = actor.membership;
+
+  if (role === "board") return sql`FALSE`;
+  if (role === "student") {
+    parts.push(
+      sql`deliverables.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  if (role === "business") {
+    parts.push(
+      sql`deliverables.application_id IN (
+        SELECT applications.id FROM applications
+        JOIN postings ON postings.id = applications.posting_id
+        WHERE postings.business_id = ${organizationId}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
+export function escalationScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "escalations")];
+  if (actor.membership.role !== "admin") {
+    parts.push(sql`escalations.raised_by = ${actor.user.id}`);
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function consentScope(actor: ActorContext): Sql {
   if (actor.membership.role === "business") return sql`FALSE`;
 

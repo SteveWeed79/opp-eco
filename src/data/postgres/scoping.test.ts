@@ -12,11 +12,13 @@ import {
   applicationScope,
   hostOfferScope,
   marketScope,
+  ownMarketScope,
   outcomeScope,
   postingOwnershipScope,
   studentScope,
 } from "./scoping";
 import { contextFor } from "@/data/session";
+import { systemContext } from "@/auth/system";
 import { canReadOutcomes } from "@/domain/outcome";
 import type { ActorRole } from "@/domain/types";
 
@@ -25,6 +27,7 @@ const business = contextFor("business");
 const college = contextFor("college");
 const board = contextFor("board");
 const student = contextFor("student");
+const system = systemContext();
 
 describe("sql template", () => {
   it("parameterises every interpolated value", () => {
@@ -60,8 +63,33 @@ describe("sql template", () => {
 });
 
 describe("market scope", () => {
-  it("does not restrict an administrator", () => {
-    expect(marketScope(admin, "applications").text).toBe("TRUE");
+  it("restricts an administrator to one world, not to one market", () => {
+    // This was `TRUE`, which is right about tenancy and wrong about truth: an
+    // administrator's console sums every market it can see, so a deployment
+    // holding the demonstration beside a real programme reported invented
+    // money inside a figure somebody takes to a funder.
+    const scope = marketScope(admin, "applications");
+    expect(scope.text).toContain("applications.market_id IN");
+    expect(scope.text).toContain("is_demo_data = $1");
+    expect(scope.params).toEqual([true]);
+  });
+
+  it("leaves the system context across both worlds", () => {
+    // `systemContext` resolves an address to a sign-in method before anybody is
+    // authenticated and dispatches queued notifications. Narrowed to the
+    // demonstration it stopped finding a real workforce board, whose officers
+    // then resolved to a password they do not have instead of the one-time code
+    // they sign in with. It is not a viewer and renders no figure.
+    expect(marketScope(system, "applications").text).toBe("TRUE");
+    expect(ownMarketScope(system).text).toBe("TRUE");
+  });
+
+  it("puts an administrator with no preference on real programmes", () => {
+    // The column's default, mirrored. A context that never set the field must
+    // not be shown fixtures — forgetting shows an empty console rather than
+    // somebody's learners.
+    const real = { ...admin, viewingDemoData: undefined };
+    expect(marketScope(real, "applications").params).toEqual([false]);
   });
 
   it("pins every other role to their own market", () => {
@@ -112,8 +140,10 @@ describe("application scope", () => {
     expect(scope.text).not.toContain("business_id");
   });
 
-  it("leaves an administrator unrestricted", () => {
-    expect(applicationScope(admin).text).toBe("TRUE");
+  it("restricts an administrator to one world", () => {
+    const scope = applicationScope(admin);
+    expect(scope.text).toContain("is_demo_data");
+    expect(scope.text).not.toBe("TRUE");
   });
 
   it("always emits at least one predicate for a non-admin", () => {
@@ -167,8 +197,10 @@ describe("host offer scope", () => {
     expect(hostOfferScope(board).text).toBe("host_offers.market_id = $1");
   });
 
-  it("leaves an administrator unrestricted", () => {
-    expect(hostOfferScope(admin).text).toBe("TRUE");
+  it("restricts an administrator to one world", () => {
+    const scope = hostOfferScope(admin);
+    expect(scope.text).toContain("is_demo_data");
+    expect(scope.text).not.toBe("TRUE");
   });
 
   it("always emits at least one predicate for a non-admin", () => {
@@ -204,8 +236,10 @@ describe("outcome scope", () => {
     expect(outcomeScope(college).text).toBe("outcomes.market_id = $1");
   });
 
-  it("leaves an administrator unrestricted", () => {
-    expect(outcomeScope(admin).text).toBe("TRUE");
+  it("restricts an administrator to one world", () => {
+    const scope = outcomeScope(admin);
+    expect(scope.text).toContain("is_demo_data");
+    expect(scope.text).not.toBe("TRUE");
   });
 
   it("always emits at least one predicate for a non-admin", () => {

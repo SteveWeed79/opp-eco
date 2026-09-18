@@ -6,11 +6,11 @@ import {
   HandHeart,
   Handshake,
   HelpCircle,
+  PackageCheck,
   Users,
   Zap,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -28,6 +28,9 @@ import {
   ToneCard,
   TrackBadge,
 } from "@/components/ui";
+import { RaiseProblem } from "@/components/RaiseProblem";
+import { AnswerHandIn } from "@/components/AnswerHandIn";
+import { downloadUrlOrNull } from "@/services/uploads";
 import {
   TransitionActions,
   MENTORSHIP_CONFIRM,
@@ -50,6 +53,9 @@ import { hostOfferQueue, marketFunding } from "@/lib/queries";
 import {
   answerPlacementOffer,
   businessCloseIntroduction,
+  businessAcceptWork,
+  businessAskForChange,
+  businessRaiseProblem,
   businessTransition,
 } from "./actions";
 import { AnswerOffer } from "@/components/AnswerOffer";
@@ -62,10 +68,14 @@ import { opportunityPath } from "@/routes";
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
   const { organizationName } = await nameLookups(actor);
-  const [unreviewedWeeks, hoursQueue, offerQueue] = await Promise.all([
+  const [unreviewedWeeks, hoursQueue, offerQueue, handIns] = await Promise.all([
     unreviewedWeeksByApplication(actor),
     reviewQueue(actor),
     hostOfferQueue(actor),
+    // The micro track's queue, and the one the employer could not act on at
+    // all until now: `Accept deliverable` has been guarded on a flag nothing
+    // could set since the first migration.
+    repositories.deliverables.awaitingResponse(actor),
   ]);
   const org = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
@@ -313,6 +323,84 @@ export default async function BusinessPage() {
       )}
 
       {/* ------------------------------------------------------------------ */}
+      {/* Work handed in, waiting on you                                      */}
+      {/*                                                                     */}
+      {/* Beside the hours queue and for the same reason: a micro learner     */}
+      {/* cannot be paid, cannot earn credit and cannot have their placement  */}
+      {/* closed until this is answered, and the employer is the only party   */}
+      {/* who can answer it. The difference is that accepting is also the     */}
+      {/* evaluation — there is no separate form on this track.               */}
+      {/* ------------------------------------------------------------------ */}
+      {handIns.length > 0 && (
+        <ToneCard tone="brand" elevation="floating">
+          <CardHeader
+            level={3}
+            icon={<PackageCheck className="w-5 h-5 text-brand-700" />}
+            title="Work handed in"
+            subtitle="Accepting completes the placement and is the evaluation the college reads"
+          />
+          <ul className="divide-y divide-line">
+            {handIns.map((handIn) => {
+              const application = applications.find((a) => a.id === handIn.applicationId);
+              const posting = application
+                ? postings.find((p) => p.id === application.postingId)
+                : undefined;
+              const learnerName = studentName(handIn.studentId);
+              return (
+                <li key={handIn.id} className="px-6 py-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-ink-950">
+                      {learnerName}
+                    </span>
+                    <span className="text-sm text-ink-600">
+                      {posting?.title ?? "a project"}
+                    </span>
+                    {handIn.round > 1 && <Badge tone="warn">Round {handIn.round}</Badge>}
+                  </div>
+                  <p className="mt-2 text-sm text-ink-700 whitespace-pre-line">
+                    {handIn.summary}
+                  </p>
+                  {handIn.fileKey && (
+                    // A signed link, minted at render and short-lived. The
+                    // signature only stops somebody guessing keys; the route
+                    // checks authorization again on every request, because
+                    // links get forwarded. Null where the deployment has no
+                    // signing secret — said rather than silently dropped.
+                    <p className="mt-2 text-sm">
+                      {downloadUrlOrNull(handIn.fileKey) ? (
+                        <a
+                          className="font-semibold text-brand-700 underline hover:text-brand-800"
+                          href={downloadUrlOrNull(handIn.fileKey)!}
+                        >
+                          Open the attached file
+                        </a>
+                      ) : (
+                        <span className="text-ink-500">
+                          A file is attached and this deployment cannot issue
+                          download links — set UPLOAD_URL_SECRET.
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  <div className="mt-3">
+                    <AnswerHandIn
+                      deliverableId={handIn.id}
+                      learnerName={learnerName}
+                      projectTitle={posting?.title ?? "this project"}
+                      summary={handIn.summary}
+                      round={handIn.round}
+                      accept={businessAcceptWork}
+                      requestRevision={businessAskForChange}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </ToneCard>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Hours awaiting sign-off                                             */}
       {/*                                                                     */}
       {/* Above the pipeline deliberately. A student cannot be paid, cannot   */}
@@ -510,6 +598,18 @@ export default async function BusinessPage() {
                             unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                           }).map((t) => ({ to: t.to, label: t.label }))}
                         />
+                        {/* The path runs both ways: an employer with a learner
+                            who has stopped turning up has the same problem
+                            from the other side, and the same route to it. */}
+                        {application.status === "placement_active" && (
+                          <div className="mt-2">
+                            <RaiseProblem
+                              applicationId={application.id}
+                              placementTitle={`${student.name} — ${posting.title}`}
+                              action={businessRaiseProblem}
+                            />
+                          </div>
+                        )}
                       </Td>
                     </tr>
                   );
@@ -662,10 +762,6 @@ export default async function BusinessPage() {
           </div>
         </div>
         <div className="px-6 pb-5">
-          <Assumption>
-            Micro-internships are unsubsidized here (Q13) — a fixed project fee has no
-            hours for an hourly reimbursement to attach to.
-          </Assumption>
         </div>
       </Card>
 
@@ -770,12 +866,6 @@ export default async function BusinessPage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Mentorship carries no credit and no reimbursement, so nothing here goes to
-            the college for review — there is no academic claim to underwrite. Who
-            starts a pairing is unsettled (Q22), so the introduction still happens
-            off-platform through {organizationName(market.collegeIds[0])}.
-          </Assumption>
         </div>
       </Card>
       </div>

@@ -12,12 +12,16 @@
  * read another market's roster no matter what a page asks for.
  */
 
+import { viewsDemoData } from "@/domain/identity";
+import * as seed from "./seed";
 import type {
   ActorContext,
   Application,
   ConsentRecord,
   AuditEvent,
   CreditAward,
+  Deliverable,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -213,6 +217,49 @@ export interface OutcomeRepository {
 }
 
 /**
+ * Escalations, read by the person who raised one and by the administrator.
+ *
+ * **Nobody else, including the parties the problem is about.** That refusal is
+ * the feature rather than a restriction on it: a learner who knows their
+ * supervisor will read it does not report an absent supervisor, and a channel
+ * carrying only what is safe to say in front of the other party is a comment
+ * box. Both layers implement it — `visibleEscalations` and `escalationScope` —
+ * and the parity suite checks they agree, including that an employer reading
+ * its own placement's escalations gets an empty list rather than an error.
+ *
+ * `live` is the administrator's queue and the reason the partial index exists.
+ */
+/**
+ * Hand-ins on the micro track, narrowed to the parties with a reason to read one.
+ *
+ * The learner's own, the employer's for placements it hosts, and the market's
+ * for a college or an administrator — the college because acceptance *is* the
+ * evaluation it awards credit against, so a deliverable it cannot read is a
+ * credit decision made blind.
+ *
+ * **The board sees none.** Micro-internships are unsubsidised (Q13 — a fixed
+ * project fee has no hours for an hourly reimbursement to attach to), so no
+ * public money rides on one and the board has no workflow reason to read a
+ * student's work. The same narrowing mentorship gets, for the same reason.
+ */
+export interface DeliverableRepository {
+  list(actor: ActorContext): Promise<Deliverable[]>;
+  find(actor: ActorContext, id: string): Promise<Deliverable | null>;
+  /** At most one per application — the unique index says so. */
+  forApplication(actor: ActorContext, applicationId: string): Promise<Deliverable | null>;
+  /** The employer's queue: handed in and not yet answered, oldest first. */
+  awaitingResponse(actor: ActorContext): Promise<Deliverable[]>;
+}
+
+export interface EscalationRepository {
+  list(actor: ActorContext): Promise<Escalation[]>;
+  find(actor: ActorContext, id: string): Promise<Escalation | null>;
+  forApplication(actor: ActorContext, applicationId: string): Promise<Escalation[]>;
+  /** Still open or being looked at, worst kind first, oldest first within a kind. */
+  live(actor: ActorContext): Promise<Escalation[]>;
+}
+
+/**
  * What each host said at the end of a placement.
  *
  * Narrowed differently from outcomes, because the parties differ. **The
@@ -254,6 +301,16 @@ export interface AuditEventRepository {
 
 export interface UserRepository {
   find(id: string): Promise<User | null>;
+  /**
+   * Everybody holding the administrator role.
+   *
+   * Unscoped like `find`, and for the same reason its comment gives: this
+   * resolves a **notification recipient**, and those cross market boundaries by
+   * design. Administrators are the one cross-market role, so there is no market
+   * to narrow by — see `services/escalation.ts` for what that costs once a
+   * second market exists.
+   */
+  administrators(): Promise<User[]>;
 }
 
 export interface Repositories {
@@ -271,6 +328,8 @@ export interface Repositories {
   fundingCommitments: FundingCommitmentRepository;
   consents: ConsentRepository;
   outcomes: OutcomeRepository;
+  deliverables: DeliverableRepository;
+  escalations: EscalationRepository;
   hostOffers: HostOfferRepository;
   regionDefinitions: RegionDefinitionRepository;
   auditEvents: AuditEventRepository;
@@ -287,11 +346,31 @@ export interface Repositories {
  * Admin is the only cross-market role, which is deliberate and audited.
  * Everyone else sees exactly one market.
  */
+/**
+ * Which markets the fixtures flag as the demonstration.
+ *
+ * The in-memory layer *is* the fixtures, so this is derived from them rather
+ * than asserted — a fifth market added unflagged would be treated as real
+ * here, which is the same answer Postgres gives for an unflagged row. The two
+ * layers must agree, and `integration.test.ts` fails if they stop.
+ */
+const DEMO_MARKET_IDS = new Set(
+  seed.markets.filter((m) => m.isDemoData).map((m) => m.id),
+);
+
+/** Whether a market belongs to the world this actor asked for. */
+function marketMatchesWorld(actor: ActorContext, marketId: string): boolean {
+  return DEMO_MARKET_IDS.has(marketId) === viewsDemoData(actor);
+}
+
 export function visibleMarketIds(
   actor: ActorContext,
   allMarketIds: string[],
 ): string[] {
-  if (actor.membership.role === "admin") return allMarketIds;
+  if (actor.membership.role === "admin") {
+    if (actor.systemWide) return allMarketIds;
+    return allMarketIds.filter((id) => marketMatchesWorld(actor, id));
+  }
   return actor.membership.marketId ? [actor.membership.marketId] : [];
 }
 
@@ -299,7 +378,12 @@ export function inScope<T extends { marketId: string }>(
   actor: ActorContext,
   rows: T[],
 ): T[] {
-  if (actor.membership.role === "admin") return rows;
+  // Cross-market, but not across both worlds — the mirror of `marketScope`'s
+  // admin branch, and the reason that one stopped being `TRUE`.
+  if (actor.membership.role === "admin") {
+    if (actor.systemWide) return rows;
+    return rows.filter((r) => marketMatchesWorld(actor, r.marketId));
+  }
   return rows.filter((r) => r.marketId === actor.membership.marketId);
 }
 

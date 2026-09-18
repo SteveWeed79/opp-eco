@@ -15,7 +15,9 @@ import {
   seedInto,
   reseedInto,
   parseArgs,
-  restoreAdmins,
+  DEMO_DELETES,
+  CASCADED_TABLES,
+  PRESERVED_TABLES,
   FIXTURE_IDS,
   RUNTIME_TABLES,
   TABLES,
@@ -262,204 +264,192 @@ const REAL_ADMIN = {
 const empty = (text: string) =>
   text.includes("count(*)") ? { rows: [{ count: 0 }] } : { rows: [] };
 
-describe("refusing to destroy what the fixtures did not create", () => {
-  it("refuses, and truncates nothing, when a table holds foreign rows", async () => {
-    const db = fakeDatabase((text) =>
-      text.includes("FROM organizations WHERE id <> ALL")
-        ? { rows: [{ count: 3 }] }
-        : empty(text),
-    );
-
-    await expect(reseedInto(db)).rejects.toThrow(/3\s+organizations/);
-
-    // The point of the whole exercise: the refusal happens *before* anything
-    // is destroyed, not as an apology afterwards.
-    expect(db.statements.filter((s) => s.text.startsWith("TRUNCATE"))).toEqual([]);
+describe("what a re-seed is allowed to remove", () => {
+  it("issues no TRUNCATE, anywhere", async () => {
+    // The whole change. A truncate empties a table; these statements empty the
+    // demonstration and leave whatever else is in there alone.
+    const db = fakeDatabase(empty);
+    await reseedInto(db);
+    expect(db.statements.filter((s) => /TRUNCATE/i.test(s.text))).toEqual([]);
   });
 
-  it("names every table it found, not just the first", async () => {
-    const db = fakeDatabase((text) =>
-      text.includes("WHERE id <> ALL") && text.includes("count(*)")
-        ? { rows: [{ count: 7 }] }
-        : empty(text),
-    );
-
-    const error = await reseedInto(db).catch((e: Error) => e);
-    for (const table of Object.keys(FIXTURE_IDS)) {
-      expect((error as Error).message).toContain(table);
+  it("gives every placeholder in a delete a parameter, and every parameter a placeholder", () => {
+    // The same check the inserts get, and for the same reason — except this one
+    // is worse: a delete whose `$2` has no parameter does not return the wrong
+    // rows, it throws mid-clear, halfway through emptying the demonstration.
+    // Written after exactly that happened here.
+    for (const entry of DEMO_DELETES) {
+      const highest = Math.max(
+        0,
+        ...[...entry.sql.matchAll(/\$(\d+)/g)].map((m: RegExpMatchArray) => Number(m[1])),
+      );
+      const params = entry.params({ markets: [], users: [] });
+      expect(highest, `${entry.table}: ${entry.sql}`).toBe(params.length);
     }
   });
 
-  it("watches the county list a board actually operates over", () => {
-    // A region definition is the one place real, hand-gathered information gets
-    // recorded against a seeded market — a WIOA county list is a phone call,
-    // not a fixture. Losing it to a re-seed means making that call again.
-    expect(Object.keys(FIXTURE_IDS)).toContain("region_definitions");
+  it("scopes every delete — none of them can empty a table", () => {
+    // An unscoped DELETE is a TRUNCATE with extra steps, and it is the one
+    // mistake in this list that would destroy a real market silently.
+    for (const entry of DEMO_DELETES) {
+      expect(entry.sql, `${entry.table} has no predicate`).toMatch(/\sWHERE\s/i);
+    }
   });
 
-  it("proceeds under --force, and says what it destroyed", async () => {
+  it("handles every table in the schema, explicitly or by cascade", () => {
+    // A table added to the schema and forgotten here would keep its
+    // demonstration rows through a re-seed and accumulate forever. The lists
+    // come from the script rather than from a copy kept in this file, because a
+    // second list is a list that goes stale.
+    const handled = new Set([
+      ...DEMO_DELETES.map((d: { table: string }) => d.table),
+      ...CASCADED_TABLES,
+      ...PRESERVED_TABLES,
+    ]);
+    expect(TABLES.filter((t: string) => !handled.has(t))).toEqual([]);
+  });
+
+  it("clears audit events only through the market that permits it", () => {
+    // `audit_events` has a BEFORE UPDATE OR DELETE trigger that raises —
+    // deliberately, since SECURITY.md names audit tampering among the most
+    // serious findings here. The old TRUNCATE was getting around that guard
+    // rather than respecting it, because truncation does not fire row triggers.
+    //
+    // Migration 0019 exempts exactly one case: a DELETE of a row whose market is
+    // flagged `is_demo_data`. So the statement has to go through the market —
+    // and `markets` and `users` still cannot be deleted at all, because audit
+    // rows reference both ON DELETE RESTRICT and a real programme's rows are
+    // still refused.
+    const audit = DEMO_DELETES.find(
+      (d: { table: string }) => d.table === "audit_events",
+    )!;
+    expect(audit.sql).toMatch(/market_id = ANY/);
+
+    const tables = DEMO_DELETES.map((d: { table: string }) => d.table);
+    expect(tables).not.toContain("markets");
+    expect(tables).not.toContain("users");
+    expect(PRESERVED_TABLES.sort()).toEqual(["markets", "users"]);
+  });
+
+  it("removes the organizations last, because everything else restricts to them", () => {
+    const tables = DEMO_DELETES.map((d: { table: string }) => d.table);
+    expect(tables.at(-1)).toBe("organizations");
+  });
+
+  it("reaches the fixture administrator's membership, which has no market", () => {
+    // `admin_is_cross_market` makes it null, so a market predicate alone never
+    // matches it — and the `users` delete that follows would then fail on the
+    // foreign key. This is the one entry where the second clause is load-bearing.
+    const memberships = DEMO_DELETES.find(
+      (d: { table: string }) => d.table === "memberships",
+    )!;
+    expect(memberships.sql).toMatch(/user_id = ANY/);
+  });
+
+  it("names the demonstration's markets and the fixtures' users, and nothing else", async () => {
+    const db = fakeDatabase((text) =>
+      text.includes("SELECT id FROM markets WHERE is_demo_data")
+        ? { rows: [{ id: "mkt-pittsburg" }] }
+        : empty(text),
+    );
+    await reseedInto(db);
+
+    const deletes = db.statements.filter((s) => s.text.startsWith("DELETE"));
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const statement of deletes) {
+      for (const param of statement.params) {
+        if (!Array.isArray(param)) continue;
+        // Every array parameter is either the demonstration's markets or the
+        // fixtures' own ids. A real market or a real account appearing here is
+        // the failure this whole design exists to prevent.
+        for (const value of param) {
+          const known =
+            value === "mkt-pittsburg" || FIXTURE_IDS.users.includes(value);
+          expect(known, `${String(value)} is not the demonstration's`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("reports what it left alone rather than refusing to run", async () => {
+    // The refusal is gone: it existed because a truncate could not tell a
+    // fixture from somebody's work. A guard that fires on every real deployment
+    // is a guard whose override becomes the command everybody types.
     const db = fakeDatabase((text) =>
       text.includes("FROM students WHERE id <> ALL")
         ? { rows: [{ count: 12 }] }
         : empty(text),
     );
-
-    const outcome = await reseedInto(db, { force: true });
-
-    expect(outcome.foreign).toEqual([{ table: "students", count: 12 }]);
-    expect(db.statements.some((s) => s.text.startsWith("TRUNCATE"))).toBe(true);
-  });
-
-  it("says nothing about a database holding only fixtures", async () => {
-    const db = fakeDatabase(empty);
     const outcome = await reseedInto(db);
-    expect(outcome.foreign).toEqual([]);
-    expect(outcome.preserved).toEqual([]);
+    expect(outcome.untouched).toContainEqual({ table: "students", count: 12 });
+    expect(db.statements.some((s) => s.text.startsWith("DELETE"))).toBe(true);
   });
 });
 
-describe("carrying an administrator through the truncate", () => {
-  /** A database holding one real administrator and nothing else foreign. */
+describe("administrators are simply not named", () => {
+  /** A database holding one real administrator. */
   function withRealAdmin() {
     return fakeDatabase((text) => {
       if (text.includes("JOIN memberships m ON m.user_id = u.id AND m.role = 'admin'")) {
         return { rows: [REAL_ADMIN] };
       }
-      if (text.startsWith("SELECT * FROM users")) {
-        return {
-          fields: [{ name: "id" }, { name: "name" }, { name: "email" }],
-          rows: [REAL_ADMIN],
-        };
-      }
-      if (text.startsWith("SELECT * FROM user_passwords")) {
-        return {
-          fields: [{ name: "user_id" }, { name: "password_hash" }, { name: "must_change" }],
-          rows: [{ user_id: REAL_ADMIN.id, password_hash: "scrypt$…", must_change: false }],
-        };
-      }
       return empty(text);
     });
   }
 
-  it("does not count an administrator it is keeping as a foreign row", async () => {
-    const db = withRealAdmin();
-    await reseedInto(db);
-
-    const usersSurvey = db.statements.find((s) =>
-      s.text.includes("FROM users WHERE id <> ALL"),
-    )!;
-    // Otherwise the seed would refuse because of the very account it is about
-    // to preserve, which is a refusal nobody could act on.
-    expect(usersSurvey.params[0]).toContain(REAL_ADMIN.id);
-  });
-
-  it("puts the account and its password back after the truncate", async () => {
+  it("never puts a real administrator's id in a delete", async () => {
     const db = withRealAdmin();
     const outcome = await reseedInto(db);
 
     expect(outcome.preserved).toEqual([REAL_ADMIN]);
+    for (const statement of db.statements.filter((s) => s.text.startsWith("DELETE"))) {
+      for (const param of statement.params.flat()) {
+        expect(param).not.toBe(REAL_ADMIN.id);
+      }
+    }
+  });
 
-    const truncate = db.statements.findIndex((s) => s.text.startsWith("TRUNCATE"));
-    const restoredUser = db.statements.findIndex(
-      (s) => s.text.startsWith("INSERT INTO users") && s.params.includes(REAL_ADMIN.id),
+  it("captures and restores nothing, because nothing is destroyed", async () => {
+    // The capture-and-restore this file used to do existed to carry an account
+    // over a truncate. There is no truncate, so a real administrator's password
+    // and authenticator are never read, never re-inserted, and never at risk of
+    // a restore that half-worked.
+    const db = withRealAdmin();
+    await reseedInto(db);
+    expect(db.statements.some((s) => s.text.startsWith("SELECT * FROM user_passwords"))).toBe(
+      false,
     );
-    const restoredPassword = db.statements.findIndex((s) =>
-      s.text.startsWith("INSERT INTO user_passwords"),
+    expect(db.statements.some((s) => s.text.startsWith("INSERT INTO user_passwords"))).toBe(
+      false,
     );
-
-    expect(truncate).toBeGreaterThanOrEqual(0);
-    expect(restoredUser).toBeGreaterThan(truncate);
-    expect(restoredPassword).toBeGreaterThan(truncate);
   });
 
-  it("captures the account before the truncate, not after it", async () => {
-    const db = withRealAdmin();
-    await reseedInto(db);
-
-    const capture = db.statements.findIndex((s) => s.text.startsWith("SELECT * FROM users"));
-    const truncate = db.statements.findIndex((s) => s.text.startsWith("TRUNCATE"));
-    // Reading the rows out after they were deleted would preserve nothing at
-    // all, silently.
-    expect(capture).toBeLessThan(truncate);
-  });
-
-  it("leaves the session behind", async () => {
-    const db = withRealAdmin();
-    await reseedInto(db);
-
-    // A password that survives is how the administrator gets back in. A session
-    // that survives is a credential issued against a database that no longer
-    // exists — `sessions` is truncated and deliberately never restored.
-    expect(db.statements.some((s) => s.text.startsWith("SELECT * FROM sessions"))).toBe(false);
-    expect(db.statements.some((s) => s.text.startsWith("INSERT INTO sessions"))).toBe(false);
-  });
-
-  it("asks only for administrators holding no other role", async () => {
-    const db = withRealAdmin();
-    await reseedInto(db);
-
-    const lookup = db.statements.find((s) => s.text.includes("JOIN memberships m"))!;
-    // Every non-admin membership names an organization that the truncate is
-    // about to remove, so an account holding one cannot be carried through —
-    // it has to fall to the refusal instead.
-    expect(lookup.text).toContain("other.role <> 'admin'");
-    expect(lookup.params[0]).toEqual(FIXTURE_IDS.users);
-  });
-
-  it("drops them under --replace-admins, and reports it", async () => {
+  it("names them only when --replace-admins asks", async () => {
     const db = withRealAdmin();
     const outcome = await reseedInto(db, { replaceAdmins: true });
 
     expect(outcome.preserved).toEqual([]);
     expect(outcome.replaced).toEqual([REAL_ADMIN]);
-    expect(db.statements.some((s) => s.text.startsWith("SELECT * FROM user_passwords"))).toBe(
-      false,
-    );
-  });
-
-  it("does not need --force to drop them under --replace-admins", async () => {
-    // The flag is itself the consent for that specific destruction. Requiring
-    // both would make the habitual command the one that also wipes real data.
-    const db = withRealAdmin();
-    await expect(reseedInto(db, { replaceAdmins: true })).resolves.toBeTruthy();
-  });
-
-  it("carries a column the capture was never told about", async () => {
-    // `user_totp.secret` is stored in the clear today and will not always be.
-    // A restore that listed its columns here would silently drop whatever a
-    // migration adds; this one reads them off the result.
-    const db = fakeDatabase();
-    await restoreAdmins(db, [
-      {
-        table: "user_totp",
-        columns: ["user_id", "secret", "secret_key_id", "confirmed_at"],
-        rows: [
-          {
-            user_id: REAL_ADMIN.id,
-            secret: "ENCRYPTED",
-            secret_key_id: "key-2026",
-            confirmed_at: null,
-          },
-        ],
-      },
-    ]);
-
-    const insert = db.statements[0];
-    expect(insert.text).toBe(
-      "INSERT INTO user_totp (user_id, secret, secret_key_id, confirmed_at) VALUES ($1,$2,$3,$4)",
-    );
-    expect(insert.params).toEqual([REAL_ADMIN.id, "ENCRYPTED", "key-2026", null]);
+    // Their memberships go, which is what takes their access. The `users` row
+    // itself cannot be deleted while any audit event names them as the actor,
+    // so it is left and the account is left unable to sign in.
+    const memberships = db.statements.find((s) =>
+      s.text.startsWith("DELETE FROM memberships"),
+    )!;
+    expect(memberships.params[1]).toContain(REAL_ADMIN.id);
   });
 });
 
 describe("arguments", () => {
-  it("reads the two flags it has", () => {
-    expect(parseArgs([])).toEqual({ force: false, replaceAdmins: false });
-    expect(parseArgs(["--force"])).toEqual({ force: true, replaceAdmins: false });
-    expect(parseArgs(["--replace-admins", "--force"])).toEqual({
-      force: true,
-      replaceAdmins: true,
-    });
+  it("reads the one flag it has", () => {
+    expect(parseArgs([])).toEqual({ replaceAdmins: false });
+    expect(parseArgs(["--replace-admins"])).toEqual({ replaceAdmins: true });
+  });
+
+  it("tells somebody following an old note that --force is gone", () => {
+    // It was documented, so a stale README or a remembered command deserves the
+    // reason rather than "unrecognised argument".
+    expect(() => parseArgs(["--force"])).toThrow(/no longer destroys anything/);
   });
 
   it("refuses one it does not, rather than ignoring it", () => {

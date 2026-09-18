@@ -8,21 +8,20 @@
  * them, so the seeded database and the in-memory demo cannot drift apart. That
  * is what the alias hook alongside this file exists for.
  *
- * Idempotent: every table is truncated first, so running it twice leaves the
- * same database rather than a duplicated one.
+ * Idempotent: the demonstration is cleared before it is loaded, so running this
+ * twice leaves the same database rather than a duplicated one.
  *
- * That truncate is the dangerous part, and it is why this script looks at what
- * is already there before it runs. Loading fixtures over a database that holds
- * real rows is not a refresh, it is a deletion — so:
+ * It does not truncate. `markets.is_demo_data` says which markets are the
+ * demonstration, and every statement here is scoped to those — so a real
+ * market, its learners, its placements and its money are not "preserved" from
+ * this script, they are never named by it. Neither are administrators, whose
+ * accounts and credentials therefore survive without being captured and put
+ * back. `--replace-admins` names them for deletion deliberately.
  *
- *  - It **refuses** when it finds rows the fixtures did not write, naming them.
- *    `--force` proceeds anyway, which is the only way that destruction happens.
- *  - It **carries administrators through**, with their passwords and
- *    authenticators. An administrator cannot be created through the product —
- *    `db:admin` exists precisely because there is no other way to make one — so
- *    a re-seed that destroyed them would make refreshing the demo data cost a
- *    re-credentialling every time, and the flag to skip that check would become
- *    the flag everybody types. `--replace-admins` drops them deliberately.
+ * That is why there is no refusal and no `--force` any more. Both existed
+ * because a truncate cannot tell a fixture from somebody's work; this can, and
+ * a guard that fires on every real deployment is a guard whose override becomes
+ * the command everybody types.
  *
  * The connection comes from `pool.mjs`, so it reaches whatever `DATABASE_URL`
  * names — Neon, a container in CI, or a local cluster. It writes through raw
@@ -46,15 +45,20 @@ const session = await import(pathToFileURL(join(ROOT, "src/data/session.ts")).hr
 const cents = (value) => (value === undefined || value === null ? null : Math.round(value * 100));
 
 /**
- * Tables in dependency order, truncated in one statement.
+ * Every table this schema holds, in dependency order — children first.
  *
- * `RESTART IDENTITY` resets the two bigserial sequences so a re-seed produces
- * the same audit ids rather than climbing forever. `schema_migrations` is
- * deliberately absent: the schema is not the data, and wiping the ledger would
- * make the next `db:migrate` try to rebuild tables that already exist.
+ * Nothing truncates them any more; the order is what `DEMO_DELETES` walks,
+ * because almost every foreign key to `markets` is `RESTRICT` and so the
+ * markets have to go last. `schema_migrations` is deliberately absent: the
+ * schema is not the data.
+ *
+ * Kept as one list because two tests read it — `seed.test.ts` asserts every
+ * table here is either written by the fixtures or named as runtime, and that
+ * every one is either deleted explicitly or reached by a cascade. A table added
+ * to the schema and forgotten here fails both.
  */
 /**
- * Tables the truncation clears and the fixtures never refill.
+ * Tables the fixtures never write, whatever else clears them.
  *
  * Everything here is produced by the running application rather than by a
  * fixture, and each one would be actively wrong to ship: a seeded session or
@@ -94,6 +98,8 @@ export const TABLES = [
   "audit_events",
   "region_definitions",
   "host_offers",
+  "escalations",
+  "deliverables",
   "outcomes",
   "consents",
   "funding_commitments",
@@ -215,107 +221,204 @@ export async function surveyForeignRows(tx, { exceptUsers = [] } = {}) {
 }
 
 /**
- * The tables a preserved administrator lives in, and the column joining each
- * one to them.
+ * How the demonstration's rows are found, table by table, in the order the
+ * foreign keys require.
  *
- * Sessions, sign-in codes and MFA challenges are deliberately absent: they are
- * in flight rather than owned, and a re-seed is exactly the moment they should
- * stop being valid. The password survives, so the administrator signs back in;
- * the session does not, so anything holding one is cut off.
+ * This replaced `TRUNCATE`, and the reason is the whole point of the flag: the
+ * seed no longer needs to know what is safe to destroy, because it can ask. A
+ * truncate empties a table; this empties the demonstration and leaves whatever
+ * else is in there alone. A real market, its learners, its placements and its
+ * money are not "preserved" — they are never named by any statement here.
+ *
+ * The order is `TABLES`, which is already children-first, and it has to be:
+ * almost every foreign key to `markets` is `RESTRICT`, so the markets
+ * themselves go last and anything pointing at them goes before.
+ *
+ * **Seven tables are deliberately absent.** `uploaded_files`, `sessions`,
+ * `sign_in_codes`, `mfa_challenges`, `user_passwords`, `user_totp` and
+ * `user_recovery_codes` carry no market and reach one only through a user, a
+ * student or an application — every one of those foreign keys is `ON DELETE
+ * CASCADE`, so a demonstration learner's upload and a fixture account's
+ * password go when the row they hang off goes. A real administrator's password
+ * stays because their `users` row is never deleted, which is also why the
+ * capture-and-restore this file used to do is gone: nothing is being carried
+ * over a truncate any more, because there is no truncate.
+ *
+ * `seed.test.ts` asserts this list plus those seven accounts for every table in
+ * `TABLES`, so a table added to the schema cannot quietly go unhandled.
  */
-export const ADMIN_TABLES = [
-  { table: "users", key: "id" },
-  // Only the admin membership. By the time anything is captured we have already
-  // established this account holds no other role, so this is belt and braces.
-  { table: "memberships", key: "user_id", only: "role = 'admin'" },
-  { table: "user_passwords", key: "user_id" },
-  { table: "user_totp", key: "user_id" },
-  { table: "user_recovery_codes", key: "user_id" },
+const byMarket = (table) => ({
+  table,
+  sql: `DELETE FROM ${table} WHERE market_id = ANY($1)`,
+  params: ({ markets }) => [markets],
+});
+
+export const CASCADED_TABLES = [
+  // Reached through the student and the application it hangs off, both of which
+  // are deleted below, both `ON DELETE CASCADE`. The fixtures never write one.
+  "uploaded_files",
 ];
 
-/** Everything those tables hold for the given accounts, columns included. */
-export async function captureAdmins(tx, userIds) {
-  const captured = [];
-  for (const { table, key, only } of ADMIN_TABLES) {
-    const result = await tx.query(
-      `SELECT * FROM ${table} WHERE ${key} = ANY($1)${only ? ` AND ${only}` : ""}`,
-      [userIds],
-    );
-    const rows = result.rows ?? [];
-    captured.push({
-      table,
-      // Read off the result rather than listed here. `SELECT *` plus the
-      // columns the server named back is a capture that carries a column added
-      // by a later migration without anybody remembering to come and add it —
-      // and one is coming, because `user_totp.secret` has to stop being stored
-      // in the clear.
-      columns: (result.fields ?? []).map((f) => f.name),
-      rows,
-    });
-  }
-  return captured;
-}
+const byUser = (table) => ({
+  table,
+  sql: `DELETE FROM ${table} WHERE user_id = ANY($1)`,
+  params: ({ users }) => [users],
+});
 
-/** Put them back, in the order the foreign keys require. */
-export async function restoreAdmins(tx, captured) {
-  for (const { table, columns, rows } of captured) {
-    for (const row of rows) {
-      const cols = columns?.length ? columns : Object.keys(row);
-      const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-      await tx.query(
-        `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
-        cols.map((col) => row[col]),
-      );
-    }
-  }
-}
+export const DEMO_DELETES = [
+  // The demonstration's own history. Deletable only because migration 0019
+  // exempts rows in a market flagged `is_demo_data` — a real programme's audit
+  // trail is refused as absolutely as it ever was, and an UPDATE is refused on
+  // every row in the table including these.
+  byMarket("audit_events"),
+  // Credentials, first, because they hang off accounts rather than markets.
+  //
+  // These used to be reached by the cascade from `users`, and are named now
+  // that `users` is never deleted. For a fixture account they clear nothing —
+  // the seed writes no credential of any kind, deliberately. They exist for
+  // `--replace-admins`, where the account cannot be deleted (an audit event
+  // naming it as the actor restricts that) and so what has to go instead is
+  // everything that account could sign in with.
+  byUser("sessions"),
+  byUser("sign_in_codes"),
+  byUser("mfa_challenges"),
+  byUser("user_passwords"),
+  byUser("user_totp"),
+  byUser("user_recovery_codes"),
+  byMarket("notification_outbox"),
+  byMarket("region_definitions"),
+  byMarket("host_offers"),
+  // Before `applications`, which they both RESTRICT from.
+  byMarket("escalations"),
+  byMarket("deliverables"),
+  byMarket("outcomes"),
+  byMarket("consents"),
+  byMarket("funding_commitments"),
+  byMarket("funding_sources"),
+  {
+    // No market of its own; it is a join between an award and an application.
+    // Reached through the award, which has one — and which `RESTRICT`s from
+    // `applications`, so this must go before them both.
+    table: "credit_award_applications",
+    sql: `DELETE FROM credit_award_applications
+           WHERE credit_award_id IN (SELECT id FROM credit_awards WHERE market_id = ANY($1))`,
+    params: ({ markets }) => [markets],
+  },
+  byMarket("credit_awards"),
+  byMarket("time_entries"),
+  byMarket("applications"),
+  byMarket("interview_slots"),
+  byMarket("mentorship_pairings"),
+  byMarket("mentorship_offers"),
+  byMarket("postings"),
+  byMarket("students"),
+  {
+    // Two ways a membership belongs to the demonstration, and the second is not
+    // optional: an administrator's membership has a null market by constraint,
+    // so `market_id = ANY(...)` would never match the fixture administrator and
+    // the `users` delete below would then fail on the foreign key.
+    table: "memberships",
+    sql: `DELETE FROM memberships WHERE market_id = ANY($1) OR user_id = ANY($2)`,
+    params: ({ markets, users }) => [markets, users],
+  },
+  byMarket("market_colleges"),
+  byMarket("organizations"),
+];
 
-/** What the refusal says, given what the survey found. */
-export function refusalMessage(foreign) {
-  const rows = foreign
-    .map(({ table, count }) => `  ${String(count).padStart(5)}  ${table}`)
-    .join("\n");
-  return (
-    `the database holds rows these fixtures did not create:\n\n${rows}\n\n` +
-    `Seeding truncates every one of those tables, so this would destroy them.\n` +
-    `Administrators are carried through a seed and are never the reason for\n` +
-    `this refusal — something else here is real.\n\n` +
-    `If this is a scratch database and losing that is what you want:\n\n` +
-    `  npm run db:seed -- --force\n`
-  );
+/**
+ * Tables the demonstration keeps rather than rebuilds, and why they cannot be
+ * anything else.
+ *
+ * `audit_events` is append-only, enforced by a `BEFORE UPDATE OR DELETE`
+ * trigger that raises. That is deliberate — `SECURITY.md` names audit tampering
+ * as one of the findings this project treats as most serious — and it means the
+ * old `TRUNCATE` was getting around the guard rather than respecting it, since
+ * truncation does not fire row triggers. Deleting a demonstration's history is
+ * exactly what the trigger exists to refuse, so this does not.
+ *
+ * `markets` and `users` follow from it: `audit_events.market_id` and
+ * `audit_events.actor_user_id` are both `ON DELETE RESTRICT`, so once the
+ * application has written a single audit row, neither can be deleted at all.
+ *
+ * So the fixtures upsert them instead. Their ids are fixed, so a re-seed
+ * refreshes the row in place and everything hanging off it is rebuilt around
+ * it. The visible consequence is the honest one: **a demonstration's audit
+ * history accumulates rather than resetting**, and `seedInto` declines to write
+ * a second copy of the same fixture history on top of it.
+ */
+export const PRESERVED_TABLES = ["markets", "users"];
+
+/** The markets this database says are the demonstration. */
+export async function demonstrationMarketIds(tx) {
+  const { rows } = await tx.query(`SELECT id FROM markets WHERE is_demo_data`);
+  return rows.map((row) => row.id);
 }
 
 /**
- * Truncate, put the administrators back, and load the fixtures.
+ * Remove the demonstration, and only the demonstration.
  *
- * Takes a transaction rather than opening one, so the whole thing is one unit —
- * a database that has been truncated but not re-seeded is worse than either
- * end state — and so that it can be exercised against a real Postgres by the
- * integration suite rather than only through the command.
+ * Returns what it deleted, per table, so the command can print it — a re-seed
+ * that says what it removed is one whose blast radius a person can check
+ * against what they expected.
  */
-export async function reseedInto(tx, { force = false, replaceAdmins = false } = {}) {
-  const admins = await findRealAdmins(tx);
+export async function clearDemonstration(tx, { markets, users }) {
+  // Before anything is removed: take the demonstration's markets back out of
+  // `live`.
+  //
+  // A market names its board, and `markets.board_id` drops to null when that
+  // organization goes — at which point `live_market_has_board` refuses the row.
+  // So the board cannot be deleted while the market it runs is live. `seedInto`
+  // already knows this from the other direction: it inserts markets as
+  // `configuring` with no board and corrects them once the organizations exist.
+  // This is the same dance run backwards, and it is why the clear cannot simply
+  // be a list of deletes.
+  await tx.query(
+    `UPDATE markets SET stage = 'configuring', board_id = NULL WHERE id = ANY($1)`,
+    [markets],
+  );
 
-  // Exempt from the survey whether or not they are being kept: under
-  // `--replace-admins` the operator has already said this specific destruction
-  // is intended, so it is not what the refusal is for.
-  const foreign = await surveyForeignRows(tx, { exceptUsers: admins.map((a) => a.id) });
-  if (foreign.length > 0 && !force) throw new SeedRefused(refusalMessage(foreign));
-
-  const preserved = replaceAdmins ? [] : admins;
-  const replaced = replaceAdmins ? admins : [];
-  const captured = preserved.length
-    ? await captureAdmins(tx, preserved.map((a) => a.id))
-    : [];
-
-  await tx.query(`TRUNCATE ${TABLES.join(", ")} RESTART IDENTITY CASCADE`);
-  await restoreAdmins(tx, captured);
-  await seedInto(tx);
-
-  return { preserved, replaced, foreign };
+  const removed = [];
+  for (const { table, sql, params } of DEMO_DELETES) {
+    const result = await tx.query(sql, params({ markets, users }));
+    const count = result.rowCount ?? 0;
+    if (count > 0) removed.push({ table, count });
+  }
+  return removed;
 }
 
-export async function seedInto(tx) {
+/**
+ * Clear the demonstration and load the fixtures.
+ *
+ * Takes a transaction rather than opening one, so the whole thing is one unit —
+ * a database cleared but not re-seeded is worse than either end state — and so
+ * that it can be exercised against a real Postgres by the integration suite
+ * rather than only through the command.
+ *
+ * There is no refusal any more, and no `--force`. Both existed because this
+ * script truncated and so could not tell a fixture from somebody's work; it can
+ * now, and a guard that fires on every real deployment is a guard whose
+ * override becomes the command everybody types. What it reports instead is what
+ * it left alone.
+ */
+export async function reseedInto(tx, { replaceAdmins = false } = {}) {
+  const admins = await findRealAdmins(tx);
+  const replaced = replaceAdmins ? admins : [];
+
+  const markets = await demonstrationMarketIds(tx);
+  const removed = await clearDemonstration(tx, {
+    markets,
+    users: [...FIXTURE_IDS.users, ...replaced.map((a) => a.id)],
+  });
+
+  await seedInto(tx);
+
+  const untouched = await surveyForeignRows(tx, {
+    exceptUsers: admins.map((a) => a.id),
+  });
+  return { preserved: replaceAdmins ? [] : admins, replaced, removed, untouched };
+}
+
+export async function seedInto(tx, { auditEvents = true } = {}) {
   const insert = (text, params) => tx.query(text, params);
 
   /**
@@ -333,7 +436,13 @@ export async function seedInto(tx) {
       // statement is the only thing in the product that can set it.
       `INSERT INTO markets (id, name, city, stage, board_id,
          launched_on, program_year, is_demo_data)
-       VALUES ($1,$2,$3,'configuring',NULL,$4,$5,$6)`,
+       VALUES ($1,$2,$3,'configuring',NULL,$4,$5,$6)
+       ON CONFLICT (id) DO UPDATE
+          SET name = EXCLUDED.name, city = EXCLUDED.city,
+              stage = 'configuring', board_id = NULL,
+              launched_on = EXCLUDED.launched_on,
+              program_year = EXCLUDED.program_year,
+              is_demo_data = EXCLUDED.is_demo_data`,
       [
         market.id,
         market.name,
@@ -407,7 +516,14 @@ export async function seedInto(tx) {
   }
 
   for (const user of seed.users) {
-    await insert(`INSERT INTO users (id, name, email) VALUES ($1,$2,$3)`, [
+    // Upserted rather than inserted: `audit_events.actor_user_id` is
+    // ON DELETE RESTRICT, so a fixture account that has ever acted cannot be
+    // removed and re-created. Its id is fixed, so refreshing it in place is the
+    // same end state.
+    await insert(
+      `INSERT INTO users (id, name, email) VALUES ($1,$2,$3)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email`,
+      [
       user.id,
       user.name,
       user.email,
@@ -779,7 +895,62 @@ export async function seedInto(tx) {
     );
   }
 
-  for (const event of seed.auditEvents) {
+  // A hand-in points at a market, an application and the learner, and once
+  // answered at the employer who answered it. All are already in.
+  for (const deliverable of seed.deliverables) {
+    await insert(
+      `INSERT INTO deliverables (id, market_id, application_id, student_id,
+         summary, file_key, submitted_on, status, response, responded_on,
+         responded_by, round, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        deliverable.id,
+        deliverable.marketId,
+        deliverable.applicationId,
+        deliverable.studentId,
+        deliverable.summary,
+        deliverable.fileKey,
+        deliverable.submittedOn,
+        deliverable.status,
+        deliverable.response ?? null,
+        deliverable.respondedOn,
+        deliverable.respondedByUserId,
+        deliverable.round,
+        deliverable.version,
+      ],
+    );
+  }
+
+  // A report points at a market, an application and whoever raised it — and,
+  // once somebody has picked it up, at the administrator who did. All are in.
+  for (const escalation of seed.escalations) {
+    await insert(
+      `INSERT INTO escalations (id, market_id, application_id, raised_by,
+         raised_by_role, kind, summary, raised_on, status, acknowledged_on,
+         acknowledged_by, resolution, resolved_on, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        escalation.id,
+        escalation.marketId,
+        escalation.applicationId,
+        escalation.raisedByUserId,
+        escalation.raisedByRole,
+        escalation.kind,
+        escalation.summary,
+        escalation.raisedOn,
+        escalation.status,
+        escalation.acknowledgedOn,
+        escalation.acknowledgedByUserId,
+        escalation.resolution ?? null,
+        escalation.resolvedOn,
+        escalation.version,
+      ],
+    );
+  }
+
+  // Skipped on a re-seed that found history already there — `audit_events`
+  // refuses deletes, so writing a second copy could never be undone.
+  for (const event of auditEvents ? seed.auditEvents : []) {
     await insert(
       `INSERT INTO audit_events (market_id, occurred_at, actor_user_id, actor_role,
          entity_type, entity_id, from_state, to_state, reason, via_override)
@@ -806,18 +977,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 
 /** `--force` and `--replace-admins`, and nothing else. */
 export function parseArgs(argv) {
-  const known = new Set(["--force", "--replace-admins"]);
+  const known = new Set(["--replace-admins"]);
   const unknown = argv.filter((arg) => !known.has(arg));
   if (unknown.length > 0) {
-    throw new SeedRefused(
-      `unrecognised argument ${unknown[0]}. This command takes --force and ` +
-        `--replace-admins.`,
-    );
+    // `--force` is named rather than lumped in with any typo, because it was a
+    // documented flag and somebody following an old note deserves to be told it
+    // is gone and why, not that it was misspelled.
+    const why =
+      unknown[0] === "--force"
+        ? `--force is gone. Seeding no longer destroys anything outside the ` +
+          `demonstration's own markets, so there is nothing left to force past.`
+        : `unrecognised argument ${unknown[0]}. This command takes --replace-admins.`;
+    throw new SeedRefused(why);
   }
-  return {
-    force: argv.includes("--force"),
-    replaceAdmins: argv.includes("--replace-admins"),
-  };
+  return { replaceAdmins: argv.includes("--replace-admins") };
 }
 
 async function main() {
@@ -858,6 +1031,8 @@ try {
        (SELECT count(*) FROM credit_awards)      AS credit_awards,
        (SELECT count(*) FROM outcomes)           AS outcomes,
        (SELECT count(*) FROM host_offers)        AS host_offers,
+       (SELECT count(*) FROM escalations)        AS escalations,
+       (SELECT count(*) FROM deliverables)       AS deliverables,
        (SELECT count(*) FROM region_definitions) AS region_definitions,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,
@@ -871,20 +1046,27 @@ try {
 
   if (outcome.preserved.length > 0) {
     const n = outcome.preserved.length;
-    console.log(`\ncarried through the truncate — ${n} administrator${n === 1 ? "" : "s"}:`);
+    console.log(`\n${n} administrator${n === 1 ? "" : "s"} here, none of them touched:`);
     for (const admin of outcome.preserved) console.log(`  ${admin.name} <${admin.email}>`);
-    console.log("\nPasswords and authenticators came with them. Sessions did not, so sign in again.");
+    console.log("\nUntouched — no statement here named them. You stay signed in.");
   }
   if (outcome.replaced.length > 0) {
     console.log("\nDestroyed, as --replace-admins asked:");
     for (const admin of outcome.replaced) console.log(`  ${admin.name} <${admin.email}>`);
     console.log("\n  npm run db:admin -- you@yourdomain.com --name \"Your Name\"");
   }
-  if (outcome.foreign.length > 0) {
-    // Only reachable under --force: the operator was told and said yes.
-    console.log("\nDestroyed, as --force asked:");
-    for (const { table, count } of outcome.foreign) {
-      console.log(`  ${String(count).padStart(5)}  ${table} not written by these fixtures`);
+  if (outcome.removed.length > 0) {
+    console.log("\nCleared from the demonstration's markets:");
+    for (const { table, count } of outcome.removed) {
+      console.log(`  ${String(count).padStart(5)}  ${table}`);
+    }
+  }
+  if (outcome.untouched.length > 0) {
+    // The reassurance that replaced the refusal. These rows were never named by
+    // any statement this command ran.
+    console.log("\nLeft alone — not the demonstration's:");
+    for (const { table, count } of outcome.untouched) {
+      console.log(`  ${String(count).padStart(5)}  ${table}`);
     }
   }
 } catch (error) {

@@ -362,6 +362,54 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createDeliverable(deliverable: import("@/domain/types").Deliverable) {
+    if (seed.deliverables.some((d) => d.applicationId === deliverable.applicationId)) {
+      // The unique index says the same thing. One per application: a
+      // resubmission is a new round on the row, never a second row.
+      throw new Error(`Deliverable for ${deliverable.applicationId} already exists`);
+    }
+    this.effects.push(() => {
+      seed.deliverables.push(deliverable);
+    });
+  }
+
+  saveDeliverable(
+    deliverable: import("@/domain/types").Deliverable,
+    expectedVersion: number,
+  ) {
+    const index = seed.deliverables.findIndex((d) => d.id === deliverable.id);
+    if (index === -1) throw new Error(`Unknown deliverable ${deliverable.id}`);
+    if (seed.deliverables[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Deliverable", deliverable.id);
+    }
+    this.effects.push(() => {
+      seed.deliverables[index] = { ...deliverable, version: expectedVersion + 1 };
+    });
+  }
+
+  createEscalation(escalation: import("@/domain/types").Escalation) {
+    if (seed.escalations.some((e) => e.id === escalation.id)) {
+      throw new Error(`Escalation ${escalation.id} already exists`);
+    }
+    this.effects.push(() => {
+      seed.escalations.push(escalation);
+    });
+  }
+
+  saveEscalation(
+    escalation: import("@/domain/types").Escalation,
+    expectedVersion: number,
+  ) {
+    const index = seed.escalations.findIndex((e) => e.id === escalation.id);
+    if (index === -1) throw new Error(`Unknown escalation ${escalation.id}`);
+    if (seed.escalations[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Escalation", escalation.id);
+    }
+    this.effects.push(() => {
+      seed.escalations[index] = { ...escalation, version: expectedVersion + 1 };
+    });
+  }
+
   createOutcome(outcome: import("@/domain/types").Outcome) {
     if (seed.outcomes.some((o) => o.id === outcome.id)) {
       throw new Error(`Outcome ${outcome.id} already exists`);

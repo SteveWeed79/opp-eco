@@ -26,6 +26,7 @@ import type {
   Organization,
   Posting,
   Student,
+  User,
 } from "@/domain/types";
 import type { NotificationIntent } from "@/data/store";
 
@@ -53,6 +54,19 @@ export interface PolicyContext {
   employer: Organization | null;
   /** The workforce board for this market. */
   board: Organization | null;
+  /**
+   * Everybody holding the administrator role.
+   *
+   * Passed in already resolved, like the three organizations above and for the
+   * same reason: the unit of work is a synchronous callback, so every read a
+   * notification needs has to be in hand before the transaction opens.
+   *
+   * A **list**, unlike every other party here, because administrators are the
+   * one role without a market — there is no single "the administrator of this
+   * placement" to resolve, and an entry addressed to them fans out to all of
+   * them. See `addressee`.
+   */
+  administrators: User[];
   /**
    * What the board pays per hour here, from the market's wage-subsidy fund.
    *
@@ -113,6 +127,11 @@ const POLICY: Partial<Record<ApplicationStatus, PolicyEntry[]>> = {
     // money that is not coming.
     { party: "student", kind: "clearance.declined.student" },
     { party: "employer", kind: "clearance.declined.employer" },
+    // Budget stewardship. A board declining funding is the signal that the
+    // allocation is running down or that this learner did not qualify, and
+    // deciding what happens as the pot empties is the administrator's job
+    // rather than something either party above can act on.
+    { party: "admin", kind: "clearance.declined.admin" },
   ],
 
   funding_authorized: [
@@ -128,6 +147,11 @@ const POLICY: Partial<Record<ApplicationStatus, PolicyEntry[]>> = {
   placement_completed: [
     { party: "student", kind: "placement.completed.student" },
     { party: "college", kind: "placement.completed.college" },
+    // The board paid for this and was never told it finished. Completion is
+    // the outcome it reports upward, and it already hears about the two ways a
+    // placement goes wrong — mutual interest stalling, and early termination —
+    // so being silent about the way it goes right left its picture skewed.
+    { party: "board", kind: "placement.completed.board", unless: isMicro },
   ],
 
   credit_pending: [{ party: "college", kind: "credit.pending.college" }],
@@ -137,20 +161,41 @@ const POLICY: Partial<Record<ApplicationStatus, PolicyEntry[]>> = {
     { party: "employer", kind: "credit.granted.employer" },
   ],
 
-  credit_denied: [{ party: "student", kind: "credit.denied.student" }],
+  credit_denied: [
+    { party: "student", kind: "credit.denied.student" },
+    // The programme's central promise failing for one learner. Rare enough
+    // that each one is a story worth an administrator reading rather than a
+    // figure in a report.
+    { party: "admin", kind: "credit.denied.admin" },
+  ],
 
-  rejected: [{ party: "student", kind: "application.rejected.student" }],
+  rejected: [
+    { party: "student", kind: "application.rejected.student" },
+    // The college advises this learner and could not see this at all. One
+    // rejection is nothing; three is a conversation about the profile, and
+    // only the party holding the whole pattern can have it.
+    { party: "college", kind: "application.rejected.college" },
+  ],
 
   terminated_early: [
     { party: "student", kind: "placement.terminated.student" },
     { party: "college", kind: "placement.terminated.college" },
     // The board committed money against this placement and has to release it.
     { party: "board", kind: "placement.terminated.board", unless: isMicro },
+    // The clearest failure the system produces, and intervention is the
+    // administrator's job. Three parties were told and the operator was not.
+    { party: "admin", kind: "placement.terminated.admin" },
   ],
 
   // `withdrawn` tells the employer their candidate is gone; the student did it
   // themselves and does not need telling.
-  withdrawn: [{ party: "employer", kind: "application.withdrawn.employer" }],
+  withdrawn: [
+    { party: "employer", kind: "application.withdrawn.employer" },
+    // A learner pulling out usually means something the college can fix — a
+    // timetable clash, a transport problem, cold feet about a placement nobody
+    // talked them through. Silence here is how that stays invisible.
+    { party: "college", kind: "application.withdrawn.college" },
+  ],
 };
 
 /**
@@ -161,36 +206,60 @@ const POLICY: Partial<Record<ApplicationStatus, PolicyEntry[]>> = {
  * account. Returning null drops the message loudly in the outbox rather than
  * guessing at a recipient.
  */
-function addressee(
+/**
+ * The addresses for a party — plural, because one of them is.
+ *
+ * **This returned a single recipient, and `admin` resolved to the literal
+ * `"u-admin"`.** That is a seed fixture inside a service: on the demonstration
+ * it happens to be a real user, and on any other deployment it resolves to
+ * nothing, so `addressFor` would drop the message — into the outbox, which is
+ * the place nobody checks. It never fired only because no entry in the table
+ * used the party. The first one added would have failed silently, which is the
+ * failure mode this codebase treats most seriously.
+ *
+ * It is a list now because administrators are the one role the schema forbids a
+ * market on, so "the administrator for this placement" does not exist. The
+ * other four parties return exactly one address as before.
+ */
+function addressees(
   party: Party,
   context: PolicyContext,
-): { recipientUserId: string; recipientOrganizationId?: string } | null {
+): { recipientUserId: string; recipientOrganizationId?: string }[] {
   switch (party) {
     case "student":
-      return { recipientUserId: context.student.userId };
+      return [{ recipientUserId: context.student.userId }];
     case "employer":
       return context.employer
-        ? {
-            recipientUserId: `contact:${context.employer.id}`,
-            recipientOrganizationId: context.employer.id,
-          }
-        : null;
+        ? [
+            {
+              recipientUserId: `contact:${context.employer.id}`,
+              recipientOrganizationId: context.employer.id,
+            },
+          ]
+        : [];
     case "college":
       return context.college
-        ? {
-            recipientUserId: `contact:${context.college.id}`,
-            recipientOrganizationId: context.college.id,
-          }
-        : null;
+        ? [
+            {
+              recipientUserId: `contact:${context.college.id}`,
+              recipientOrganizationId: context.college.id,
+            },
+          ]
+        : [];
     case "board":
       return context.board
-        ? {
-            recipientUserId: `contact:${context.board.id}`,
-            recipientOrganizationId: context.board.id,
-          }
-        : null;
+        ? [
+            {
+              recipientUserId: `contact:${context.board.id}`,
+              recipientOrganizationId: context.board.id,
+            },
+          ]
+        : [];
     case "admin":
-      return { recipientUserId: "u-admin" };
+      // Every administrator, resolved from `memberships` by the caller. An
+      // empty list is a real answer — a deployment with no administrator yet —
+      // and means no message rather than a message to nobody.
+      return context.administrators.map((a) => ({ recipientUserId: a.id }));
   }
 }
 
@@ -224,9 +293,12 @@ export function notificationsFor(
   const intents: Omit<NotificationIntent, "marketId">[] = [];
   for (const entry of entries) {
     if (entry.unless?.(context)) continue;
-    const to = addressee(entry.party, context);
-    if (!to) continue;
-    intents.push({ ...to, kind: entry.kind, payload });
+    // One entry can now produce several messages, because an administrator
+    // entry addresses every administrator. The other four parties still
+    // produce exactly one, or none where the organization is unresolvable.
+    for (const to of addressees(entry.party, context)) {
+      intents.push({ ...to, kind: entry.kind, payload });
+    }
   }
   return intents;
 }

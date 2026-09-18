@@ -130,8 +130,25 @@ export function createMemoryFileStore(): FileStore {
  * Still exported, and still what the demo runs on, but no longer what callers
  * reach for: `fileStore()` in `backend.ts` picks this or Postgres from
  * `DATABASE_URL`, the same way every other store in this application is chosen.
+ *
+ * **Pinned to `globalThis`, and it has to be.** A file is written by a Server
+ * Action and read back by the route handler at `/api/files/[key]`, and those
+ * are compiled into *different* server bundles — so a plain module-level `Map`
+ * gives each of them its own, and every download of a file the demo just
+ * accepted returns 404. Nothing else in this codebase hits that boundary: the
+ * repositories' in-memory store is only ever touched from pages and actions,
+ * which share a bundle, so this was the first module state read from a route
+ * handler and the first place the seam showed.
+ *
+ * The symptom is quiet — an upload that reports success and a link that does
+ * not work — which is the likeliest reason the upload machinery sat complete
+ * and unwired for as long as it did.
  */
-export const memoryFileStore = createMemoryFileStore();
+const GLOBAL_KEY = Symbol.for("oppeco.memoryFileStore");
+type WithStore = typeof globalThis & { [GLOBAL_KEY]?: FileStore };
+
+export const memoryFileStore: FileStore =
+  ((globalThis as WithStore)[GLOBAL_KEY] ??= createMemoryFileStore());
 
 // ---------------------------------------------------------------------------
 // Signed retrieval
@@ -154,6 +171,31 @@ function signingSecret(): string {
     );
   }
   return "development-only-secret-not-for-production-use";
+}
+
+/**
+ * A signed link, or null where this deployment cannot issue one.
+ *
+ * For **rendering**, where `signDownloadUrl` throwing is the wrong answer: a
+ * production deployment with no `UPLOAD_URL_SECRET` is misconfigured, and the
+ * proportionate response is an attachment nobody can open, not a learner's
+ * whole portal replaced by an error boundary because one optional file could
+ * not be linked.
+ *
+ * The refusal is still visible rather than silent — callers render "the file is
+ * there and this deployment cannot serve it" instead of quietly omitting the
+ * link — and the download route keeps the hard version, because a forgeable
+ * signature there is the failure this secret exists to prevent.
+ */
+export function downloadUrlOrNull(
+  key: string,
+  ttlSeconds: number = DEFAULT_URL_TTL_SECONDS,
+): string | null {
+  try {
+    return signDownloadUrl(key, ttlSeconds);
+  } catch {
+    return null;
+  }
 }
 
 export const DEFAULT_URL_TTL_SECONDS = 300;

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  Assumption,
   Avatar,
   Badge,
   Button,
@@ -408,12 +407,6 @@ function StatusSection() {
         </div>
       </Section>
 
-      <Section title="Assumption marker" note="Marks a decision standing in for an unanswered question, tagged with its number">
-        <Assumption>
-          Micro-internships are unsubsidized here (Q13) — a fixed project fee has
-          no hours for an hourly reimbursement to attach to.
-        </Assumption>
-      </Section>
     </>
   );
 }

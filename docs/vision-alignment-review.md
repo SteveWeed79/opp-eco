@@ -583,6 +583,13 @@ Worth saying plainly, because a review that only lists gaps invites over-correct
   reads as credible rather than as vapourware, and a funder who finds an unlabelled
   mockup will not trust the next thing they are told. Section A moves them behind a
   front door; it does not remove them.
+
+  *Since this review:* the banner stands down for one audience only — a real
+  person signed in with a real account on a deployment that authenticates. A
+  visitor still meets it on every prototype page, which is who it was always
+  written for. It was never meant to caption a coordinator's working session,
+  and markets now carry `is_demo_data` so the claim is made about the rows on
+  screen rather than about the process serving them.
 - **`docs/product-vision.md`'s "Where this does not yet match the build" table
   stays, and should grow.** Every gap in this review that is not closed belongs in
   that table. A venture that publishes its own gap list is making a credibility

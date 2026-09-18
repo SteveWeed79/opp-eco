@@ -2,19 +2,39 @@
 
 ## Reporting a vulnerability
 
-Email **security@opportunityecosystem.example** with what you found, how to
-reproduce it, and what you think the impact is. We aim to acknowledge within
-two business days.
+Email **steve@swbuild.dev** with what you found, how to reproduce it, and what
+you think the impact is. We aim to acknowledge within two business days.
+
+<!--
+  This was `security@opportunityecosystem.example` — a domain RFC 2606 reserves
+  so that nothing can be delivered to it. Move it to a `security@` on the
+  venture's own domain when that mailbox exists.
+-->
+
 
 Please do not open a public issue for a security problem, and please do not
 test against live data or other people's accounts.
 
 ## Scope
 
-This repository currently runs as a **demonstration prototype**. It has no
-database, no real authentication, and every organisation, student, and figure
-in it is fictional. Findings against the demo are still welcome — the code is
-intended to become the real system.
+This repository is **the real system**, and it is also its own demonstration.
+That sentence used to read "a demonstration prototype… no database, no real
+authentication", and every clause of it has stopped being true:
+
+- **It has a database.** PostgreSQL, on Neon in deployment, behind a store that
+  refuses writes by default and a scoping layer applied in one place.
+- **It has real authentication.** Passwords are scrypt at OWASP's 2¹⁷ baseline,
+  one-time codes are stored as SHA-256 and never enter the notification outbox,
+  administrators can enrol a second factor, and sessions are server-side tokens
+  that can be revoked.
+- **Not everything in it is fictional any more.** The prototype under `/demo`
+  runs on invented organizations, and markets carry `is_demo_data` saying so.
+  Anything without that flag is somebody's actual programme.
+
+Findings against the demonstration are still welcome and are the same code
+path. Findings that cross the line between the two — anything letting invented
+rows pass as real, or real rows reach a demonstration surface — are the most
+serious thing you can send us.
 
 ## What we care about most
 
@@ -28,6 +48,13 @@ treat as most serious:
 - **PII disclosure** — a student's contact details reaching an employer before
   the placement stage that permits it
 - **Audit tampering** — any way to modify or delete an audit record
+- **Credential handling** — a one-time code or reset code reaching anywhere it
+  is persisted and rendered, a password hash readable through any surface, or a
+  temporary credential that survives being used
+- **The demonstration boundary** — a real learner's record appearing on a
+  demonstration surface, or invented figures counted into a real market's
+  totals. `markets.is_demo_data` is the only thing separating them, and nothing
+  in the application is permitted to write it
 
 ## Design commitments
 

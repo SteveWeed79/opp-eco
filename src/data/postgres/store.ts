@@ -23,6 +23,8 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Deliverable,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -498,6 +500,94 @@ class PostgresUnitOfWork implements UnitOfWork {
         WHERE id = ${consent.id} AND version = ${expectedVersion}
         RETURNING id`,
       { entity: "Consent", id: consent.id },
+    );
+  }
+
+  // -- Deliverables ---------------------------------------------------------
+
+  createDeliverable(deliverable: Deliverable) {
+    this.add(sql`
+      INSERT INTO deliverables (
+        id, market_id, application_id, student_id, summary, file_key,
+        submitted_on, status, response, responded_on, responded_by, round, version
+      ) VALUES (
+        ${deliverable.id}, ${deliverable.marketId}, ${deliverable.applicationId},
+        ${deliverable.studentId}, ${deliverable.summary}, ${deliverable.fileKey},
+        ${deliverable.submittedOn}, ${deliverable.status},
+        ${deliverable.response ?? null}, ${deliverable.respondedOn},
+        ${deliverable.respondedByUserId}, ${deliverable.round}, ${deliverable.version}
+      )`);
+  }
+
+  /**
+   * A resubmission, a revision ask, or an acceptance.
+   *
+   * The summary and the file **are** in the SET list, unlike a consent's scope
+   * or an escalation's text: a new round genuinely replaces the work, which is
+   * what handing it in again means. `round` is set rather than incremented here
+   * because the service computes it — the database is not the place to decide
+   * whether something counts as a new attempt.
+   */
+  saveDeliverable(deliverable: Deliverable, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE deliverables SET
+          summary = ${deliverable.summary},
+          file_key = ${deliverable.fileKey},
+          submitted_on = ${deliverable.submittedOn},
+          status = ${deliverable.status},
+          response = ${deliverable.response ?? null},
+          responded_on = ${deliverable.respondedOn},
+          responded_by = ${deliverable.respondedByUserId},
+          round = ${deliverable.round},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${deliverable.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Deliverable", id: deliverable.id },
+    );
+  }
+
+  // -- Escalations ----------------------------------------------------------
+
+  createEscalation(escalation: Escalation) {
+    this.add(sql`
+      INSERT INTO escalations (
+        id, market_id, application_id, raised_by, raised_by_role, kind,
+        summary, raised_on, status, acknowledged_on, acknowledged_by,
+        resolution, resolved_on, version
+      ) VALUES (
+        ${escalation.id}, ${escalation.marketId}, ${escalation.applicationId},
+        ${escalation.raisedByUserId}, ${escalation.raisedByRole}, ${escalation.kind},
+        ${escalation.summary}, ${escalation.raisedOn}, ${escalation.status},
+        ${escalation.acknowledgedOn}, ${escalation.acknowledgedByUserId},
+        ${escalation.resolution ?? null}, ${escalation.resolvedOn}, ${escalation.version}
+      )`);
+  }
+
+  /**
+   * Status and its consequences only.
+   *
+   * The kind and the summary are absent from the SET list for the same reason
+   * a consent's scope is: they are what somebody reported, and an escalation
+   * edited into being about something else is worse than no record at all.
+   * Somebody who reported the wrong thing withdraws it and raises the right
+   * one, which leaves both facts in the log.
+   */
+  saveEscalation(escalation: Escalation, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE escalations SET
+          status = ${escalation.status},
+          acknowledged_on = ${escalation.acknowledgedOn},
+          acknowledged_by = ${escalation.acknowledgedByUserId},
+          resolution = ${escalation.resolution ?? null},
+          resolved_on = ${escalation.resolvedOn},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${escalation.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Escalation", id: escalation.id },
     );
   }
 

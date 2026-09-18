@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
+import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
+import { handInWork } from "@/app/_actions/deliverable";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
 import { executeTransition } from "@/services/transitions";
@@ -15,6 +17,8 @@ import { logHours } from "@/services/timesheet";
 import { LIMITS, callerKey, checkRateLimit } from "@/services/rate-limit";
 import { logger } from "@/services/logging";
 import { submitApplication } from "@/services/creation";
+import { isDemonstrationVisitor } from "@/auth/visitor";
+import { recordApplied } from "@/demo/overlay";
 import { drainPending } from "@/services/outbox";
 import { updateProfile } from "@/services/profile";
 import { recordFollowUp } from "@/app/_actions/outcome";
@@ -219,6 +223,21 @@ export async function applyToPosting(postingId: unknown): Promise<ActionResult> 
     };
   }
 
+  // A visitor walking the demonstration cannot write, and should still be able
+  // to press the button — an inert prototype is a screenshot. Their action is
+  // recorded in their own cookie and the repositories render the consequence,
+  // so nothing reaches the database and every other visitor still meets the
+  // demonstration exactly as seeded. See `src/demo/overlay.ts`.
+  if (await isDemonstrationVisitor()) {
+    const posting = await repositories.postings.find(actor, input.data.postingId);
+    if (!posting || posting.status !== "published") {
+      return { ok: false, error: "That opportunity is no longer listed." };
+    }
+    await recordApplied(posting.id);
+    revalidatePath("/demo/student");
+    return { ok: true };
+  }
+
   const result = await attemptWrite(() =>
     submitApplication(actor, input.data.postingId),
   );
@@ -328,4 +347,35 @@ export async function studentRecordOwnOutcome(
     employmentCounty,
     employmentState,
   );
+}
+
+/**
+ * Report a problem with a placement.
+ *
+ * The role is hardcoded here rather than taken from the request — see
+ * `_actions/escalation.ts`. Everybody may raise one; whether this actor can
+ * see the placement they named is the repository's answer, not this file's.
+ */
+export async function studentRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("student", applicationId, kind, summary);
+}
+
+/** Take back a report they raised themselves. */
+export async function studentWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
+  return withdrawProblem("student", escalationId);
+}
+
+/**
+ * Hand in a micro-internship's work, or hand it in again.
+ *
+ * The role is pinned here rather than taken from the request — see
+ * `_actions/deliverable.ts`. The service checks again that this learner owns
+ * the placement and that it is a running micro one.
+ */
+export async function studentHandInWork(form: FormData): Promise<ActionResult> {
+  return handInWork(form);
 }

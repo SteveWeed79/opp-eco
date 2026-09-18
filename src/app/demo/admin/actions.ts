@@ -6,8 +6,17 @@ import { addMember, changeAddress } from "@/app/_actions/access";
 import { runTransition, type ActionResult } from "@/app/_actions/transition";
 import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { nudgeForFollowUp } from "@/app/_actions/outreach";
+import {
+  acknowledgeProblem,
+  raiseProblem,
+  resolveProblem,
+} from "@/app/_actions/escalation";
 import { redefineMarketRegion } from "@/app/_actions/region";
 import { overrideInput, validate } from "@/services/validation";
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { DEMO_VIEW_COOKIE } from "@/auth/session";
+import { DEMO_ROOT } from "@/routes";
 
 /**
  * Administrator override.
@@ -167,4 +176,59 @@ export async function adminRedefineRegion(
   source: unknown,
 ): Promise<ActionResult> {
   return redefineMarketRegion(marketId, state, counties, effectiveFrom, source);
+}
+
+/**
+ * Switch the console between the demonstration and real programmes.
+ *
+ * A switch, not a filter that adds: the administrator is looking at one world
+ * or the other, never both summed together. Both worlds can exist in one
+ * database — the demonstration is `markets.is_demo_data`, not a separate
+ * deployment — and a subsidy tile adding invented money to real money is the
+ * failure this exists to prevent.
+ *
+ * Stored in a cookie rather than against the account, because it is a view
+ * preference and not a permission. It decides what a console shows and never
+ * what anybody may do; the scope it feeds narrows to one world, so a forged
+ * value can only ever show the demonstration, which is public at `/demo`.
+ */
+export async function setDemoView(next: boolean): Promise<void> {
+  const store = await cookies();
+  store.set(DEMO_VIEW_COOKIE, next ? "1" : "0", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  // Every figure on the console is derived from the scope this changes, so the
+  // cached render is wrong the moment it flips.
+  revalidatePath(DEMO_ROOT, "layout");
+}
+
+/**
+ * The administrator picks up a reported problem, or closes it out.
+ *
+ * No role parameter on either: these are the administrator's alone, so there is
+ * nothing for a caller to assert. Raising one is different — every portal has
+ * its own wrapper for that, including this one, because an administrator
+ * writing down a phone call is recording it in their own voice rather than the
+ * caller's.
+ */
+export async function adminAcknowledgeProblem(escalationId: unknown): Promise<ActionResult> {
+  return acknowledgeProblem(escalationId);
+}
+
+export async function adminResolveProblem(
+  escalationId: unknown,
+  resolution: unknown,
+): Promise<ActionResult> {
+  return resolveProblem(escalationId, resolution);
+}
+
+export async function adminRaiseProblem(
+  applicationId: unknown,
+  kind: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return raiseProblem("admin", applicationId, kind, summary);
 }

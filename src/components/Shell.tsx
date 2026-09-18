@@ -73,6 +73,7 @@ export function Shell({
   theme,
   readOnly = false,
   demoSignOn = false,
+  showsDemoData = true,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
@@ -82,6 +83,16 @@ export function Shell({
   theme: ResolvedTheme;
   /** True when the deployment is backed by a database nothing may write to. */
   readOnly?: boolean;
+  /**
+   * Whether the rows on screen are the demonstration's.
+   *
+   * Resolved server-side from the data — see `showsDemonstrationData` — because
+   * the banner is a claim about rows and a client component cannot check one.
+   * Defaults to true: a component rendered without being told must say the
+   * cautious thing, since the failure it guards against is an invented figure
+   * read as real.
+   */
+  showsDemoData?: boolean;
   /**
    * Whether the role picker is this deployment's way in.
    *
@@ -129,6 +140,7 @@ export function Shell({
       theme={theme}
       readOnly={readOnly}
       demoSignOn={demoSignOn}
+      showsDemoData={showsDemoData}
     >
       {children}
     </DemoChrome>
@@ -142,6 +154,7 @@ function DemoChrome({
   theme,
   readOnly = false,
   demoSignOn = false,
+  showsDemoData = true,
 }: {
   children: React.ReactNode;
   signedInAs?: string;
@@ -153,6 +166,8 @@ function DemoChrome({
   readOnly?: boolean;
   /** True when the role picker is this deployment's way in. */
   demoSignOn?: boolean;
+  /** True when the rows on screen are the demonstration's. */
+  showsDemoData?: boolean;
 }) {
   const pathname = usePathname();
   const [signOnOpen, setSignOnOpen] = useState(false);
@@ -164,13 +179,13 @@ function DemoChrome({
    *
    * Both halves matter. `signedInRole` alone is true of somebody the role
    * picker handed an account to, which is the demonstration doing exactly what
-   * it is for — so the demonstration's own chrome has to stay up around them.
-   * `!demoSignOn` alone is true of a signed-out visitor on a real deployment,
-   * who is about to be sent to the sign-in page anyway.
+   * it is for. `!demoSignOn` alone is true of a signed-out visitor on a real
+   * deployment, who is about to be sent to the sign-in page anyway.
    *
-   * Together they mean: this deployment authenticates, and this person is
-   * authenticated. That is the only case where the notice, the switcher and
-   * the prototype footer are furniture rather than information.
+   * This governs the **switcher**, and only the switcher: it is a question
+   * about the session, not about the rows. Signed in for real you hold exactly
+   * one portal whichever world you are reading, so the control would render as
+   * your own tab beside four dead ones either way.
    */
   const inProduct = Boolean(signedInRole) && !demoSignOn;
 
@@ -214,7 +229,12 @@ function DemoChrome({
         style={themed ? (theme.variables as React.CSSProperties) : undefined}
         className="min-h-screen text-ink-950 antialiased selection:bg-brand-200 flex flex-col"
       >
-        {!inProduct && <DemoNotice readOnly={readOnly} />}
+        {/* The banner follows the rows, not the session. A real administrator
+            switched to the demonstration is looking at invented figures and
+            must be told so; a coordinator in a real market must not be told
+            her learners are fictional. `showsDemoData` answers that from the
+            market's own flag — see `showsDemonstrationData`. */}
+        {showsDemoData && <DemoNotice readOnly={readOnly} />}
         {/* A shadow rather than only a hairline: the header has to read as
             floating above the page it is pinned over, or a card scrolling
             under it looks like it is passing through it. */}
@@ -435,7 +455,7 @@ function DemoChrome({
             employers, students, placements and dollar figures are invented".
             True of the demonstration, and a strange thing to print under a
             coordinator's working session. */}
-        {!inProduct && <DemoFooter />}
+        {showsDemoData && <DemoFooter />}
 
         {signOnOpen && demoSignOn && (
           <SignOnDialog onClose={() => setSignOnOpen(false)} />

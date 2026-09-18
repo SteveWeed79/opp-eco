@@ -6,7 +6,6 @@ import {
   Wallet,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Button,
   Card,
@@ -26,14 +25,15 @@ import {
 } from "@/components/ui";
 import { TransitionActions } from "@/components/TransitionActions";
 import { AuthorizeFunding } from "./AuthorizeFunding";
-import { boardTransition, publishSlots } from "./actions";
+import { boardRaiseProblem, boardTransition, publishSlots } from "./actions";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { PublishSlots } from "./PublishSlots";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { reimbursementFor } from "@/domain/timesheet";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "@/lib/clock";
 import { availableTransitions, daysInStatus } from "@/domain/workflow";
 import { postingTotalHours } from "@/domain/types";
 import { marketFunding } from "@/lib/queries";
@@ -43,6 +43,8 @@ import { adjustAllocation } from "./actions";
 
 export default async function BoardPage() {
   const actor = await actorForPortal("board");
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(actor);
   const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   const board = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
@@ -290,7 +292,7 @@ export default async function BoardPage() {
             {unbooked.map((application) => {
               const student = studentById.get(application.studentId)!;
               const posting = postingById.get(application.postingId)!;
-              const days = daysInStatus(application, DEMO_NOW);
+              const days = daysInStatus(application, now);
               return (
                 <li
                   key={application.id}
@@ -360,7 +362,7 @@ export default async function BoardPage() {
                   (application) => {
                     const student = studentById.get(application.studentId)!;
                     const posting = postingById.get(application.postingId)!;
-                    const days = daysInStatus(application, DEMO_NOW);
+                    const days = daysInStatus(application, now);
                     // The proposed commitment: what the board would authorize
                     // if it approved the posting's full hours at market rate.
                     const hours = application.fundingAuthorizedHours ?? postingTotalHours(posting);
@@ -458,6 +460,14 @@ export default async function BoardPage() {
                                 label: t.label,
                               }))}
                             />
+                            {/* The board pays for these placements and is the
+                                party most likely to notice a claim nobody is
+                                answering. Its report is its own. */}
+                            <RaiseProblem
+                              applicationId={application.id}
+                              placementTitle={`${student.name} — ${posting.title}`}
+                              action={boardRaiseProblem}
+                            />
                           </div>
                         </Td>
                       </tr>
@@ -469,12 +479,6 @@ export default async function BoardPage() {
           </TableWrap>
         )}
         <div className="px-6 pb-5 pt-4">
-          <Assumption>
-            Clearance is per applicant per job (Q2), so your interview volume tracks
-            applications rather than students — a student pursuing three roles books three
-            interviews. Funding is then authorized per placement against a finite
-            allocation (Q20).
-          </Assumption>
         </div>
       </Card>
 
@@ -558,12 +562,6 @@ export default async function BoardPage() {
             </table>
           </TableWrap>
           <div className="px-6 py-4">
-            <Assumption>
-              Hours are approved by the supervising employer, who is the party
-              that can attest the student was there. This board sees the hours
-              and the periods; it does not see what the student worked on, which
-              it has no need of to price a claim.
-            </Assumption>
           </div>
         </Card>
       )}

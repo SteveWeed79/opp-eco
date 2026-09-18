@@ -47,6 +47,39 @@ export interface ActorContext {
    * password to owe a change on.
    */
   passwordChangeOwed?: boolean;
+  /**
+   * Which world a cross-market administrator is looking at.
+   *
+   * Only an administrator has the question to answer. Every other role is
+   * anchored to one market by their membership, so whether that market is the
+   * demonstration is already decided for them and `marketScope` never consults
+   * this.
+   *
+   * A switch rather than a filter that adds: the administrator is looking at
+   * the demonstration *or* at real programmes, never both at once. Mixing them
+   * is the bug this exists to prevent — a subsidy tile summing invented money
+   * into a figure a funder is shown.
+   *
+   * Absent means real, matching the column's own default. Forgetting it shows
+   * an empty console rather than somebody's learners.
+   */
+  viewingDemoData?: boolean;
+  /**
+   * Reads on nobody's behalf, across both worlds.
+   *
+   * The one context that must not be narrowed to the demonstration or away from
+   * it, because it is not a viewer: `systemContext` resolves an address to a
+   * sign-in method before anybody is authenticated, and dispatches queued
+   * notifications. Both have to work for a real college and a fictional one
+   * alike, and neither renders a figure to anybody — which is the whole reason
+   * `viewingDemoData` exists.
+   *
+   * Set in exactly one place, `systemContext()`, and asserted to be set nowhere
+   * else. It reopens the unrestricted cross-market read that `marketScope`
+   * otherwise no longer has, so where it is settable is the whole of its
+   * safety.
+   */
+  systemWide?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1203,6 +1236,147 @@ export interface Outcome {
 }
 
 // ---------------------------------------------------------------------------
+// Deliverables — the micro track's unit of work
+// ---------------------------------------------------------------------------
+
+/**
+ * `accepted` is terminal and is also the evaluation.
+ *
+ * A micro-internship has no timesheet and no supervisor sign-off; the employer
+ * taking the work is the whole assessment, which is why the acceptance note is
+ * an academic record the college reads when it awards credit rather than a
+ * courtesy. `revision_requested` is the only way back, and a resubmission is a
+ * new round on the same record rather than a second record.
+ */
+export type DeliverableStatus = "submitted" | "revision_requested" | "accepted";
+
+/**
+ * What a learner handed in, and what the employer said about it.
+ *
+ * **The two booleans on `Application` stay, and this does not replace them.**
+ * `deliverableSubmitted` guards the employer's *Accept deliverable* transition
+ * and `deliverableAccepted` decides whether the posting's hours count toward
+ * credit — both are read by pure domain functions that take an application and
+ * nothing else, and threading a second record through them would touch every
+ * caller and every test for no gain. So the flags remain the current state the
+ * machine reads, this record is the history behind them, and the service writes
+ * both in one transaction. Denormalised on purpose, and said out loud because
+ * the alternative is somebody discovering it as a surprise.
+ *
+ * What the flags cannot hold is why this is a record at all: the employer's
+ * words, and the count of how many times the work came back.
+ */
+export interface Deliverable {
+  id: string;
+  marketId: string;
+  applicationId: string;
+  studentId: string;
+  /** What they say they did. Required — a file alone explains nothing. */
+  summary: string;
+  /**
+   * The uploaded file, or null where the work is a link or a written brief.
+   *
+   * Optional deliberately: a micro deliverable is genuinely varied, and
+   * refusing to record one that is not a file would push the common case out
+   * of the system entirely.
+   */
+  fileKey: string | null;
+  submittedOn: string;
+  status: DeliverableStatus;
+  /**
+   * The employer's words — the revision ask, or the acceptance that *is* the
+   * evaluation. Absent only while the first round is still unanswered.
+   */
+  response?: string;
+  respondedOn: string | null;
+  respondedByUserId: string | null;
+  /** 1 for the first hand-in, 2 after one revision, and so on. */
+  round: number;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
+// Escalations — somebody says a placement has gone wrong
+// ---------------------------------------------------------------------------
+
+/**
+ * What kind of problem, declared worst first.
+ *
+ * The order is load-bearing twice over: Postgres sorts an enum in declaration
+ * order, which is what lets the administrator's queue put safety at the top
+ * without a CASE expression, and `escalation_kind` is declared in this same
+ * order for the two layers to agree.
+ *
+ * Six rather than a free-text subject line, because the administrator's first
+ * question is which of these it is and a sentence cannot be sorted on. Six
+ * rather than twenty, because a list nobody can hold in their head gets
+ * answered with `other` and stops meaning anything.
+ */
+export type EscalationKind =
+  | "safety"
+  | "pay"
+  | "hours"
+  | "supervision"
+  | "academic"
+  | "other";
+
+/**
+ * `withdrawn` is the raiser's; `resolved` is the administrator's.
+ *
+ * Kept apart because they record different things. A learner saying "it sorted
+ * itself out" and an administrator saying "I dealt with it" are not the same
+ * event, and a programme asked later how many problems it resolved must not be
+ * able to count the first as the second.
+ */
+export type EscalationStatus = "open" | "acknowledged" | "resolved" | "withdrawn";
+
+/**
+ * A problem somebody raised about a placement.
+ *
+ * **Deliberately not an application status.** A placement can be in trouble and
+ * still be running — that is the normal case, and the whole point of raising
+ * one early. Folding this into the workflow would mean every existing status
+ * needing an escalated twin, and it would make reporting a transition that
+ * somebody could refuse. It runs alongside instead: the application moves as it
+ * always did, and this says somebody is unhappy about it.
+ *
+ * **Who may read one is the design.** An escalation is visible to whoever
+ * raised it and to the administrator, and to nobody else — not to the employer
+ * it may be about, not to the college, not to the board. A learner who knows
+ * their supervisor will read it does not report an absent supervisor, and a
+ * channel that only carries what is safe to say in front of the other party is
+ * not an escalation path, it is a comment box. The administrator is the route
+ * precisely because they are outside the placement.
+ */
+export interface Escalation {
+  id: string;
+  marketId: string;
+  /** The placement this is about. */
+  applicationId: string;
+  raisedByUserId: string;
+  /**
+   * The capacity they raised it in, stored rather than resolved at read time.
+   *
+   * Same reasoning as `Outcome.source`: who was speaking is part of what was
+   * said. A supervisor moving to the college later must not silently turn a
+   * complaint an employer made into one the college made.
+   */
+  raisedByRole: ActorRole;
+  kind: EscalationKind;
+  /** What is wrong, in their words. Required — see `raiseBlockReason`. */
+  summary: string;
+  raisedOn: string;
+  status: EscalationStatus;
+  /** When an administrator picked it up, or null while nobody has. */
+  acknowledgedOn: string | null;
+  acknowledgedByUserId: string | null;
+  /** What was done about it. Required to resolve, absent until then. */
+  resolution?: string;
+  resolvedOn: string | null;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
 
@@ -1240,6 +1414,16 @@ export interface AuditEvent {
     | "funding_source"
     | "funding_commitment"
     | "consent"
+    // Somebody reported a problem with a placement. Audited so the market's log
+    // shows that a report was made and what became of it, while the report's own
+    // text stays where only the raiser and the administrator can read it — the
+    // log is wider-readable than the escalation, and copying the summary into it
+    // would undo the visibility rule the feature rests on.
+    | "escalation"
+    // A micro-internship's hand-in. Audited because acceptance is the whole
+    // assessment behind a credit award, so "who accepted this, and when" is a
+    // question a registrar can be asked years later.
+    | "deliverable"
     // An account: added to an organization, or moved to a new work address.
     // Both are identity rather than work, and both are the answer to "who was
     // this account when it signed that" — which is the question attribution

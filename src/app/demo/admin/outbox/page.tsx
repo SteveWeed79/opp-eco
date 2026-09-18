@@ -10,7 +10,6 @@ import {
   TableWrap,
   Td,
   Th,
-  Assumption,
 } from "@/components/ui";
 import { actorForPortal } from "@/auth/session";
 import { outboxFor } from "@/services/outbox";
@@ -256,13 +255,6 @@ export default async function OutboxPage() {
           </TableWrap>
         )}
         <div className="px-6 pb-5 pt-4">
-          <Assumption>
-            Held in the server process, so this resets when the process restarts
-            and is per-instance rather than shared. A real deployment is the same
-            two lists as one outbox table with a <code>delivered_at</code>{" "}
-            column, drained by a worker rather than by whoever happened to
-            trigger the last transition.
-          </Assumption>
         </div>
       </Card>
     </div>

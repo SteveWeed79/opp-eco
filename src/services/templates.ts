@@ -25,6 +25,8 @@
  */
 
 import { DEMO_ROOT, PORTAL_PATH } from "@/routes";
+import { escalationKindLabel } from "@/domain/escalation";
+import type { EscalationKind } from "@/domain/types";
 
 export interface Message {
   subject: string;
@@ -526,6 +528,126 @@ export const TEMPLATES: Record<string, Template> = {
       `Placements that stall here are the ones most likely to fall through.`,
     action: { label: "Open the portal", path: DEMO_ROOT },
   }),
+
+  // --- The operator's three -------------------------------------------------
+  /*
+   * Written for somebody reading a queue rather than somebody waiting on news.
+   * An administrator gets these because they are the party who can act on a
+   * pattern — a run of declines means the allocation is going, a run of early
+   * terminations means an employer worth a visit — so each says what the event
+   * is evidence *of* rather than repeating what the other parties were told.
+   */
+  "clearance.declined.admin": (p) => ({
+    subject: `Funding declined — ${str(p.postingTitle)}`,
+    body:
+      `The board declined funding for this placement, and it continues unsubsidized if both sides still want it. ` +
+      `On its own that is an ordinary outcome; several in a row usually means the allocation is running down, which is the thing to look at before a market quietly stops placing anybody.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+  }),
+
+  "placement.terminated.admin": (p) => ({
+    subject: `Placement ended early — ${str(p.postingTitle)}`,
+    body:
+      `This placement ended before it finished. The learner, the college and the board have been told what they each need to do about it. ` +
+      `You are told because ending early is the clearest failure this system produces, and the reason behind it is usually only findable while everyone still remembers.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+    notice: FERPA_NOTICE,
+  }),
+
+  "credit.denied.admin": (p) => ({
+    subject: `Credit denied — ${str(p.postingTitle)}`,
+    body:
+      `A learner finished a placement and their college did not award the credit. ` +
+      `This is the programme's central promise failing for one person, and it is rare enough to be worth reading rather than counting.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+    notice: FERPA_NOTICE,
+  }),
+
+  // --- The two parties who were not being told -----------------------------
+  "placement.completed.board": (p) => ({
+    subject: `Placement completed — ${str(p.postingTitle)}`,
+    body:
+      `A placement you funded has finished. The hours are approved and the commitment settles against your allocation. ` +
+      `This is the number that renews a board's participation, and until now you were told when a placement stalled and when one ended early but not when one worked.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.board },
+  }),
+
+  "application.rejected.college": (p) => ({
+    subject: `A learner was not shortlisted — ${str(p.postingTitle)}`,
+    body:
+      `${str(p.employerName)} passed on one of your learners for ${str(p.postingTitle)}. ` +
+      `No action is needed for one. The reason you are told is the pattern: a learner passed over three or four times usually has something fixable in their profile, and you are the only party who can see all of it.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.college },
+    notice: FERPA_NOTICE,
+  }),
+
+  "application.withdrawn.college": (p) => ({
+    subject: `A learner withdrew — ${str(p.postingTitle)}`,
+    body:
+      `One of your learners withdrew their own application for ${str(p.postingTitle)}. ` +
+      `Often it is a timetable clash, a transport problem, or cold feet about a placement nobody talked them through — all of which you can do something about, and none of which shows up anywhere else.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.college },
+    notice: FERPA_NOTICE,
+  }),
+
+  // --- The micro track's hand-in -------------------------------------------
+  "deliverable.submitted": (p) => {
+    const round = num(p.round) ?? 1;
+    return {
+      subject:
+        round > 1
+          ? `Revised work for ${str(p.postingTitle)}`
+          : `Work handed in for ${str(p.postingTitle)}`,
+      body:
+        (round > 1
+          ? `The revised work for ${str(p.postingTitle)} is in — round ${round}. `
+          : `The work for ${str(p.postingTitle)} has been handed in. `) +
+        `Accepting it completes the placement and is what the college reads when it awards the credit, so a sentence about what was good is worth more here than it looks. If it is not right yet, send it back with what needs changing.`,
+      action: { label: "Read the hand-in", path: PORTAL_PATH.business },
+    };
+  },
+
+  "deliverable.revision_requested": (p) => ({
+    subject: `${str(p.postingTitle)} — the employer asked for a change`,
+    body:
+      `Your work on ${str(p.postingTitle)} has come back with a note about what to change. ` +
+      `This is not a rejection and the placement is still running: read what they asked for and hand it in again when you have it.`,
+    action: { label: "Read what they asked for", path: PORTAL_PATH.student },
+  }),
+
+  // --- Somebody reported a problem ----------------------------------------
+  /**
+   * A pointer, never the report.
+   *
+   * Every other template here says what happened, because every other record
+   * is readable by the person receiving the mail from somewhere else too. An
+   * escalation is readable by exactly two parties, and **email is the least
+   * private channel this system has** — it leaves the platform when it is
+   * sent, and it can reach the employer the report is about in one forward.
+   * So this says a problem of this kind exists and where to read it, and the
+   * administrator loads one page.
+   *
+   * The kind is in the subject because it decides whether this is opened now
+   * or after lunch, and a subject line that will not say is a subject line
+   * everybody learns to ignore.
+   */
+  "escalation.raised": (p) => {
+    const kind = escalationKindLabel(str(p.kind) as EscalationKind).toLowerCase();
+    const safety = p.kind === "safety";
+    return {
+      subject: safety
+        ? "Safety problem reported on a placement"
+        : `Problem reported on a placement: ${kind}`,
+      body:
+        `The ${str(p.raisedByRole, "party")} on a placement reported a problem — ${kind}. ` +
+        (safety
+          ? "Safety reports sit at the top of your queue ahead of everything else. "
+          : "") +
+        "What they wrote is in the console rather than in this message: it is readable " +
+        "by them and by you, and email is not a channel that can keep it that way.",
+      action: { label: "Read it in the console", path: PORTAL_PATH.admin },
+    };
+  },
 };
 
 export function templateFor(kind: string): Template | null {

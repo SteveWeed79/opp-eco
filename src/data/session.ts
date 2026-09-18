@@ -116,7 +116,11 @@ export const demoAccounts: DemoAccount[] = ACCOUNTS.map((account) => {
 export function contextFor(role: ActorRole): ActorContext {
   const account = ACCOUNTS.find((a) => a.role === role) ?? ACCOUNTS[0];
   const user = seed.users.find((u) => u.id === account.membership.userId)!;
-  return { user, membership: account.membership };
+  // These are the demonstration's own accounts, so an administrator minted
+  // here is looking at the demonstration. Without this the role picker's admin
+  // console renders empty against fixtures flagged `is_demo_data`, which is the
+  // correct default for a real deployment and the wrong one for the demo.
+  return { user, membership: account.membership, viewingDemoData: true };
 }
 
 /**
@@ -140,6 +144,21 @@ const memberships: Membership[] = ACCOUNTS.map((account) => account.membership);
  */
 export function membershipForUser(userId: string): Membership | null {
   return memberships.find((m) => m.userId === userId) ?? null;
+}
+
+/**
+ * Everybody holding the administrator role.
+ *
+ * Reads the membership list rather than `ACCOUNTS`, so an administrator added
+ * at runtime is one of these — the same reason `membershipForUser` does.
+ *
+ * Administrators are the one cross-market role, so this is deliberately every
+ * administrator on the platform rather than a market's own. At one market that
+ * is the same set; at ten it is not, and the note in `services/escalation.ts`
+ * says what that costs and what would fix it.
+ */
+export function administratorUserIds(): string[] {
+  return memberships.filter((m) => m.role === "admin").map((m) => m.userId);
 }
 
 /**

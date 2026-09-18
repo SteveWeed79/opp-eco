@@ -47,6 +47,8 @@ import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   consentScope,
+  deliverableScope,
+  escalationScope,
   fundingCommitmentScope,
   marketScope,
   hostOfferScope,
@@ -65,6 +67,8 @@ import {
   toMarket,
   toMentorshipOffer,
   toConsentRecord,
+  toDeliverable,
+  toEscalation,
   toFundingCommitment,
   toFundingSource,
   toHostOffer,
@@ -210,6 +214,33 @@ export function postgresRepositories(db: SqlClient): Repositories {
     const where = joinSql([consentScope(actor), extra], " AND ");
     return sql`SELECT * FROM consents WHERE ${where}
                ORDER BY consents.granted_on DESC, consents.id COLLATE "C"`;
+  }
+
+  /**
+   * Worst kind first, then oldest first within a kind, then the id.
+   *
+   * Oldest first is the opposite of every other list here and matches
+   * `byEscalationOrder`: elsewhere the newest row is the interesting one, and
+   * here the oldest unanswered problem is the one that has waited longest.
+   * `escalation_kind` is declared worst-first in the migration, so Postgres
+   * sorts it correctly with no CASE expression.
+   */
+  /**
+   * Oldest first, matching `byDeliverableOrder` — this is a queue somebody
+   * works through, so the hand-in that has waited longest comes first. Every
+   * other list here is newest-first.
+   */
+  function deliverablesWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([deliverableScope(actor), extra], " AND ");
+    return sql`SELECT * FROM deliverables WHERE ${where}
+               ORDER BY deliverables.submitted_on, deliverables.id COLLATE "C"`;
+  }
+
+  function escalationsWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([escalationScope(actor), extra], " AND ");
+    return sql`SELECT * FROM escalations WHERE ${where}
+               ORDER BY escalations.kind, escalations.raised_on,
+                        escalations.id COLLATE "C"`;
   }
 
   function fundsWhere(actor: ActorContext, extra: Sql): Sql {
@@ -570,6 +601,35 @@ export function postgresRepositories(db: SqlClient): Repositories {
         all(consentsWhere(actor, sql`consents.student_id = ${studentId}`), toConsentRecord),
     },
 
+    deliverables: {
+      list: (actor) => all(deliverablesWhere(actor, sql`TRUE`), toDeliverable),
+      find: (actor, id) =>
+        one(deliverablesWhere(actor, sql`deliverables.id = ${id}`), toDeliverable),
+      forApplication: (actor, applicationId) =>
+        one(
+          deliverablesWhere(actor, sql`deliverables.application_id = ${applicationId}`),
+          toDeliverable,
+        ),
+      awaitingResponse: (actor) =>
+        all(deliverablesWhere(actor, sql`deliverables.status = 'submitted'`), toDeliverable),
+    },
+
+    escalations: {
+      list: (actor) => all(escalationsWhere(actor, sql`TRUE`), toEscalation),
+      find: (actor, id) =>
+        one(escalationsWhere(actor, sql`escalations.id = ${id}`), toEscalation),
+      forApplication: (actor, applicationId) =>
+        all(
+          escalationsWhere(actor, sql`escalations.application_id = ${applicationId}`),
+          toEscalation,
+        ),
+      live: (actor) =>
+        all(
+          escalationsWhere(actor, sql`escalations.status IN ('open', 'acknowledged')`),
+          toEscalation,
+        ),
+    },
+
     fundingSources: {
       list: (actor) => all(fundsWhere(actor, sql`TRUE`), toFundingSource),
       find: (actor, id) =>
@@ -647,6 +707,17 @@ export function postgresRepositories(db: SqlClient): Repositories {
       // the name behind an audit entry or a notification recipient, both of
       // which cross market boundaries by design.
       find: (id) => one(sql`SELECT * FROM users WHERE id = ${id}`, toUser),
+      // Every administrator, because the role is the one without a market to
+      // narrow by — `admin_is_cross_market` in the schema says so. Ordered by
+      // id so the two layers agree; the parity suite compares the list.
+      administrators: () =>
+        all(
+          sql`SELECT users.* FROM users
+              JOIN memberships ON memberships.user_id = users.id
+              WHERE memberships.role = 'admin'
+              ORDER BY users.id COLLATE "C"`,
+          toUser,
+        ),
     },
   };
 }

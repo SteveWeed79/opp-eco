@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  Siren,
   Building2,
   ClipboardCheck,
   Compass,
@@ -13,7 +14,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -34,6 +34,8 @@ import {
 import { HOST_OFFER_ANSWERS } from "@/domain/offer";
 import { NudgeButton } from "@/components/NudgeButton";
 import { RedefineRegion } from "@/components/RedefineRegion";
+import { ResolveProblem } from "@/components/ResolveProblem";
+import { escalationKindLabel, daysWaiting } from "@/domain/escalation";
 import { regionHistory } from "@/domain/region";
 import { repositories } from "@/data/backend";
 import { nameLookups } from "@/lib/names";
@@ -44,8 +46,15 @@ import {
   ORGANIZATION_CONFIRM,
 } from "@/components/TransitionActions";
 import { actorForPortal } from "@/auth/session";
+import { asOf } from "@/lib/clock";
 import { healthReport } from "@/services/health";
 import { mfaStatus } from "@/services/mfa";
+import { demoSignOnEnabled } from "@/auth/config";
+import {
+  adminAcknowledgeProblem,
+  adminResolveProblem,
+  setDemoView,
+} from "./actions";
 import { SecondFactor } from "./SecondFactor";
 import { Access } from "./Access";
 import {
@@ -120,6 +129,8 @@ export default async function AdminPage() {
   // Cheap enough to run on every load: four of the five checks are reading
   // configuration, and the two that touch the database are a `SELECT 1` and a
   // single-row lookup.
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(admin);
   const system = await healthReport();
   const secondFactor = await mfaStatus(admin);
   const { organizationName, marketName } = await nameLookups(admin);
@@ -140,6 +151,32 @@ export default async function AdminPage() {
   const verified = (await repositories.students.list(admin)).filter(
     (student) => student.status === "verified",
   );
+  // Problems somebody reported, which is the one queue here that is not derived
+  // from dwell time. `What's stuck` below can only see a placement that has gone
+  // quiet; this sees the ones going wrong loudly, and it is deliberately the
+  // first thing on the page.
+  const reported = await repositories.escalations.live(admin);
+  const reportedContext = new Map<
+    string,
+    { title: string; student: string } | undefined
+  >();
+  for (const escalation of reported) {
+    const application = await repositories.applications.find(
+      admin,
+      escalation.applicationId,
+    );
+    const posting = application
+      ? await repositories.postings.find(admin, application.postingId)
+      : null;
+    const learner = application
+      ? await repositories.students.find(admin, application.studentId)
+      : null;
+    reportedContext.set(escalation.id, {
+      title: posting?.title ?? "a placement",
+      student: learner?.name ?? "a learner",
+    });
+  }
+
   /** Verified students in one market — an introduction never crosses one. */
   const introducibleIn = (marketId: string) =>
     verified
@@ -271,6 +308,55 @@ export default async function AdminPage() {
         subtitle={`${liveMarkets.length} live ${liveMarkets.length === 1 ? "market" : "markets"} · ${health.length - liveMarkets.length} in the launch pipeline`}
       />
 
+      {/* Which world every figure below is counted from — under real sign-on
+          only. The role picker's session *is* the demonstration and `getActor`
+          will not let a cookie take it to a world it holds no rows in, so the
+          control would be one that does nothing; the chrome's banner already
+          says what that session is looking at.
+
+          Which world every figure below is counted from.
+          A switch rather than a checkbox that adds: the demonstration and real
+          programmes can live in one database, and a subsidy total summing
+          invented money into real money is the mistake worth a control of its
+          own. Stated even when it is off, because a reader cannot tell which
+          world they are looking at from the numbers — which is the whole
+          problem. */}
+      {!demoSignOnEnabled() && (
+      <form action={setDemoView.bind(null, !admin.viewingDemoData)}>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-panel border px-5 py-3.5 ${
+            admin.viewingDemoData
+              ? "border-micro-600/40 bg-micro-600/5"
+              : "border-line bg-surface"
+          }`}
+        >
+          <p className="text-sm text-ink-700">
+            {admin.viewingDemoData ? (
+              <>
+                <span className="font-bold text-ink-950">
+                  Counting the demonstration.
+                </span>{" "}
+                Every figure below is invented.
+              </>
+            ) : (
+              <>
+                <span className="font-bold text-ink-950">
+                  Counting real programmes.
+                </span>{" "}
+                Demonstration markets are excluded.
+              </>
+            )}
+          </p>
+          <button
+            type="submit"
+            className="shrink-0 bg-surface border border-line-strong text-ink-700 px-4 py-2 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all"
+          >
+            {admin.viewingDemoData ? "Show real programmes" : "Show the demonstration"}
+          </button>
+        </div>
+      </form>
+      )}
+
       {/* Exception-first: the numbers that mean someone has to do something */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat
@@ -298,6 +384,71 @@ export default async function AdminPage() {
           tone="brand"
         />
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Reported — the queue somebody filled deliberately                   */}
+      {/* ------------------------------------------------------------------ */}
+      {/*
+        Above `What's stuck` on purpose. That queue is derived from dwell time
+        and is the better signal most days; this one is a person going out of
+        their way to say something is wrong, and on the day it has a row in it
+        it outranks everything else on the page.
+
+        The summary is rendered here and nowhere else in the product, because
+        this console and the raiser are the only two places entitled to it.
+      */}
+      {reported.length > 0 && (
+        <Card>
+          <CardHeader
+            icon={<Siren className="w-5 h-5" />}
+            title="Reported to you"
+            subtitle="Somebody said a placement has gone wrong. Worst first, then longest waiting."
+          />
+          <div className="divide-y divide-line">
+            {reported.map((escalation) => {
+              const context = reportedContext.get(escalation.id);
+              const waiting = daysWaiting(escalation, now);
+              return (
+                <div
+                  key={escalation.id}
+                  className={`px-6 py-5 ${escalation.kind === "safety" ? "bg-crit-50/40" : ""}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge tone={escalation.kind === "safety" ? "crit" : "warn"}>
+                      {escalationKindLabel(escalation.kind)}
+                    </Badge>
+                    <span className="text-sm font-semibold text-ink-950">
+                      {context?.student} · {context?.title}
+                    </span>
+                    <span className="text-xs text-ink-500">
+                      raised by the {escalation.raisedByRole}
+                      {waiting > 0
+                        ? ` · ${waiting} day${waiting === 1 ? "" : "s"} ${
+                            escalation.status === "acknowledged" ? "since pick-up" : "unanswered"
+                          }`
+                        : " · today"}
+                    </span>
+                    {escalation.status === "acknowledged" && (
+                      <Badge tone="neutral">Being looked at</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-ink-700 whitespace-pre-line">
+                    {escalation.summary}
+                  </p>
+                  <div className="mt-3">
+                    <ResolveProblem
+                      escalationId={escalation.id}
+                      acknowledged={escalation.status === "acknowledged"}
+                      acknowledge={adminAcknowledgeProblem}
+                      resolve={adminResolveProblem}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* What's stuck — the administrator's actual job                       */}
@@ -595,10 +746,6 @@ export default async function AdminPage() {
                 </div>
               );
             })}
-            <Assumption>
-              Boards hold a fixed annual allocation that placements draw down (Q20). If
-              funding is uncapped, the budget rail on each market comes out.
-            </Assumption>
           </div>
         </Card>
 
@@ -676,12 +823,6 @@ export default async function AdminPage() {
               </div>
             )}
 
-            <Assumption>
-              One observation per learner, most recent first — a learner followed
-              up twice is one learner. The rate is over learners measured, not
-              over everyone who finished, so an unworked queue never reads as a
-              programme that fails to place people. Asked on a clock — the 2nd and 4th quarter after exit — so two cohorts are measured against the same calendar rather than against their own end dates.
-            </Assumption>
           </div>
         </Card>
 
@@ -771,12 +912,6 @@ export default async function AdminPage() {
               </div>
             )}
 
-            <Assumption>
-              A recorded &ldquo;we made no offer&rdquo; is a finding. A placement
-              nobody has answered for is a gap, and the two are never added
-              together — the rate is over what was answered, and what was not is
-              the count beside it.
-            </Assumption>
           </div>
         </Card>
       </div>
@@ -928,11 +1063,6 @@ export default async function AdminPage() {
             </ul>
           )}
           <div className="px-6 pb-5">
-            <Assumption>
-              Wage subsidy is reported separately from everything else rather
-              than summed with it. A total mixing public and philanthropic
-              dollars is the one number neither funder would accept.
-            </Assumption>
           </div>
         </Card>
       </PageSection>
@@ -974,13 +1104,6 @@ export default async function AdminPage() {
                   </p>
                 </div>
               ))}
-              <Assumption>
-                These figures are a starting position rather than a legal
-                conclusion. They are concrete anyway — a schedule expressed as
-                &ldquo;to be determined&rdquo; is the same as no schedule, and
-                the useful thing to hand a district&rsquo;s counsel is a number
-                to argue with.
-              </Assumption>
             </div>
           </Card>
 

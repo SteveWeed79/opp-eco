@@ -37,6 +37,7 @@ import type { ActorContext, ActorRole } from "@/domain/types";
 import { ConcurrencyError } from "../store";
 import { repositories as memoryRepositories } from "../memory";
 import { contextFor } from "../session";
+import { systemContext } from "@/auth/system";
 import { databaseConfig } from "./config";
 import { createPostgresClient, type PostgresClient } from "./neon";
 import { nodePostgresPool } from "./node-pg";
@@ -240,6 +241,15 @@ withDatabase("parity with the in-memory layer", () => {
       hostOffers: await repos.hostOffers.list(actor),
       regionDefinitions: await repos.regionDefinitions.list(actor),
       consents: await repos.consents.list(actor),
+      // Takes no actor: it resolves a notification recipient, which crosses
+      // markets by design. Compared per role anyway, because "unscoped" is the
+      // contract and a layer that quietly narrowed it would be a layer where
+      // somebody stops being told about a safety report.
+      administrators: await repos.users.administrators(),
+      deliverables: await repos.deliverables.list(actor),
+      awaitingResponse: await repos.deliverables.awaitingResponse(actor),
+      escalations: await repos.escalations.list(actor),
+      liveEscalations: await repos.escalations.live(actor),
       fundingSources: await repos.fundingSources.list(actor),
       fundingCommitments: await repos.fundingCommitments.list(actor),
       // Without their ids: the log's primary key is a bigserial the database
@@ -383,6 +393,18 @@ withDatabase("parity with the in-memory layer", () => {
       expect(await postgres.hostOffers.forApplication(actor, application.id)).toEqual(
         await memoryRepositories.hostOffers.forApplication(actor, application.id),
       );
+      // Ordered worst-kind-first rather than by id, and the only list here
+      // whose order is not newest-first, so a disagreement between the enum's
+      // declaration order in the migration and ESCALATION_KINDS in the domain
+      // shows up as an order mismatch rather than silently.
+      expect(
+        await postgres.escalations.forApplication(actor, application.id),
+      ).toEqual(await memoryRepositories.escalations.forApplication(actor, application.id));
+      // Returns one record or null rather than a list, so `byId` would hide a
+      // disagreement about which of the two it was. Compared directly.
+      expect(
+        await postgres.deliverables.forApplication(actor, application.id),
+      ).toEqual(await memoryRepositories.deliverables.forApplication(actor, application.id));
       expect(
         byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
       ).toEqual(
@@ -1587,7 +1609,7 @@ withDatabase("re-seeding a database somebody is already using", () => {
     expect(Number(count)).toBeGreaterThan(0);
   });
 
-  it("revokes the session it did not carry", async () => {
+  it("leaves a real administrator's session alone", async () => {
     await makeRealAdmin();
     await client.query(
       `INSERT INTO sessions (id, user_id, expires_at) VALUES ('sess-real',$1, now() + interval '1 day')`,
@@ -1596,33 +1618,36 @@ withDatabase("re-seeding a database somebody is already using", () => {
 
     await runSeed();
 
-    // The password survives so they can sign in again; the session does not,
-    // because it was issued against a database that no longer exists.
+    // This used to be revoked, because a truncate took every session in the
+    // database with it and the best that could be done was to say so. Nothing
+    // about this account changed, so there is no longer any reason to sign
+    // them out of it.
     const [{ count }] = await client.query<{ count: string }>(
-      "SELECT count(*) AS count FROM sessions",
+      "SELECT count(*) AS count FROM sessions WHERE id = 'sess-real'",
     );
-    expect(Number(count)).toBe(0);
+    expect(Number(count)).toBe(1);
   });
 
-  it("refuses, and destroys nothing, when a row is not the fixtures'", async () => {
+  it("leaves a real account alone instead of refusing to run", async () => {
     await client.query(
       `INSERT INTO users (id, name, email) VALUES ('u-realperson','A Real Learner','learner@a-real-school.edu')`,
     );
 
-    await expect(runSeed()).rejects.toThrow(/users/);
+    const outcome = await runSeed();
+    expect(outcome.untouched).toContainEqual({ table: "users", count: 1 });
 
-    // The refusal is only worth anything if the transaction took nothing with
-    // it on the way out.
     const [{ count }] = await client.query<{ count: string }>(
       "SELECT count(*) AS count FROM users WHERE id = 'u-realperson'",
     );
     expect(Number(count)).toBe(1);
   });
 
-  it("refuses over a county list recorded against a seeded market", async () => {
-    // The case this is really for: a board's WIOA counties are a phone call,
-    // recorded through the admin console against a market that came from the
-    // fixtures. Nothing else about that row looks real.
+  it("clears a county list recorded against a demonstration market", async () => {
+    // The honest consequence of scoping by market rather than by id. A WIOA
+    // county list recorded against `mkt-pittsburg` is recorded against the
+    // demonstration, and a re-seed rebuilds the demonstration. Recorded against
+    // a real market it would survive, which is the case that matters — and is
+    // covered by the real-market test below.
     await makeRealAdmin();
     await client.query(
       `INSERT INTO region_definitions
@@ -1631,17 +1656,65 @@ withDatabase("re-seeding a database somebody is already using", () => {
       [ADMIN.id],
     );
 
-    await expect(runSeed()).rejects.toThrow(/region_definitions/);
+    await runSeed();
 
     const [{ count }] = await client.query<{ count: string }>(
       "SELECT count(*) AS count FROM region_definitions WHERE id = 'rd-real'",
     );
-    expect(Number(count)).toBe(1);
+    expect(Number(count)).toBe(0);
   });
 
-  it("does not carry an account that also holds a market role", async () => {
-    // Carrying the user while the truncate took the membership anchoring their
-    // other role would leave half an account. It has to refuse instead.
+  it("does not touch a real market, or anything in it", async () => {
+    // The assertion the whole change exists for. A market that is not the
+    // demonstration is not named by any statement the seed runs — so its
+    // learners, its placements, its money and its boundary are all still there
+    // afterwards.
+    await client.query(
+      `INSERT INTO markets (id, name, city, stage, program_year, is_demo_data)
+       VALUES ('mkt-real','A Real Market','Real City','configuring','PY2026',false)`,
+    );
+    await client.query(
+      `INSERT INTO organizations
+         (id, market_id, kind, name, county, status, contact_name, contact_email,
+          applied_on, identity_mode, email_domains)
+       VALUES ('org-real','mkt-real','college','A Real College','Crawford','active',
+               'A Person','person@a-real-college.edu', now(), 'password', ARRAY['a-real-college.edu'])`,
+    );
+    await client.query(
+      `INSERT INTO region_definitions
+         (id, market_id, state, counties, effective_from, recorded_by, recorded_on)
+       VALUES ('rd-realmarket','mkt-real','KS',ARRAY['Crawford'],'2026-01-01',
+               (SELECT id FROM users LIMIT 1),'2026-01-01')`,
+    );
+
+    await runSeed();
+
+    const [row] = await client.query<{
+      markets: string;
+      orgs: string;
+      regions: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM markets WHERE id = 'mkt-real')                AS markets,
+         (SELECT count(*) FROM organizations WHERE id = 'org-real')          AS orgs,
+         (SELECT count(*) FROM region_definitions WHERE id = 'rd-realmarket') AS regions`,
+    );
+    expect(Number(row.markets)).toBe(1);
+    expect(Number(row.orgs)).toBe(1);
+    expect(Number(row.regions)).toBe(1);
+
+    // Cleaned up so the shared fixture state is what the next file expects.
+    await client.query("DELETE FROM region_definitions WHERE id = 'rd-realmarket'");
+    await client.query("DELETE FROM organizations WHERE id = 'org-real'");
+    await client.query("DELETE FROM markets WHERE id = 'mkt-real'");
+  });
+
+  it("takes the demonstration role off an account that also holds one", async () => {
+    // This used to have to refuse: carrying the user over a truncate while the
+    // truncate took the membership anchoring their other role left half an
+    // account. Nothing is carried now — the membership sat in a demonstration
+    // market, so it goes with that market's rows, and the account itself is
+    // untouched.
     await makeRealAdmin();
     const [org] = await client.query<{ id: string }>(
       "SELECT id FROM organizations WHERE kind = 'college' LIMIT 1",
@@ -1652,40 +1725,74 @@ withDatabase("re-seeding a database somebody is already using", () => {
       [ADMIN.id, org.id],
     );
 
-    await expect(runSeed()).rejects.toThrow(/users/);
+    await runSeed();
+
+    const [row] = await client.query<{ account: string; college: string; admin: string }>(
+      `SELECT
+         (SELECT count(*) FROM users WHERE id = $1)                                   AS account,
+         (SELECT count(*) FROM memberships WHERE id = 'mem-alsocollege')              AS college,
+         (SELECT count(*) FROM memberships WHERE user_id = $1 AND role = 'admin')     AS admin`,
+      [ADMIN.id],
+    );
+    expect(Number(row.account)).toBe(1);
+    expect(Number(row.college)).toBe(0);
+    expect(Number(row.admin)).toBe(1);
   });
 
-  it("proceeds under --force, and still keeps the administrator", async () => {
+  it("keeps a real learner's account and the administrator's credentials", async () => {
     await makeRealAdmin();
     await client.query(
       `INSERT INTO users (id, name, email) VALUES ('u-realperson','A Real Learner','learner@a-real-school.edu')`,
     );
 
-    const outcome = await runSeed({ force: true });
-
-    expect(outcome.foreign).toContainEqual({ table: "users", count: 1 });
+    const outcome = await runSeed();
     expect(outcome.preserved).toHaveLength(1);
 
-    const [gone] = await client.query<{ count: string }>(
-      "SELECT count(*) AS count FROM users WHERE id = 'u-realperson'",
-    );
-    expect(Number(gone.count)).toBe(0);
-    const [kept] = await client.query<{ count: string }>(
-      "SELECT count(*) AS count FROM user_passwords WHERE user_id = $1",
+    const [kept] = await client.query<{ learner: string; password: string }>(
+      `SELECT
+         (SELECT count(*) FROM users WHERE id = 'u-realperson')       AS learner,
+         (SELECT count(*) FROM user_passwords WHERE user_id = $1)     AS password`,
       [ADMIN.id],
     );
-    expect(Number(kept.count)).toBe(1);
+    expect(Number(kept.learner)).toBe(1);
+    expect(Number(kept.password)).toBe(1);
+
+    await client.query("DELETE FROM users WHERE id = 'u-realperson'");
   });
 
-  it("drops the administrator under --replace-admins", async () => {
+  it("takes away everything an administrator could sign in with, under --replace-admins", async () => {
     await makeRealAdmin();
 
     const outcome = await runSeed({ replaceAdmins: true });
 
     expect(outcome.preserved).toEqual([]);
     expect(outcome.replaced).toHaveLength(1);
+
+    // The `users` row survives, and cannot do otherwise: an audit event naming
+    // the account as the actor restricts its deletion, and the audit trigger
+    // refuses to let that event go. So what is removed is everything the
+    // account could act with — its membership, its password, its authenticator.
+    const [row] = await client.query<{
+      account: string;
+      membership: string;
+      password: string;
+      totp: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM users WHERE id = $1)              AS account,
+         (SELECT count(*) FROM memberships WHERE user_id = $1)   AS membership,
+         (SELECT count(*) FROM user_passwords WHERE user_id = $1) AS password,
+         (SELECT count(*) FROM user_totp WHERE user_id = $1)      AS totp`,
+      [ADMIN.id],
+    );
+    expect(Number(row.account)).toBe(1);
+    expect(Number(row.membership)).toBe(0);
+    expect(Number(row.password)).toBe(0);
+    expect(Number(row.totp)).toBe(0);
+
+    // And it is no longer an administrator as far as the seed is concerned.
     const [{ count }] = await client.query<{ count: string }>(
-      "SELECT count(*) AS count FROM users WHERE id = $1",
+      "SELECT count(*) AS count FROM memberships WHERE role = 'admin' AND user_id = $1",
       [ADMIN.id],
     );
     expect(Number(count)).toBe(0);
@@ -1693,7 +1800,93 @@ withDatabase("re-seeding a database somebody is already using", () => {
 
   it("is a no-op on a database holding only fixtures", async () => {
     const outcome = await runSeed();
-    expect(outcome.foreign).toEqual([]);
+    expect(outcome.untouched).toEqual([]);
     expect(outcome.preserved).toEqual([]);
+  });
+});
+
+/**
+ * The administrator sees one world at a time.
+ *
+ * `marketScope` returned `TRUE` for an administrator, which is right about
+ * tenancy and wrong about truth: the console sums every market it can see, so
+ * a deployment holding the demonstration beside a real programme reported
+ * invented placements and invented money inside figures somebody takes to a
+ * funder.
+ *
+ * Asserted here rather than only against generated text, because this is the
+ * assertion a recording client cannot make: whether Postgres agrees that the
+ * subquery excludes what it claims to.
+ */
+withDatabase("an administrator's world", () => {
+  const admin = contextFor("admin");
+  const viewingReal = { ...admin, viewingDemoData: false };
+
+  beforeEach(async () => {
+    await reseed();
+  });
+
+  it("sees the demonstration's markets when asking for the demonstration", async () => {
+    const markets = await postgresRepositories(client).markets.list(admin);
+    expect(markets.length).toBeGreaterThan(0);
+    expect(markets.every((m) => m.isDemoData)).toBe(true);
+  });
+
+  it("sees nothing when asking for real programmes, because there are none", async () => {
+    // Every seeded market is the demonstration, so this is the whole fixture
+    // set correctly withheld. The number that matters is zero.
+    const repositories = postgresRepositories(client);
+    expect(await repositories.markets.list(viewingReal)).toEqual([]);
+    expect(await repositories.organizations.list(viewingReal)).toEqual([]);
+    expect(await repositories.students.list(viewingReal)).toEqual([]);
+    expect(await repositories.applications.list(viewingReal)).toEqual([]);
+    expect(await repositories.fundingSources.list(viewingReal)).toEqual([]);
+  });
+
+  it("agrees with the in-memory layer about both worlds", async () => {
+    // Parity is the assertion everywhere else in this file, and it has to hold
+    // for the new predicate too — the two layers disagreeing about which rows
+    // are fictional is exactly how an invented figure reaches a real report.
+    const pg = postgresRepositories(client);
+    for (const actor of [admin, viewingReal]) {
+      const fromSql = await pg.markets.list(actor);
+      const fromMemory = await memoryRepositories.markets.list(actor);
+      expect(fromSql.map((m) => m.id).sort()).toEqual(
+        fromMemory.map((m) => m.id).sort(),
+      );
+    }
+  });
+
+  it("shows a real market to the system context and to nobody else by default", async () => {
+    // The regression this guards: `systemContext()` is `contextFor("admin")`,
+    // which views the demonstration — so narrowing the administrator quietly
+    // narrowed every pre-auth lookup too, and a real workforce board's address
+    // stopped resolving to the one-time code its officers sign in with.
+    await client.query(
+      "UPDATE markets SET is_demo_data = false WHERE id = 'mkt-emporia'",
+    );
+    const pg = postgresRepositories(client);
+
+    const bySystem = await pg.markets.list(systemContext());
+    expect(bySystem.map((m) => m.id)).toContain("mkt-emporia");
+    // And it still sees the demonstration's, which is the point of "both".
+    expect(bySystem.map((m) => m.id)).toContain("mkt-pittsburg");
+
+    const byDemoAdmin = await pg.markets.list(admin);
+    expect(byDemoAdmin.map((m) => m.id)).not.toContain("mkt-emporia");
+
+    const byRealAdmin = await pg.markets.list(viewingReal);
+    expect(byRealAdmin.map((m) => m.id)).toEqual(["mkt-emporia"]);
+  });
+
+  it("does not consult the flag for a role anchored to one market", async () => {
+    // Every other role is pinned by their membership, so the question is
+    // already answered for them. Flipping the field must change nothing.
+    const college = contextFor("college");
+    const pg = postgresRepositories(client);
+    const asIs = await pg.students.list(college);
+    const flipped = await pg.students.list({ ...college, viewingDemoData: false });
+    expect(flipped.map((s) => s.id)).toEqual(asIs.map((s) => s.id));
+    expect(asIs.length).toBeGreaterThan(0);
   });
 });

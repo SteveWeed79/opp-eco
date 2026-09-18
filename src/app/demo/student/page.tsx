@@ -10,7 +10,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -30,7 +29,7 @@ import { nameLookups } from "@/lib/names";
 import { actorForPortal } from "@/auth/session";
 import { unreviewedWeeksByApplication } from "@/services/timesheet";
 import { openWeeksFor } from "@/domain/timesheet";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "@/lib/clock";
 import { LogHours } from "./LogHours";
 import { followUpQueue, marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
@@ -42,16 +41,23 @@ import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
 import {
   saveProfile,
+  studentHandInWork,
+  studentRaiseProblem,
   studentRecordOwnOutcome,
   studentTransition,
 } from "./actions";
 import { RecordOutcome } from "@/components/RecordOutcome";
+import { RaiseProblem } from "@/components/RaiseProblem";
+import { HandInWork } from "@/components/HandInWork";
+import { downloadUrlOrNull, uploadRefusalReason } from "@/services/uploads";
 import { OUTCOME_KINDS } from "@/domain/outcome";
 import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
 
 export default async function StudentPage() {
   const actor = await actorForPortal("student");
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(actor);
   const { organizationName } = await nameLookups(actor);
   const unreviewedWeeks = await unreviewedWeeksByApplication(actor);
   // Through the repository, not the fixtures.
@@ -73,6 +79,15 @@ export default async function StudentPage() {
     await repositories.postings.published(actor),
   ]);
   const applications = ownApplications.filter((a) => !isTerminal(a.status));
+  // The micro track's hand-ins, keyed by placement. At most one per
+  // application — the unique index says so — and a resubmission is a new round
+  // on the same row rather than a second one.
+  const handIns = new Map(
+    (await repositories.deliverables.list(actor)).map((d) => [d.applicationId, d]),
+  );
+  // Asked once, on the server, so the dialog can say why rather than letting a
+  // learner pick a file and discover it afterwards.
+  const uploadsRefused = uploadRefusalReason();
   // The vocabulary this market's employers already use, offered when a learner
   // edits their own tags. Free text sprawls into "JS", "Javascript" and
   // "JavaScript", and match scoring compares them literally — so the fix is the
@@ -83,7 +98,7 @@ export default async function StudentPage() {
   const region = currentRegion(
     await repositories.regionDefinitions.forMarket(actor, student.marketId),
     student.marketId,
-    DEMO_NOW,
+    now,
   );
   const [progress, funding, followUps] = await Promise.all([
     studentCreditProgress(actor, STUDENT_ID, college?.hoursPerCredit ?? 45),
@@ -116,7 +131,7 @@ export default async function StudentPage() {
       ...row,
       openWeeks: openWeeksFor(
         new Date(row.application.statusSince),
-        DEMO_NOW,
+        now,
         row.entries,
       ),
     }));
@@ -261,12 +276,6 @@ export default async function StudentPage() {
             ))}
           </ul>
           <div className="px-6 pb-5">
-            <Assumption>
-              Your college and the workforce board see the answer. Neither sees
-              the detail box, and &ldquo;still looking&rdquo; is counted apart
-              from the people nobody asked — so saying so never makes anything
-              look worse than staying quiet.
-            </Assumption>
           </div>
         </Card>
       )}
@@ -284,7 +293,7 @@ export default async function StudentPage() {
           <ul className="row-list divide-y divide-line">
             {needsAction.map((application) => {
               const posting = postingById.get(application.postingId)!;
-              const days = daysInStatus(application, DEMO_NOW);
+              const days = daysInStatus(application, now);
               const options = optionsFor(application);
               // Show the booking panel only when booking is a move the state
               // machine will actually accept — a student the board found
@@ -400,6 +409,74 @@ export default async function StudentPage() {
                             />
                           </div>
                         )}
+                      {/*
+                        The micro track's central act. Shown only while the
+                        placement is running and only where the work is not
+                        already accepted — after that the employer has it, and
+                        the learner's next move is the credit rather than the
+                        work.
+                      */}
+                      {application.track === "micro" &&
+                        application.status === "placement_active" &&
+                        handIns.get(application.id)?.status !== "submitted" && (
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            <HandInWork
+                              applicationId={application.id}
+                              projectTitle={posting.title}
+                              revisionAsked={
+                                handIns.get(application.id)?.status === "revision_requested"
+                                  ? handIns.get(application.id)?.response
+                                  : undefined
+                              }
+                              round={handIns.get(application.id)?.round}
+                              uploadsRefused={uploadsRefused}
+                              action={studentHandInWork}
+                            />
+                            {handIns.get(application.id)?.status === "revision_requested" && (
+                              <Badge tone="warn">They asked for a change</Badge>
+                            )}
+                          </div>
+                        )}
+                      {application.track === "micro" &&
+                        handIns.get(application.id)?.status === "submitted" && (
+                          <p className="mt-3 text-xs text-ink-500">
+                            Handed in — waiting on {organizationName(posting.businessId)}.
+                            {handIns.get(application.id)?.fileKey &&
+                              (downloadUrlOrNull(handIns.get(application.id)!.fileKey!) ? (
+                                <>
+                                  {" "}
+                                  <a
+                                    className="underline hover:text-brand-700"
+                                    href={
+                                      downloadUrlOrNull(
+                                        handIns.get(application.id)!.fileKey!,
+                                      )!
+                                    }
+                                  >
+                                    Your attachment
+                                  </a>
+                                </>
+                              ) : (
+                                " Your file was received; this deployment cannot issue download links."
+                              ))}
+                          </p>
+                        )}
+                      {/*
+                        Quiet, and last. Nobody should be nudged into reporting
+                        a problem — a prominent control on a healthy placement
+                        invites the noise that makes the administrator's queue
+                        worthless — but a learner who needs it must not have to
+                        go looking, and this is the only page they have.
+                      */}
+                      {!isTerminal(application.status) && (
+                        <div className="mt-3">
+                          <RaiseProblem
+                            applicationId={application.id}
+                            placementTitle={posting.title}
+                            action={studentRaiseProblem}
+                          />
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -481,10 +558,6 @@ export default async function StudentPage() {
                   ? `${progress.microCredits} credit ready to claim`
                   : `${progress.hoursToNextCredit} more hours to your next credit`}
               </p>
-              <Assumption>
-                A single micro-internship runs 5–40 hours, short of the ~45 needed for one
-                credit, so they stack (Q21). Change that and this panel changes with it.
-              </Assumption>
             </div>
           </Card>
 

@@ -17,7 +17,8 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { ReadOnlyError } from "@/data/backend";
+import { ReadOnlyError, VisitorError } from "@/data/backend";
+import { isDemonstrationVisitor } from "@/auth/visitor";
 import type { ActorRole, Application } from "@/domain/types";
 import { actorForPortal } from "@/auth/session";
 import { executeTransition, type TransitionCommand } from "@/services/transitions";
@@ -47,6 +48,17 @@ export interface ActionResult {
 export async function attemptWrite<T extends { ok: boolean }>(
   run: () => Promise<T>,
 ): Promise<T | { ok: false; error: string; code: "forbidden" }> {
+  // Checked here as well as in the store, and this is the one that fires. A
+  // Server Action is its own request, so anything the page render worked out
+  // about the caller is gone by the time the action runs — the store's guard
+  // was derived from a request-scoped flag and silently did not fire in an
+  // action, which a browser driving the Apply button proved by writing a real
+  // row. Forty-three call sites across sixteen files come through here, which
+  // is why it is here rather than in each of them.
+  if (await isDemonstrationVisitor()) {
+    logger.info("write.refused", { reason: "visitor" });
+    return { ok: false, error: new VisitorError().message, code: "forbidden" };
+  }
   try {
     return await run();
   } catch (error) {

@@ -45,7 +45,6 @@ export {
   Th,
   Td,
   Empty,
-  Assumption,
   Money,
   ProgressBar,
 } from "./primitives";
