@@ -327,15 +327,20 @@ export async function seedInto(tx) {
    */
   for (const market of seed.markets) {
     await insert(
+      // `is_demo_data` is written here and nowhere else in the system. The
+      // seed is what makes these markets fictional, so the seed is what says
+      // so — and because the application has no write path to `markets`, this
+      // statement is the only thing in the product that can set it.
       `INSERT INTO markets (id, name, city, stage, board_id,
-         launched_on, program_year)
-       VALUES ($1,$2,$3,'configuring',NULL,$4,$5)`,
+         launched_on, program_year, is_demo_data)
+       VALUES ($1,$2,$3,'configuring',NULL,$4,$5,$6)`,
       [
         market.id,
         market.name,
         market.city,
         market.launchedOn,
         market.programYear,
+        market.isDemoData,
       ],
     );
   }

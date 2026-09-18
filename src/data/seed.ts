@@ -62,7 +62,8 @@ function daysAgo(n: number): string {
 // Markets
 // ---------------------------------------------------------------------------
 
-export const markets: Market[] = [
+export const markets: Market[] = (
+  [
   {
     id: "mkt-pittsburg",
     name: "Southeast Kansas",
@@ -121,7 +122,17 @@ export const markets: Market[] = [
     launchedOn: null,
     programYear: "PY2026",
   },
-];
+  ] satisfies Omit<Market, "isDemoData">[]
+  /**
+   * Every fixture market is the demonstration, set here rather than repeated
+   * on each literal.
+   *
+   * One place, so a fifth market added below cannot arrive real by accident —
+   * which is the one mistake in this file that would matter, because a market
+   * that forgets the flag is a market whose invented learners and invented
+   * dollar figures are counted as somebody's actual programme.
+   */
+).map((market) => ({ ...market, isDemoData: true }));
 
 // ---------------------------------------------------------------------------
 // Region definitions — the boundary each market's figures are measured against
