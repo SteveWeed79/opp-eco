@@ -529,6 +529,67 @@ export const TEMPLATES: Record<string, Template> = {
     action: { label: "Open the portal", path: DEMO_ROOT },
   }),
 
+  // --- The operator's three -------------------------------------------------
+  /*
+   * Written for somebody reading a queue rather than somebody waiting on news.
+   * An administrator gets these because they are the party who can act on a
+   * pattern — a run of declines means the allocation is going, a run of early
+   * terminations means an employer worth a visit — so each says what the event
+   * is evidence *of* rather than repeating what the other parties were told.
+   */
+  "clearance.declined.admin": (p) => ({
+    subject: `Funding declined — ${str(p.postingTitle)}`,
+    body:
+      `The board declined funding for this placement, and it continues unsubsidized if both sides still want it. ` +
+      `On its own that is an ordinary outcome; several in a row usually means the allocation is running down, which is the thing to look at before a market quietly stops placing anybody.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+  }),
+
+  "placement.terminated.admin": (p) => ({
+    subject: `Placement ended early — ${str(p.postingTitle)}`,
+    body:
+      `This placement ended before it finished. The learner, the college and the board have been told what they each need to do about it. ` +
+      `You are told because ending early is the clearest failure this system produces, and the reason behind it is usually only findable while everyone still remembers.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+    notice: FERPA_NOTICE,
+  }),
+
+  "credit.denied.admin": (p) => ({
+    subject: `Credit denied — ${str(p.postingTitle)}`,
+    body:
+      `A learner finished a placement and their college did not award the credit. ` +
+      `This is the programme's central promise failing for one person, and it is rare enough to be worth reading rather than counting.`,
+    action: { label: "Open the console", path: PORTAL_PATH.admin },
+    notice: FERPA_NOTICE,
+  }),
+
+  // --- The two parties who were not being told -----------------------------
+  "placement.completed.board": (p) => ({
+    subject: `Placement completed — ${str(p.postingTitle)}`,
+    body:
+      `A placement you funded has finished. The hours are approved and the commitment settles against your allocation. ` +
+      `This is the number that renews a board's participation, and until now you were told when a placement stalled and when one ended early but not when one worked.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.board },
+  }),
+
+  "application.rejected.college": (p) => ({
+    subject: `A learner was not shortlisted — ${str(p.postingTitle)}`,
+    body:
+      `${str(p.employerName)} passed on one of your learners for ${str(p.postingTitle)}. ` +
+      `No action is needed for one. The reason you are told is the pattern: a learner passed over three or four times usually has something fixable in their profile, and you are the only party who can see all of it.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.college },
+    notice: FERPA_NOTICE,
+  }),
+
+  "application.withdrawn.college": (p) => ({
+    subject: `A learner withdrew — ${str(p.postingTitle)}`,
+    body:
+      `One of your learners withdrew their own application for ${str(p.postingTitle)}. ` +
+      `Often it is a timetable clash, a transport problem, or cold feet about a placement nobody talked them through — all of which you can do something about, and none of which shows up anywhere else.`,
+    action: { label: "Open your dashboard", path: PORTAL_PATH.college },
+    notice: FERPA_NOTICE,
+  }),
+
   // --- Somebody reported a problem ----------------------------------------
   /**
    * A pointer, never the report.

@@ -63,6 +63,22 @@ One caveat worth knowing before you run them: the demo store lives in the
 server process, so `e2e/booking.spec.ts` permanently books the seed's only
 bookable application. Restart the server to reseed.
 
+A second, if you have been running real sign-on: the suite starts `next start`,
+which loads `.env.local`, and `AUTH_ECHO_CODES=true` is **refused in a
+production build** — so a `.env.local` left in code mode makes every page throw
+`AuthConfigError` at boot and Playwright sits for two minutes before reporting
+a web-server timeout rather than the reason. CI never sees this, having no
+`.env.local`. Override for the run:
+
+```bash
+AUTH_MODE=demo DATABASE_URL= DATABASE_READ_ONLY= AUTH_ECHO_CODES= npm run test:e2e
+```
+
+Watch for the inverse, too: `reuseExistingServer` is on outside CI, so a dev
+server left on port 3000 is silently reused and the suite runs against `next
+dev` while appearing to test the production build. The tell is the wall clock —
+the suite takes about half as long against `next start`.
+
 ### Trying real sign-on
 
 `npm run dev` gives you the role picker, which makes you anybody. To walk the
