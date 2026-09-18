@@ -109,24 +109,32 @@ Run with no arguments, `npm run db:admin` reports who the administrators are
 and whether each of them can actually get in — an account with no password and
 no authenticator is a row, not a way in.
 
-Re-running `npm run db:seed` later does **not** cost you that account. The seed
-truncates, so it used to: an administrator cannot be created through the product
-and a refreshed set of fixtures would take the only way back into the deployment
-with it. It now carries administrators through the truncate with their passwords
-and authenticators — their sessions are dropped, so you sign in again — and
-**refuses outright** when it finds anything else it did not write, naming the
-tables rather than destroying them:
+Re-running `npm run db:seed` later does **not** cost you that account, and does
+not cost you anything else real either. The seed used to truncate, so it took
+everything; it now clears only the markets `is_demo_data` flags and rebuilds
+those. An administrator, a real market, its learners and its money are not
+"preserved" from it — no statement it runs names them. It reports both halves:
 
 ```
-Refused: the database holds rows these fixtures did not create:
+Cleared from the demonstration's markets:
+     27  applications
+     12  postings
 
+Left alone — not the demonstration's:
       1  users
-      1  region_definitions
 ```
 
-`--force` proceeds anyway and reports what it destroyed; `--replace-admins`
-drops the administrators too. Neither is needed for the ordinary case of
-refreshing the demo data on a database that holds only demo data.
+`--replace-admins` is the one flag, and it takes away everything an
+administrator could sign in with. There is no `--force` any more, because there
+is nothing left to force past.
+
+**Two things the seed deliberately cannot do**, both following from the same
+constraint. `audit_events` is append-only, enforced by a trigger — so a
+demonstration's audit history accumulates rather than resetting, and the seed
+declines to write a second copy of the fixture history on top of it. And
+because audit rows reference `markets` and `users` with `ON DELETE RESTRICT`,
+neither can be deleted once the application has written one: the fixtures
+upsert them in place instead.
 
 The password it prints is spent the first time it is used. Signing in with it
 produces a real session that may do exactly one thing: replace it. Typing a
@@ -1335,14 +1343,12 @@ doing after any change to the data layer:
 export DATABASE_URL=postgresql://you@localhost:5432/oppeco
 export DATABASE_READ_ONLY=false
 export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
-npm run db:seed -- --force && npm run build && npm run test:e2e
+npm run db:seed && npm run build && npm run test:e2e
 ```
 
-`--force` because the previous run left rows behind: the suite drives the real
-application, so it creates postings and applications the fixtures never wrote,
-and a second `db:seed` would otherwise refuse to destroy them. On this database
-that refusal is noise — the variable above has already declared it disposable —
-and everywhere else it is the point.
+The previous run's rows go without asking: the suite drives the real application
+against the demonstration's markets, so everything it creates is inside them and
+the seed clears them along with the fixtures.
 
 Every flow the demo has passes on either backend, and the sign-on suites below
 are run against both as well — the in-memory store and Postgres each hold
