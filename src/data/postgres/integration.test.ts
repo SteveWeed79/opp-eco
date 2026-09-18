@@ -246,6 +246,8 @@ withDatabase("parity with the in-memory layer", () => {
       // contract and a layer that quietly narrowed it would be a layer where
       // somebody stops being told about a safety report.
       administrators: await repos.users.administrators(),
+      deliverables: await repos.deliverables.list(actor),
+      awaitingResponse: await repos.deliverables.awaitingResponse(actor),
       escalations: await repos.escalations.list(actor),
       liveEscalations: await repos.escalations.live(actor),
       fundingSources: await repos.fundingSources.list(actor),
@@ -398,6 +400,11 @@ withDatabase("parity with the in-memory layer", () => {
       expect(
         await postgres.escalations.forApplication(actor, application.id),
       ).toEqual(await memoryRepositories.escalations.forApplication(actor, application.id));
+      // Returns one record or null rather than a list, so `byId` would hide a
+      // disagreement about which of the two it was. Compared directly.
+      expect(
+        await postgres.deliverables.forApplication(actor, application.id),
+      ).toEqual(await memoryRepositories.deliverables.forApplication(actor, application.id));
       expect(
         byId(await postgres.fundingCommitments.forApplication(actor, application.id)),
       ).toEqual(

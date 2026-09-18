@@ -1236,6 +1236,66 @@ export interface Outcome {
 }
 
 // ---------------------------------------------------------------------------
+// Deliverables — the micro track's unit of work
+// ---------------------------------------------------------------------------
+
+/**
+ * `accepted` is terminal and is also the evaluation.
+ *
+ * A micro-internship has no timesheet and no supervisor sign-off; the employer
+ * taking the work is the whole assessment, which is why the acceptance note is
+ * an academic record the college reads when it awards credit rather than a
+ * courtesy. `revision_requested` is the only way back, and a resubmission is a
+ * new round on the same record rather than a second record.
+ */
+export type DeliverableStatus = "submitted" | "revision_requested" | "accepted";
+
+/**
+ * What a learner handed in, and what the employer said about it.
+ *
+ * **The two booleans on `Application` stay, and this does not replace them.**
+ * `deliverableSubmitted` guards the employer's *Accept deliverable* transition
+ * and `deliverableAccepted` decides whether the posting's hours count toward
+ * credit — both are read by pure domain functions that take an application and
+ * nothing else, and threading a second record through them would touch every
+ * caller and every test for no gain. So the flags remain the current state the
+ * machine reads, this record is the history behind them, and the service writes
+ * both in one transaction. Denormalised on purpose, and said out loud because
+ * the alternative is somebody discovering it as a surprise.
+ *
+ * What the flags cannot hold is why this is a record at all: the employer's
+ * words, and the count of how many times the work came back.
+ */
+export interface Deliverable {
+  id: string;
+  marketId: string;
+  applicationId: string;
+  studentId: string;
+  /** What they say they did. Required — a file alone explains nothing. */
+  summary: string;
+  /**
+   * The uploaded file, or null where the work is a link or a written brief.
+   *
+   * Optional deliberately: a micro deliverable is genuinely varied, and
+   * refusing to record one that is not a file would push the common case out
+   * of the system entirely.
+   */
+  fileKey: string | null;
+  submittedOn: string;
+  status: DeliverableStatus;
+  /**
+   * The employer's words — the revision ask, or the acceptance that *is* the
+   * evaluation. Absent only while the first round is still unanswered.
+   */
+  response?: string;
+  respondedOn: string | null;
+  respondedByUserId: string | null;
+  /** 1 for the first hand-in, 2 after one revision, and so on. */
+  round: number;
+  version: number;
+}
+
+// ---------------------------------------------------------------------------
 // Escalations — somebody says a placement has gone wrong
 // ---------------------------------------------------------------------------
 
@@ -1360,6 +1420,10 @@ export interface AuditEvent {
     // log is wider-readable than the escalation, and copying the summary into it
     // would undo the visibility rule the feature rests on.
     | "escalation"
+    // A micro-internship's hand-in. Audited because acceptance is the whole
+    // assessment behind a credit award, so "who accepted this, and when" is a
+    // question a registrar can be asked years later.
+    | "deliverable"
     // An account: added to an organization, or moved to a new work address.
     // Both are identity rather than work, and both are the answer to "who was
     // this account when it signed that" — which is the question attribution

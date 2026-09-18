@@ -99,6 +99,7 @@ export const TABLES = [
   "region_definitions",
   "host_offers",
   "escalations",
+  "deliverables",
   "outcomes",
   "consents",
   "funding_commitments",
@@ -287,8 +288,9 @@ export const DEMO_DELETES = [
   byMarket("notification_outbox"),
   byMarket("region_definitions"),
   byMarket("host_offers"),
-  // Before `applications`, which they RESTRICT from.
+  // Before `applications`, which they both RESTRICT from.
   byMarket("escalations"),
+  byMarket("deliverables"),
   byMarket("outcomes"),
   byMarket("consents"),
   byMarket("funding_commitments"),
@@ -893,6 +895,32 @@ export async function seedInto(tx, { auditEvents = true } = {}) {
     );
   }
 
+  // A hand-in points at a market, an application and the learner, and once
+  // answered at the employer who answered it. All are already in.
+  for (const deliverable of seed.deliverables) {
+    await insert(
+      `INSERT INTO deliverables (id, market_id, application_id, student_id,
+         summary, file_key, submitted_on, status, response, responded_on,
+         responded_by, round, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        deliverable.id,
+        deliverable.marketId,
+        deliverable.applicationId,
+        deliverable.studentId,
+        deliverable.summary,
+        deliverable.fileKey,
+        deliverable.submittedOn,
+        deliverable.status,
+        deliverable.response ?? null,
+        deliverable.respondedOn,
+        deliverable.respondedByUserId,
+        deliverable.round,
+        deliverable.version,
+      ],
+    );
+  }
+
   // A report points at a market, an application and whoever raised it — and,
   // once somebody has picked it up, at the administrator who did. All are in.
   for (const escalation of seed.escalations) {
@@ -1004,6 +1032,7 @@ try {
        (SELECT count(*) FROM outcomes)           AS outcomes,
        (SELECT count(*) FROM host_offers)        AS host_offers,
        (SELECT count(*) FROM escalations)        AS escalations,
+       (SELECT count(*) FROM deliverables)       AS deliverables,
        (SELECT count(*) FROM region_definitions) AS region_definitions,
        (SELECT count(*) FROM consents)           AS consents,
        (SELECT count(*) FROM funding_sources)    AS funding_sources,

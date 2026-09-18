@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/transition";
 import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
+import { handInWork } from "@/app/_actions/deliverable";
 import { actorForPortal } from "@/auth/session";
 import { repositories } from "@/data/backend";
 import { executeTransition } from "@/services/transitions";
@@ -366,4 +367,18 @@ export async function studentRaiseProblem(
 /** Take back a report they raised themselves. */
 export async function studentWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
   return withdrawProblem("student", escalationId);
+}
+
+/**
+ * Hand in a micro-internship's work, or hand it in again.
+ *
+ * The role is pinned here rather than taken from the request — see
+ * `_actions/deliverable.ts`. The service checks again that this learner owns
+ * the placement and that it is a running micro one.
+ */
+export async function studentHandInWork(
+  applicationId: unknown,
+  summary: unknown,
+): Promise<ActionResult> {
+  return handInWork(applicationId, summary);
 }

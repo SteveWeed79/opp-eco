@@ -41,12 +41,14 @@ import { TransitionActions } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
 import {
   saveProfile,
+  studentHandInWork,
   studentRaiseProblem,
   studentRecordOwnOutcome,
   studentTransition,
 } from "./actions";
 import { RecordOutcome } from "@/components/RecordOutcome";
 import { RaiseProblem } from "@/components/RaiseProblem";
+import { HandInWork } from "@/components/HandInWork";
 import { OUTCOME_KINDS } from "@/domain/outcome";
 import { EditProfile } from "./EditProfile";
 import { opportunityPath } from "@/routes";
@@ -76,6 +78,12 @@ export default async function StudentPage() {
     await repositories.postings.published(actor),
   ]);
   const applications = ownApplications.filter((a) => !isTerminal(a.status));
+  // The micro track's hand-ins, keyed by placement. At most one per
+  // application — the unique index says so — and a resubmission is a new round
+  // on the same row rather than a second one.
+  const handIns = new Map(
+    (await repositories.deliverables.list(actor)).map((d) => [d.applicationId, d]),
+  );
   // The vocabulary this market's employers already use, offered when a learner
   // edits their own tags. Free text sprawls into "JS", "Javascript" and
   // "JavaScript", and match scoring compares them literally — so the fix is the
@@ -396,6 +404,39 @@ export default async function StudentPage() {
                               tone="good"
                             />
                           </div>
+                        )}
+                      {/*
+                        The micro track's central act. Shown only while the
+                        placement is running and only where the work is not
+                        already accepted — after that the employer has it, and
+                        the learner's next move is the credit rather than the
+                        work.
+                      */}
+                      {application.track === "micro" &&
+                        application.status === "placement_active" &&
+                        handIns.get(application.id)?.status !== "submitted" && (
+                          <div className="mt-3 flex flex-wrap items-center gap-3">
+                            <HandInWork
+                              applicationId={application.id}
+                              projectTitle={posting.title}
+                              revisionAsked={
+                                handIns.get(application.id)?.status === "revision_requested"
+                                  ? handIns.get(application.id)?.response
+                                  : undefined
+                              }
+                              round={handIns.get(application.id)?.round}
+                              action={studentHandInWork}
+                            />
+                            {handIns.get(application.id)?.status === "revision_requested" && (
+                              <Badge tone="warn">They asked for a change</Badge>
+                            )}
+                          </div>
+                        )}
+                      {application.track === "micro" &&
+                        handIns.get(application.id)?.status === "submitted" && (
+                          <p className="mt-3 text-xs text-ink-500">
+                            Handed in — waiting on {organizationName(posting.businessId)}.
+                          </p>
                         )}
                       {/*
                         Quiet, and last. Nobody should be nudged into reporting

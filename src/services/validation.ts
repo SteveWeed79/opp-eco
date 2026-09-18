@@ -451,3 +451,21 @@ export const resolveEscalationInput = z.object({
   escalationId: id,
   resolution: reason,
 });
+
+/**
+ * Handing work in on the micro track.
+ *
+ * No `fileKey` yet: the upload service is complete and already
+ * deliverable-aware, but nothing renders a file picker, so accepting a key
+ * here would be accepting a value no honest caller can produce.
+ */
+export const submitDeliverableInput = z.object({
+  applicationId: id,
+  summary: longText,
+});
+
+/** The employer's answer, whichever of the two it is. */
+export const answerDeliverableInput = z.object({
+  deliverableId: id,
+  response: reason,
+});

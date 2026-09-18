@@ -5,6 +5,7 @@ import { attemptWrite, runTransition, type ActionResult } from "@/app/_actions/t
 import { closeIntroduction } from "@/app/_actions/mentorship";
 import { answerHostOffer } from "@/app/_actions/offer";
 import { raiseProblem, withdrawProblem } from "@/app/_actions/escalation";
+import { acceptWork, askForChange } from "@/app/_actions/deliverable";
 import { actorForPortal } from "@/auth/session";
 import { reviewHours } from "@/services/timesheet";
 import { reviewHoursInput, validate } from "@/services/validation";
@@ -123,4 +124,25 @@ export async function businessRaiseProblem(
 /** Take back a report they raised themselves. */
 export async function businessWithdrawProblem(escalationId: unknown): Promise<ActionResult> {
   return withdrawProblem("business", escalationId);
+}
+
+/**
+ * Take the work, or ask for a change.
+ *
+ * Accepting completes the placement and writes the evaluation the college reads
+ * when it awards credit, so both go through the service rather than through a
+ * bare transition: the note is the point.
+ */
+export async function businessAcceptWork(
+  deliverableId: unknown,
+  evaluation: unknown,
+): Promise<ActionResult> {
+  return acceptWork(deliverableId, evaluation);
+}
+
+export async function businessAskForChange(
+  deliverableId: unknown,
+  response: unknown,
+): Promise<ActionResult> {
+  return askForChange(deliverableId, response);
 }

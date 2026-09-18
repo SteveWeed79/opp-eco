@@ -16,6 +16,7 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Deliverable,
   Escalation,
   FundingCommitment,
   FundingSource,
@@ -301,6 +302,15 @@ export interface UnitOfWork {
    * a later effective date, and the row it supersedes is left untouched.
    */
   createRegionDefinition(definition: RegionDefinition): void;
+  createDeliverable(deliverable: Deliverable): void;
+  /**
+   * A resubmission, a revision ask, or an acceptance.
+   *
+   * The summary and the file are in the SET list, unlike most `save*` here,
+   * because a resubmission genuinely replaces them — that is what a new round
+   * is. What cannot be edited is `round` itself, which only ever counts up.
+   */
+  saveDeliverable(deliverable: Deliverable, expectedVersion: number): void;
   createEscalation(escalation: Escalation): void;
   /**
    * Pick one up, close it, or withdraw it.

@@ -11,6 +11,7 @@ import type {
   ActorContext,
   Application,
   ConsentRecord,
+  Deliverable,
   Escalation,
   FundingCommitment,
   MentorshipOffer,
@@ -37,6 +38,7 @@ import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { byEscalationOrder, isLive } from "@/domain/escalation";
+import { awaitsEmployer, byDeliverableOrder } from "@/domain/deliverable";
 import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import { administratorUserIds } from "./session";
@@ -132,6 +134,31 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
  *
  * Matched clause for clause by `escalationScope` on the SQL side.
  */
+/**
+ * Hand-ins this actor may read. Matched clause for clause by `deliverableScope`.
+ *
+ * The board sees none: micro-internships carry no public money, so there is no
+ * workflow reason for it to read a learner's work.
+ */
+function visibleDeliverables(actor: ActorContext): Deliverable[] {
+  const { role, organizationId } = actor.membership;
+  if (role === "board") return [];
+
+  const rows = inScope(actor, seed.deliverables);
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((d) => d.studentId === self.id) : [];
+  }
+  if (role === "business") {
+    const owned = postingIdsOwnedBy(organizationId);
+    const mine = new Set(
+      seed.applications.filter((a) => owned.has(a.postingId)).map((a) => a.id),
+    );
+    return rows.filter((d) => mine.has(d.applicationId));
+  }
+  return rows;
+}
+
 function visibleEscalations(actor: ActorContext): Escalation[] {
   const rows = inScope(actor, seed.escalations);
   if (actor.membership.role === "admin") return rows;
@@ -465,6 +492,15 @@ export const repositories: Repositories = {
       visibleConsents(actor)
         .filter((c) => c.studentId === studentId)
         .sort(byConsentOrder),
+  },
+
+  deliverables: {
+    list: async (actor) => visibleDeliverables(actor).slice().sort(byDeliverableOrder),
+    find: async (actor, id) => visibleDeliverables(actor).find((d) => d.id === id) ?? null,
+    forApplication: async (actor, applicationId) =>
+      visibleDeliverables(actor).find((d) => d.applicationId === applicationId) ?? null,
+    awaitingResponse: async (actor) =>
+      visibleDeliverables(actor).filter(awaitsEmployer).sort(byDeliverableOrder),
   },
 
   escalations: {

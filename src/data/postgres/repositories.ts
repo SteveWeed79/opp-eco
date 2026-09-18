@@ -47,6 +47,7 @@ import { joinSql, sql, type Sql, type SqlClient } from "./client";
 import {
   applicationScope,
   consentScope,
+  deliverableScope,
   escalationScope,
   fundingCommitmentScope,
   marketScope,
@@ -66,6 +67,7 @@ import {
   toMarket,
   toMentorshipOffer,
   toConsentRecord,
+  toDeliverable,
   toEscalation,
   toFundingCommitment,
   toFundingSource,
@@ -223,6 +225,17 @@ export function postgresRepositories(db: SqlClient): Repositories {
    * `escalation_kind` is declared worst-first in the migration, so Postgres
    * sorts it correctly with no CASE expression.
    */
+  /**
+   * Oldest first, matching `byDeliverableOrder` — this is a queue somebody
+   * works through, so the hand-in that has waited longest comes first. Every
+   * other list here is newest-first.
+   */
+  function deliverablesWhere(actor: ActorContext, extra: Sql): Sql {
+    const where = joinSql([deliverableScope(actor), extra], " AND ");
+    return sql`SELECT * FROM deliverables WHERE ${where}
+               ORDER BY deliverables.submitted_on, deliverables.id COLLATE "C"`;
+  }
+
   function escalationsWhere(actor: ActorContext, extra: Sql): Sql {
     const where = joinSql([escalationScope(actor), extra], " AND ");
     return sql`SELECT * FROM escalations WHERE ${where}
@@ -586,6 +599,19 @@ export function postgresRepositories(db: SqlClient): Repositories {
         one(consentsWhere(actor, sql`consents.id = ${id}`), toConsentRecord),
       forStudent: (actor, studentId) =>
         all(consentsWhere(actor, sql`consents.student_id = ${studentId}`), toConsentRecord),
+    },
+
+    deliverables: {
+      list: (actor) => all(deliverablesWhere(actor, sql`TRUE`), toDeliverable),
+      find: (actor, id) =>
+        one(deliverablesWhere(actor, sql`deliverables.id = ${id}`), toDeliverable),
+      forApplication: (actor, applicationId) =>
+        one(
+          deliverablesWhere(actor, sql`deliverables.application_id = ${applicationId}`),
+          toDeliverable,
+        ),
+      awaitingResponse: (actor) =>
+        all(deliverablesWhere(actor, sql`deliverables.status = 'submitted'`), toDeliverable),
     },
 
     escalations: {

@@ -400,11 +400,19 @@ Phase 1 opens "students self-activate once their market is live" and Phase 2 wit
 
 What *is* built is everything downstream of the door. The college has a verification queue with **Verify** and **Reject verification**, the administrator has vetting with **Begin vetting**, **Request more information**, **Information received**, **Approve** and **Reject**, and both work. The only way into the system is the administrator's **Add somebody to an organization**. Two reviewers, both waiting on a queue nothing can fill.
 
-### The micro track cannot be completed
+### ~~The micro track cannot be completed~~ — built
 
-Phase 5 says the student submits the deliverable and the business accepts it or requests a revision, and that acceptance *is* the evaluation. `Application` carries `deliverableSubmitted` and `deliverableAccepted`, and **both are written only by the seed**. The learner's **Submit for credit** is a status transition that records no deliverable; the employer's portal offers **Assign project**, **Mark filled** and **End placement early**, and nothing that accepts one.
+The second gap closed after the walk, and the one that turned out to be least missing: the model was already most of the way there and nothing could reach it. `Application.deliverableSubmitted` has guarded the employer's **Accept deliverable** transition since the first migration, and `deliverableAccepted` decides whether a micro posting's hours count toward a credit — both written only by the seed, so the track had a gate nobody could open and a credit rule nothing could satisfy.
 
-The file machinery for it already exists and is reachable from nowhere: `UPLOAD_PURPOSES` in `src/services/uploads/validation.ts` declares exactly two purposes, `resume` and `deliverable`, with magic-byte checking, size caps, a Postgres store, a retrieval route and access rules. The design system has a `FileUpload` component. The only screen that renders it is the design gallery. So the resume the master profile is supposed to carry, and the deliverable the micro track turns on, are the same missing wiring twice.
+A learner now hands work in, and an employer accepts it or asks for a change, as `Deliverable`. Three decisions worth knowing:
+
+- **A round, not a second record.** A resubmission increments `round` on the same row. "The third version" is a thing a college wants to read, and a chain of rows makes it a join.
+- **Acceptance really is the evaluation, and the interface says so.** There is no timesheet and no separate evaluation form on this track, so the note an employer writes when accepting is the whole academic record behind the credit. Both the schema and the service refuse an empty one, and the dialog tells the employer what they are writing — an employer who thinks they are clicking a receipt writes "thanks", and a registrar is later asked to award credit on the strength of it.
+- **Submitting is not a status change.** The placement stays active until the employer accepts, because work being handed in and a placement being finished are different facts.
+
+The two booleans stay where they are, written in the same transaction as the record. They are what the state machine and the credit calculation read, both being pure functions of an application; the record is the history behind them. Denormalised deliberately, and the fixtures' agreement is asserted rather than assumed.
+
+**The file is still not wired.** `UPLOAD_PURPOSES` declares `resume` and `deliverable` with magic-byte checking, size caps, a Postgres store, a retrieval route, access rules and quarantine, and `UploadTarget.applicationId` is documented as being for exactly this — but nothing renders a file picker, so a hand-in is a written summary and `fileKey` is a column waiting for one. That and the learner's missing resume are the same wiring, twice, and are now the smallest remaining piece of this.
 
 ### ~~No one can raise a problem~~ — built
 

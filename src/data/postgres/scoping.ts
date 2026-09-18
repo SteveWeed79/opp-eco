@@ -261,6 +261,41 @@ export function fundingCommitmentScope(actor: ActorContext): Sql {
  * Matches `visibleEscalations` clause for clause; the parity suite compares
  * them accessor by accessor and role by role.
  */
+/**
+ * Hand-ins, narrowed to the parties with a reason to read one.
+ *
+ * The learner's own, the employer's for placements it hosts, the market's for a
+ * college or an administrator — and **nothing at all for the board**, which
+ * does not fund micro-internships and has no workflow reason to read a
+ * student's work. `FALSE` rather than an omitted clause, so the refusal is in
+ * the statement where a reviewer can see it.
+ *
+ * Matches `visibleDeliverables` clause for clause.
+ */
+export function deliverableScope(actor: ActorContext): Sql {
+  const parts: Sql[] = [marketScope(actor, "deliverables")];
+  const { role, organizationId } = actor.membership;
+
+  if (role === "board") return sql`FALSE`;
+  if (role === "student") {
+    parts.push(
+      sql`deliverables.student_id IN (
+        SELECT id FROM students WHERE user_id = ${actor.user.id}
+      )`,
+    );
+  }
+  if (role === "business") {
+    parts.push(
+      sql`deliverables.application_id IN (
+        SELECT applications.id FROM applications
+        JOIN postings ON postings.id = applications.posting_id
+        WHERE postings.business_id = ${organizationId}
+      )`,
+    );
+  }
+  return joinSql(parts, " AND ");
+}
+
 export function escalationScope(actor: ActorContext): Sql {
   const parts: Sql[] = [marketScope(actor, "escalations")];
   if (actor.membership.role !== "admin") {

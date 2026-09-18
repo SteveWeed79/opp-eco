@@ -20,6 +20,7 @@ import type {
   ConsentRecord,
   AuditEvent,
   CreditAward,
+  Deliverable,
   Escalation,
   FundingCommitment,
   FundingSource,
@@ -228,6 +229,28 @@ export interface OutcomeRepository {
  *
  * `live` is the administrator's queue and the reason the partial index exists.
  */
+/**
+ * Hand-ins on the micro track, narrowed to the parties with a reason to read one.
+ *
+ * The learner's own, the employer's for placements it hosts, and the market's
+ * for a college or an administrator — the college because acceptance *is* the
+ * evaluation it awards credit against, so a deliverable it cannot read is a
+ * credit decision made blind.
+ *
+ * **The board sees none.** Micro-internships are unsubsidised (Q13 — a fixed
+ * project fee has no hours for an hourly reimbursement to attach to), so no
+ * public money rides on one and the board has no workflow reason to read a
+ * student's work. The same narrowing mentorship gets, for the same reason.
+ */
+export interface DeliverableRepository {
+  list(actor: ActorContext): Promise<Deliverable[]>;
+  find(actor: ActorContext, id: string): Promise<Deliverable | null>;
+  /** At most one per application — the unique index says so. */
+  forApplication(actor: ActorContext, applicationId: string): Promise<Deliverable | null>;
+  /** The employer's queue: handed in and not yet answered, oldest first. */
+  awaitingResponse(actor: ActorContext): Promise<Deliverable[]>;
+}
+
 export interface EscalationRepository {
   list(actor: ActorContext): Promise<Escalation[]>;
   find(actor: ActorContext, id: string): Promise<Escalation | null>;
@@ -305,6 +328,7 @@ export interface Repositories {
   fundingCommitments: FundingCommitmentRepository;
   consents: ConsentRepository;
   outcomes: OutcomeRepository;
+  deliverables: DeliverableRepository;
   escalations: EscalationRepository;
   hostOffers: HostOfferRepository;
   regionDefinitions: RegionDefinitionRepository;

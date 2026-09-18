@@ -362,6 +362,31 @@ class MemoryUnitOfWork implements UnitOfWork {
     });
   }
 
+  createDeliverable(deliverable: import("@/domain/types").Deliverable) {
+    if (seed.deliverables.some((d) => d.applicationId === deliverable.applicationId)) {
+      // The unique index says the same thing. One per application: a
+      // resubmission is a new round on the row, never a second row.
+      throw new Error(`Deliverable for ${deliverable.applicationId} already exists`);
+    }
+    this.effects.push(() => {
+      seed.deliverables.push(deliverable);
+    });
+  }
+
+  saveDeliverable(
+    deliverable: import("@/domain/types").Deliverable,
+    expectedVersion: number,
+  ) {
+    const index = seed.deliverables.findIndex((d) => d.id === deliverable.id);
+    if (index === -1) throw new Error(`Unknown deliverable ${deliverable.id}`);
+    if (seed.deliverables[index].version !== expectedVersion) {
+      throw new ConcurrencyError("Deliverable", deliverable.id);
+    }
+    this.effects.push(() => {
+      seed.deliverables[index] = { ...deliverable, version: expectedVersion + 1 };
+    });
+  }
+
   createEscalation(escalation: import("@/domain/types").Escalation) {
     if (seed.escalations.some((e) => e.id === escalation.id)) {
       throw new Error(`Escalation ${escalation.id} already exists`);

@@ -590,6 +590,31 @@ export const TEMPLATES: Record<string, Template> = {
     notice: FERPA_NOTICE,
   }),
 
+  // --- The micro track's hand-in -------------------------------------------
+  "deliverable.submitted": (p) => {
+    const round = num(p.round) ?? 1;
+    return {
+      subject:
+        round > 1
+          ? `Revised work for ${str(p.postingTitle)}`
+          : `Work handed in for ${str(p.postingTitle)}`,
+      body:
+        (round > 1
+          ? `The revised work for ${str(p.postingTitle)} is in — round ${round}. `
+          : `The work for ${str(p.postingTitle)} has been handed in. `) +
+        `Accepting it completes the placement and is what the college reads when it awards the credit, so a sentence about what was good is worth more here than it looks. If it is not right yet, send it back with what needs changing.`,
+      action: { label: "Read the hand-in", path: PORTAL_PATH.business },
+    };
+  },
+
+  "deliverable.revision_requested": (p) => ({
+    subject: `${str(p.postingTitle)} — the employer asked for a change`,
+    body:
+      `Your work on ${str(p.postingTitle)} has come back with a note about what to change. ` +
+      `This is not a rejection and the placement is still running: read what they asked for and hand it in again when you have it.`,
+    action: { label: "Read what they asked for", path: PORTAL_PATH.student },
+  }),
+
   // --- Somebody reported a problem ----------------------------------------
   /**
    * A pointer, never the report.

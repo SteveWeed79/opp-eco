@@ -23,6 +23,7 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Deliverable,
   Escalation,
   FundingCommitment,
   FundingSource,
@@ -499,6 +500,51 @@ class PostgresUnitOfWork implements UnitOfWork {
         WHERE id = ${consent.id} AND version = ${expectedVersion}
         RETURNING id`,
       { entity: "Consent", id: consent.id },
+    );
+  }
+
+  // -- Deliverables ---------------------------------------------------------
+
+  createDeliverable(deliverable: Deliverable) {
+    this.add(sql`
+      INSERT INTO deliverables (
+        id, market_id, application_id, student_id, summary, file_key,
+        submitted_on, status, response, responded_on, responded_by, round, version
+      ) VALUES (
+        ${deliverable.id}, ${deliverable.marketId}, ${deliverable.applicationId},
+        ${deliverable.studentId}, ${deliverable.summary}, ${deliverable.fileKey},
+        ${deliverable.submittedOn}, ${deliverable.status},
+        ${deliverable.response ?? null}, ${deliverable.respondedOn},
+        ${deliverable.respondedByUserId}, ${deliverable.round}, ${deliverable.version}
+      )`);
+  }
+
+  /**
+   * A resubmission, a revision ask, or an acceptance.
+   *
+   * The summary and the file **are** in the SET list, unlike a consent's scope
+   * or an escalation's text: a new round genuinely replaces the work, which is
+   * what handing it in again means. `round` is set rather than incremented here
+   * because the service computes it — the database is not the place to decide
+   * whether something counts as a new attempt.
+   */
+  saveDeliverable(deliverable: Deliverable, expectedVersion: number) {
+    this.add(
+      sql`
+        UPDATE deliverables SET
+          summary = ${deliverable.summary},
+          file_key = ${deliverable.fileKey},
+          submitted_on = ${deliverable.submittedOn},
+          status = ${deliverable.status},
+          response = ${deliverable.response ?? null},
+          responded_on = ${deliverable.respondedOn},
+          responded_by = ${deliverable.respondedByUserId},
+          round = ${deliverable.round},
+          version = version + 1,
+          updated_at = now()
+        WHERE id = ${deliverable.id} AND version = ${expectedVersion}
+        RETURNING id`,
+      { entity: "Deliverable", id: deliverable.id },
     );
   }
 

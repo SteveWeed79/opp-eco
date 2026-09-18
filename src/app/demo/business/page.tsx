@@ -6,6 +6,7 @@ import {
   HandHeart,
   Handshake,
   HelpCircle,
+  PackageCheck,
   Users,
   Zap,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   TrackBadge,
 } from "@/components/ui";
 import { RaiseProblem } from "@/components/RaiseProblem";
+import { AnswerHandIn } from "@/components/AnswerHandIn";
 import {
   TransitionActions,
   MENTORSHIP_CONFIRM,
@@ -50,6 +52,8 @@ import { hostOfferQueue, marketFunding } from "@/lib/queries";
 import {
   answerPlacementOffer,
   businessCloseIntroduction,
+  businessAcceptWork,
+  businessAskForChange,
   businessRaiseProblem,
   businessTransition,
 } from "./actions";
@@ -63,10 +67,14 @@ import { opportunityPath } from "@/routes";
 export default async function BusinessPage() {
   const actor = await actorForPortal("business");
   const { organizationName } = await nameLookups(actor);
-  const [unreviewedWeeks, hoursQueue, offerQueue] = await Promise.all([
+  const [unreviewedWeeks, hoursQueue, offerQueue, handIns] = await Promise.all([
     unreviewedWeeksByApplication(actor),
     reviewQueue(actor),
     hostOfferQueue(actor),
+    // The micro track's queue, and the one the employer could not act on at
+    // all until now: `Accept deliverable` has been guarded on a flag nothing
+    // could set since the first migration.
+    repositories.deliverables.awaitingResponse(actor),
   ]);
   const org = (await repositories.organizations.find(actor, actor.membership.organizationId!))!;
   const market = (await repositories.markets.find(actor, actor.membership.marketId!))!;
@@ -309,6 +317,62 @@ export default async function BusinessPage() {
                 <Badge tone="warn">With the college</Badge>
               </li>
             ))}
+          </ul>
+        </ToneCard>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Work handed in, waiting on you                                      */}
+      {/*                                                                     */}
+      {/* Beside the hours queue and for the same reason: a micro learner     */}
+      {/* cannot be paid, cannot earn credit and cannot have their placement  */}
+      {/* closed until this is answered, and the employer is the only party   */}
+      {/* who can answer it. The difference is that accepting is also the     */}
+      {/* evaluation — there is no separate form on this track.               */}
+      {/* ------------------------------------------------------------------ */}
+      {handIns.length > 0 && (
+        <ToneCard tone="brand" elevation="floating">
+          <CardHeader
+            level={3}
+            icon={<PackageCheck className="w-5 h-5 text-brand-700" />}
+            title="Work handed in"
+            subtitle="Accepting completes the placement and is the evaluation the college reads"
+          />
+          <ul className="divide-y divide-line">
+            {handIns.map((handIn) => {
+              const application = applications.find((a) => a.id === handIn.applicationId);
+              const posting = application
+                ? postings.find((p) => p.id === application.postingId)
+                : undefined;
+              const learnerName = studentName(handIn.studentId);
+              return (
+                <li key={handIn.id} className="px-6 py-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-ink-950">
+                      {learnerName}
+                    </span>
+                    <span className="text-sm text-ink-600">
+                      {posting?.title ?? "a project"}
+                    </span>
+                    {handIn.round > 1 && <Badge tone="warn">Round {handIn.round}</Badge>}
+                  </div>
+                  <p className="mt-2 text-sm text-ink-700 whitespace-pre-line">
+                    {handIn.summary}
+                  </p>
+                  <div className="mt-3">
+                    <AnswerHandIn
+                      deliverableId={handIn.id}
+                      learnerName={learnerName}
+                      projectTitle={posting?.title ?? "this project"}
+                      summary={handIn.summary}
+                      round={handIn.round}
+                      accept={businessAcceptWork}
+                      requestRevision={businessAskForChange}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </ToneCard>
       )}
