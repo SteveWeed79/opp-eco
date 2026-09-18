@@ -84,6 +84,21 @@ export interface Market {
   collegeIds: string[];
   launchedOn: string | null;
   programYear: string;
+  /**
+   * Whether this market is the demonstration.
+   *
+   * The one thing on this type that is a claim about the rows rather than a
+   * property of the programme, and it is here because every other table in the
+   * schema carries `market_id` — so one flag on a market answers "is this
+   * fictional" for a posting, a learner, a placement and a dollar figure alike.
+   *
+   * Written by `db:seed` and by nothing else. The application has no write path
+   * to `markets` at all, which is what makes this trustworthy: it cannot be
+   * flipped by a bug or by whoever holds an administrator's password. Real
+   * markets are real by default, so the failure mode of forgetting it is an
+   * empty demonstration rather than an exposed learner.
+   */
+  isDemoData: boolean;
 }
 
 /**

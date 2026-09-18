@@ -176,6 +176,10 @@ export function toMarket(row: Row): import("@/domain/types").Market {
     collegeIds: list(row.college_ids),
     launchedOn: nullableTimestamp(row.launched_on),
     programYear: text(row.program_year),
+    // Defaulted rather than coerced, because a market read through a query
+    // that predates this column should be real, not fictional. Same polarity
+    // as the schema's own default, for the same reason.
+    isDemoData: row.is_demo_data === true,
   };
 }
 
