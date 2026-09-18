@@ -23,6 +23,8 @@ import { joinSql, sql, type Sql } from "./client";
  */
 export function marketScope(actor: ActorContext, table: string): Sql {
   if (actor.membership.role === "admin") {
+    // The system reads on nobody's behalf and is narrowed by neither world.
+    if (actor.systemWide) return sql`TRUE`;
     // Cross-market, but not across both worlds. This used to be `TRUE`, which
     // is right about tenancy and wrong about truth: the administrator's console
     // sums every market it can see, so a deployment holding the demonstration
@@ -52,6 +54,7 @@ export function ownMarketScope(actor: ActorContext): Sql {
   // The `markets` table answers it directly rather than through a subquery
   // against itself.
   if (actor.membership.role === "admin") {
+    if (actor.systemWide) return sql`TRUE`;
     return sql`markets.is_demo_data = ${viewsDemoData(actor)}`;
   }
   return sql`markets.id = ${actor.membership.marketId}`;

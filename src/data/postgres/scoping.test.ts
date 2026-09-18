@@ -12,11 +12,13 @@ import {
   applicationScope,
   hostOfferScope,
   marketScope,
+  ownMarketScope,
   outcomeScope,
   postingOwnershipScope,
   studentScope,
 } from "./scoping";
 import { contextFor } from "@/data/session";
+import { systemContext } from "@/auth/system";
 import { canReadOutcomes } from "@/domain/outcome";
 import type { ActorRole } from "@/domain/types";
 
@@ -25,6 +27,7 @@ const business = contextFor("business");
 const college = contextFor("college");
 const board = contextFor("board");
 const student = contextFor("student");
+const system = systemContext();
 
 describe("sql template", () => {
   it("parameterises every interpolated value", () => {
@@ -69,6 +72,16 @@ describe("market scope", () => {
     expect(scope.text).toContain("applications.market_id IN");
     expect(scope.text).toContain("is_demo_data = $1");
     expect(scope.params).toEqual([true]);
+  });
+
+  it("leaves the system context across both worlds", () => {
+    // `systemContext` resolves an address to a sign-in method before anybody is
+    // authenticated and dispatches queued notifications. Narrowed to the
+    // demonstration it stopped finding a real workforce board, whose officers
+    // then resolved to a password they do not have instead of the one-time code
+    // they sign in with. It is not a viewer and renders no figure.
+    expect(marketScope(system, "applications").text).toBe("TRUE");
+    expect(ownMarketScope(system).text).toBe("TRUE");
   });
 
   it("puts an administrator with no preference on real programmes", () => {

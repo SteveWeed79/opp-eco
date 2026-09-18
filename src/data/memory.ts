@@ -268,7 +268,9 @@ export const repositories: Repositories = {
     // had two shapes depending on which accessor answered.
     list: async (actor) =>
       actor.membership.role === "admin"
-        ? // The market's own flag answers directly — the mirror of
+        ? actor.systemWide
+          ? seed.markets
+          : // The market's own flag answers directly — the mirror of
           // `ownMarketScope`, which reads the column rather than a subquery
           // against the table it is already selecting from.
           seed.markets.filter((m) => m.isDemoData === viewsDemoData(actor))
@@ -277,6 +279,7 @@ export const repositories: Repositories = {
       const market = seed.markets.find((m) => m.id === id);
       if (!market) return null;
       if (actor.membership.role === "admin") {
+        if (actor.systemWide) return market;
         return market.isDemoData === viewsDemoData(actor) ? market : null;
       }
       if (actor.membership.marketId !== id) return null;

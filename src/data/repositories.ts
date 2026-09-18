@@ -311,6 +311,7 @@ export function visibleMarketIds(
   allMarketIds: string[],
 ): string[] {
   if (actor.membership.role === "admin") {
+    if (actor.systemWide) return allMarketIds;
     return allMarketIds.filter((id) => marketMatchesWorld(actor, id));
   }
   return actor.membership.marketId ? [actor.membership.marketId] : [];
@@ -323,6 +324,7 @@ export function inScope<T extends { marketId: string }>(
   // Cross-market, but not across both worlds — the mirror of `marketScope`'s
   // admin branch, and the reason that one stopped being `TRUE`.
   if (actor.membership.role === "admin") {
+    if (actor.systemWide) return rows;
     return rows.filter((r) => marketMatchesWorld(actor, r.marketId));
   }
   return rows.filter((r) => r.marketId === actor.membership.marketId);

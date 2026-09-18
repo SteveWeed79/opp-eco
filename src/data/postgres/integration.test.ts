@@ -37,6 +37,7 @@ import type { ActorContext, ActorRole } from "@/domain/types";
 import { ConcurrencyError } from "../store";
 import { repositories as memoryRepositories } from "../memory";
 import { contextFor } from "../session";
+import { systemContext } from "@/auth/system";
 import { databaseConfig } from "./config";
 import { createPostgresClient, type PostgresClient } from "./neon";
 import { nodePostgresPool } from "./node-pg";
@@ -1748,6 +1749,28 @@ withDatabase("an administrator's world", () => {
         fromMemory.map((m) => m.id).sort(),
       );
     }
+  });
+
+  it("shows a real market to the system context and to nobody else by default", async () => {
+    // The regression this guards: `systemContext()` is `contextFor("admin")`,
+    // which views the demonstration — so narrowing the administrator quietly
+    // narrowed every pre-auth lookup too, and a real workforce board's address
+    // stopped resolving to the one-time code its officers sign in with.
+    await client.query(
+      "UPDATE markets SET is_demo_data = false WHERE id = 'mkt-emporia'",
+    );
+    const pg = postgresRepositories(client);
+
+    const bySystem = await pg.markets.list(systemContext());
+    expect(bySystem.map((m) => m.id)).toContain("mkt-emporia");
+    // And it still sees the demonstration's, which is the point of "both".
+    expect(bySystem.map((m) => m.id)).toContain("mkt-pittsburg");
+
+    const byDemoAdmin = await pg.markets.list(admin);
+    expect(byDemoAdmin.map((m) => m.id)).not.toContain("mkt-emporia");
+
+    const byRealAdmin = await pg.markets.list(viewingReal);
+    expect(byRealAdmin.map((m) => m.id)).toEqual(["mkt-emporia"]);
   });
 
   it("does not consult the flag for a role anchored to one market", async () => {

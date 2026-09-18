@@ -64,6 +64,22 @@ export interface ActorContext {
    * an empty console rather than somebody's learners.
    */
   viewingDemoData?: boolean;
+  /**
+   * Reads on nobody's behalf, across both worlds.
+   *
+   * The one context that must not be narrowed to the demonstration or away from
+   * it, because it is not a viewer: `systemContext` resolves an address to a
+   * sign-in method before anybody is authenticated, and dispatches queued
+   * notifications. Both have to work for a real college and a fictional one
+   * alike, and neither renders a figure to anybody — which is the whole reason
+   * `viewingDemoData` exists.
+   *
+   * Set in exactly one place, `systemContext()`, and asserted to be set nowhere
+   * else. It reopens the unrestricted cross-market read that `marketScope`
+   * otherwise no longer has, so where it is settable is the whole of its
+   * safety.
+   */
+  systemWide?: boolean;
 }
 
 // ---------------------------------------------------------------------------

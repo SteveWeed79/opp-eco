@@ -11,5 +11,15 @@ import { contextFor } from "@/data/session";
  * these totals ever became expensive.
  */
 export function systemContext(): ActorContext {
-  return contextFor("admin");
+  // `systemWide` because this context is not a viewer. Every other
+  // administrator reads one world at a time — the demonstration or real
+  // programmes — so that a console cannot sum invented money into a real
+  // total. This one resolves an address to a sign-in method before anybody is
+  // authenticated, and dispatches queued notifications; both must work for a
+  // real college and a fictional one alike, and neither renders a figure.
+  //
+  // Without it this became `contextFor("admin")` viewing the demonstration,
+  // and a real workforce board's address quietly stopped resolving to the
+  // one-time code its officers sign in with.
+  return { ...contextFor("admin"), systemWide: true };
 }
