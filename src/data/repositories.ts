@@ -278,6 +278,16 @@ export interface AuditEventRepository {
 
 export interface UserRepository {
   find(id: string): Promise<User | null>;
+  /**
+   * Everybody holding the administrator role.
+   *
+   * Unscoped like `find`, and for the same reason its comment gives: this
+   * resolves a **notification recipient**, and those cross market boundaries by
+   * design. Administrators are the one cross-market role, so there is no market
+   * to narrow by — see `services/escalation.ts` for what that costs once a
+   * second market exists.
+   */
+  administrators(): Promise<User[]>;
 }
 
 export interface Repositories {

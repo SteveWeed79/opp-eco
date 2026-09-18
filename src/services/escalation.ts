@@ -14,15 +14,27 @@
  * is what the repository says, rather than a permission check this file would
  * have to remember to write.
  *
- * **Nothing here notifies anybody, and that is a gap rather than a decision.**
- * The platform has no concept of an administrator on duty: administrators are
- * the one cross-market role, `NotificationIntent` addresses a user or an
- * organization, and neither can express "whoever is operating this market
- * today". Hard-coding the seeded administrator's id would put a fixture inside
- * a service, which is exactly the class of bug the repository contract exists
- * to prevent. So delivery is the console queue — `escalations.live` — until
- * there is a real answer to who gets rung at two in the morning about a safety
- * report. That question wants the operator, not a guess from here.
+ * **Raising one notifies every administrator, and the message deliberately does
+ * not contain the report.** `memberships` knows who holds the role — it is the
+ * one role the schema forbids a market on — so the recipients are a query
+ * rather than a guess, and `users.administrators()` is that query.
+ *
+ * What the mail says is "a supervision problem was reported on this placement,
+ * go and look". Not the summary, for the same reason the audit entry omits it:
+ * **email is the least private channel this system has.** It leaves the
+ * platform's control the moment it is sent, lands in an inbox the raiser never
+ * agreed to, and can be forwarded to the employer the report is about in one
+ * click. A pointer costs an administrator one page load and keeps the promise
+ * the reporting dialog makes.
+ *
+ * **What is still missing is a rota, not a recipient.** Administrators are the
+ * one cross-market role, so this is every administrator on the platform rather
+ * than the one running that market: at one market those are the same set, at
+ * ten a safety report in Pittsburg mails whoever runs Hays. Nor is email the
+ * right channel for a safety report at two in the morning — it queues in the
+ * outbox behind "new applicant" mail and is drained by a dispatcher. Both want
+ * an escalation contact per market, which is an operator's decision about who
+ * is on call rather than something to invent here.
  */
 
 import type { ActorContext, Escalation, EscalationKind } from "@/domain/types";
@@ -104,6 +116,11 @@ export async function raiseEscalation(
     version: 1,
   };
 
+  // Resolved before the transaction opens: a read inside a unit of work is a
+  // connection held for longer than the write needs, and the recipients do not
+  // depend on anything the write does.
+  const administrators = await repositories.users.administrators();
+
   await deps.store.transaction((uow) => {
     uow.createEscalation(escalation);
     uow.appendAuditEvent({
@@ -124,6 +141,21 @@ export async function raiseEscalation(
       // feature rests on.
       viaOverride: false,
     });
+    for (const administrator of administrators) {
+      uow.enqueueNotification({
+        marketId: escalation.marketId,
+        recipientUserId: administrator.id,
+        kind: "escalation.raised",
+        payload: {
+          // The kind and the id, never the summary. See the note at the top of
+          // this file: the report is readable by two parties, and email is not
+          // a channel that can keep it that way.
+          escalationId: escalation.id,
+          kind: escalation.kind,
+          raisedByRole: escalation.raisedByRole,
+        },
+      });
+    }
   });
 
   return { ok: true, updated: escalation };

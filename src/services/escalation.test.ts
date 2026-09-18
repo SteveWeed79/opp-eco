@@ -21,6 +21,11 @@ import {
 import { contextFor } from "@/data/session";
 import { repositories } from "@/data/backend";
 import * as seed from "@/data/seed";
+import { pendingNotifications } from "@/data/memory-store";
+import { templateFor } from "./templates";
+
+/** Everything queued so far, in order. The in-memory queue is an array. */
+const queued = () => pendingNotifications.map((p) => p.intent);
 
 const original = seed.escalations.map((e) => ({ ...e }));
 
@@ -132,6 +137,55 @@ describe("raising one", () => {
     // the visibility rule the whole feature rests on.
     expect(entry?.reason).toBeUndefined();
     expect(JSON.stringify(entry)).not.toContain("guard");
+  });
+});
+
+describe("telling the administrator", () => {
+  it("queues a message to every administrator", async () => {
+    const before = queued().length;
+    const result = await raiseEscalation(student(), {
+      applicationId: OWN_APPLICATION,
+      kind: "safety",
+      summary: "There is no guard on the press I have been asked to run.",
+    });
+    expect(result.ok).toBe(true);
+
+    const sent = queued().slice(before);
+    const admins = await repositories.users.administrators();
+    expect(admins.length).toBeGreaterThan(0);
+    expect(sent.map((n) => n.recipientUserId).sort()).toEqual(
+      admins.map((a) => a.id).sort(),
+    );
+    expect(sent.every((n) => n.kind === "escalation.raised")).toBe(true);
+  });
+
+  it("sends a pointer rather than the report", async () => {
+    // The assertion this one exists for. Email is the least private channel
+    // here — it leaves the platform when it is sent and reaches the employer
+    // the report is about in one forward — so the message says a problem of
+    // this kind exists and where to read it, and nothing else.
+    const before = queued().length;
+    await raiseEscalation(student(), {
+      applicationId: OWN_APPLICATION,
+      kind: "supervision",
+      summary: "My supervisor has not been in for three weeks and I sit alone.",
+    });
+
+    const sent = queued().slice(before);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const intent of sent) {
+      const rendered = JSON.stringify(intent);
+      expect(rendered).not.toContain("three weeks");
+      expect(rendered).not.toContain("sit alone");
+    }
+
+    // And the rendered mail itself, not only the payload: a template is free to
+    // put a field somewhere the payload check would not see.
+    const template = templateFor("escalation.raised")!;
+    const mail = template(sent[0].payload);
+    expect(`${mail.subject} ${mail.body}`).not.toContain("supervisor has not been in");
+    // It does say which kind, because that decides whether this is opened now.
+    expect(mail.subject.toLowerCase()).toContain("supervision");
   });
 });
 

@@ -241,6 +241,11 @@ withDatabase("parity with the in-memory layer", () => {
       hostOffers: await repos.hostOffers.list(actor),
       regionDefinitions: await repos.regionDefinitions.list(actor),
       consents: await repos.consents.list(actor),
+      // Takes no actor: it resolves a notification recipient, which crosses
+      // markets by design. Compared per role anyway, because "unscoped" is the
+      // contract and a layer that quietly narrowed it would be a layer where
+      // somebody stops being told about a safety report.
+      administrators: await repos.users.administrators(),
       escalations: await repos.escalations.list(actor),
       liveEscalations: await repos.escalations.live(actor),
       fundingSources: await repos.fundingSources.list(actor),

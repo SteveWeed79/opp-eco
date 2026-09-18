@@ -681,6 +681,17 @@ export function postgresRepositories(db: SqlClient): Repositories {
       // the name behind an audit entry or a notification recipient, both of
       // which cross market boundaries by design.
       find: (id) => one(sql`SELECT * FROM users WHERE id = ${id}`, toUser),
+      // Every administrator, because the role is the one without a market to
+      // narrow by — `admin_is_cross_market` in the schema says so. Ordered by
+      // id so the two layers agree; the parity suite compares the list.
+      administrators: () =>
+        all(
+          sql`SELECT users.* FROM users
+              JOIN memberships ON memberships.user_id = users.id
+              WHERE memberships.role = 'admin'
+              ORDER BY users.id COLLATE "C"`,
+          toUser,
+        ),
     },
   };
 }

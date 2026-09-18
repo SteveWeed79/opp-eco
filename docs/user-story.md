@@ -402,7 +402,9 @@ The file machinery for it already exists and is reachable from nowhere: `UPLOAD_
 
 This was the first gap closed after the walk. Every portal now has **Report a problem** on a live placement, and the administrator's console opens with **Reported to you** above *What's stuck* — the two queues answer different questions, and the ordering says which wins on the day both have rows. *What's stuck* is derived from dwell time and remains the better signal most days; it can only ever see a placement that has gone **quiet**, and one going wrong loudly moves through its statuses on time and looks healthy from every screen.
 
-What is **not** built is notification. Escalations reach the administrator's queue and nothing rings: the platform has no concept of an administrator on duty, `NotificationIntent` addresses a user or an organization, and neither can express "whoever is operating this market today". Hardcoding the seeded administrator's id would put a fixture inside a service. That wants an operator's answer to who gets rung at two in the morning about a safety report, not a guess from the code.
+Raising one **mails every administrator**, and the message deliberately carries a pointer rather than the report — a kind, a placement, and a link to the console. Email is the least private channel the platform has: it leaves the system when it is sent and reaches the employer a report is about in one forward, so the promise the reporting dialog makes cannot survive putting the text in it.
+
+What is still missing is a **rota, not a recipient**. Administrators are the one cross-market role, so every administrator on the platform is told rather than the one running that market — the same set at one market, and at ten a safety report in Pittsburg mailing whoever runs Hays. Email is also the wrong urgency for a safety report at two in the morning: it queues in the outbox behind *new applicant* mail. Both want an **escalation contact per market**, which is an operator's decision about who is on call rather than something to invent in code.
 
 ### A minor still cannot be recognised
 

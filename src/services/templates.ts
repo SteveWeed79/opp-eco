@@ -25,6 +25,8 @@
  */
 
 import { DEMO_ROOT, PORTAL_PATH } from "@/routes";
+import { escalationKindLabel } from "@/domain/escalation";
+import type { EscalationKind } from "@/domain/types";
 
 export interface Message {
   subject: string;
@@ -526,6 +528,40 @@ export const TEMPLATES: Record<string, Template> = {
       `Placements that stall here are the ones most likely to fall through.`,
     action: { label: "Open the portal", path: DEMO_ROOT },
   }),
+
+  // --- Somebody reported a problem ----------------------------------------
+  /**
+   * A pointer, never the report.
+   *
+   * Every other template here says what happened, because every other record
+   * is readable by the person receiving the mail from somewhere else too. An
+   * escalation is readable by exactly two parties, and **email is the least
+   * private channel this system has** — it leaves the platform when it is
+   * sent, and it can reach the employer the report is about in one forward.
+   * So this says a problem of this kind exists and where to read it, and the
+   * administrator loads one page.
+   *
+   * The kind is in the subject because it decides whether this is opened now
+   * or after lunch, and a subject line that will not say is a subject line
+   * everybody learns to ignore.
+   */
+  "escalation.raised": (p) => {
+    const kind = escalationKindLabel(str(p.kind) as EscalationKind).toLowerCase();
+    const safety = p.kind === "safety";
+    return {
+      subject: safety
+        ? "Safety problem reported on a placement"
+        : `Problem reported on a placement: ${kind}`,
+      body:
+        `The ${str(p.raisedByRole, "party")} on a placement reported a problem — ${kind}. ` +
+        (safety
+          ? "Safety reports sit at the top of your queue ahead of everything else. "
+          : "") +
+        "What they wrote is in the console rather than in this message: it is readable " +
+        "by them and by you, and email is not a channel that can keep it that way.",
+      action: { label: "Read it in the console", path: PORTAL_PATH.admin },
+    };
+  },
 };
 
 export function templateFor(kind: string): Template | null {

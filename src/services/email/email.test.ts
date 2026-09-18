@@ -242,7 +242,7 @@ describe("policy and templates agree", () => {
     // an entity the application policy does not govern. Written as a list this
     // grew by one line per feature, which is how an orphaned template
     // eventually gets waved through by someone adding to it out of habit.
-    const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship)\./;
+    const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship|escalation)\./;
     // The genuine exception to the rule, and it is a category rather than a
     // list of favours: a message sent because somebody decided to ask, not
     // because something changed. No status can own one — `application.stalled`
@@ -288,6 +288,7 @@ describe("policy and templates agree", () => {
       "hours.submitted",
       "hours.approved",
       "hours.rejected",
+      "escalation.raised",
     ].filter((kind) => !templates.has(kind));
 
     expect(missing).toEqual([]);

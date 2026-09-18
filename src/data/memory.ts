@@ -39,6 +39,7 @@ import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
 import { byEscalationOrder, isLive } from "@/domain/escalation";
 import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
+import { administratorUserIds } from "./session";
 import * as seed from "./seed";
 
 /** Postings an organization owns, for narrowing application access. */
@@ -544,6 +545,11 @@ export const repositories: Repositories = {
 
   users: {
     find: async (id) => seed.users.find((u) => u.id === id) ?? null,
+    administrators: async () => {
+      const ids = new Set(administratorUserIds());
+      // Sorted by id to match the SQL layer, which the parity suite compares.
+      return seed.users.filter((u) => ids.has(u.id)).sort((a, b) => a.id.localeCompare(b.id));
+    },
   },
 };
 

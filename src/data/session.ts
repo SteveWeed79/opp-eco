@@ -147,6 +147,21 @@ export function membershipForUser(userId: string): Membership | null {
 }
 
 /**
+ * Everybody holding the administrator role.
+ *
+ * Reads the membership list rather than `ACCOUNTS`, so an administrator added
+ * at runtime is one of these — the same reason `membershipForUser` does.
+ *
+ * Administrators are the one cross-market role, so this is deliberately every
+ * administrator on the platform rather than a market's own. At one market that
+ * is the same set; at ten it is not, and the note in `services/escalation.ts`
+ * says what that costs and what would fix it.
+ */
+export function administratorUserIds(): string[] {
+  return memberships.filter((m) => m.role === "admin").map((m) => m.userId);
+}
+
+/**
  * Record a membership created at runtime.
  *
  * Called by the in-memory store inside `addOrganizationMember`, so the user row
