@@ -1413,6 +1413,35 @@ log said the board was told, the outbox screen said nothing had been sent, and
 both were right. The queue is now a seam on the backend, and the dispatcher
 drains whichever one the data layer filled.
 
+### The visitor suite
+
+`e2e/zzzzzzzzzzzzzz-visitor.spec.ts` is the third thing that runs on its own,
+and it is the only one needing real sign-on *and* a database at once — because
+the thing it is about only exists where both are true: a deployment that
+authenticates, a visitor who has not, and a demonstration they can still click
+through.
+
+```bash
+DATABASE_URL=postgresql://you@localhost:5432/oppeco DATABASE_READ_ONLY=false \
+  AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev &
+AUTH_MODE=code npx playwright test e2e/zzzzzzzzzzzzzz-visitor.spec.ts
+```
+
+The database has to be seeded, because the demonstration's account is handed to
+a signed-out caller only where the market it is pinned to says `is_demo_data` —
+an unseeded database has no demonstration to show, and the suite would have
+nothing to walk. It skips itself without `AUTH_MODE=code`, so `npm run test:e2e`
+passes straight over it.
+
+The assertion it exists for is the last one, and it is the only one a screen
+cannot make: a second browser context meets the demonstration exactly as seeded
+after the first has clicked **Apply**. Had that click reached the shared
+database rather than the clicking visitor's own cookie, the second context would
+be short by one — which is precisely what happened before `isDemonstrationVisitor`
+was derived from the request instead of remembered about it, while the interface
+said exactly what it says now. Running the suite leaves the row counts where it
+found them, which is the same claim stated from the other side.
+
 ## Email
 
 Messages send through [Resend](https://resend.com) when configured, and are recorded either way.
