@@ -6,6 +6,7 @@ import { demoSignOnEnabled } from "@/auth/config";
 import { siteTitle } from "@/brand";
 import { resolvePartnerTheme } from "@/theme/resolve";
 import { backend } from "@/data/backend";
+import { showsDemonstrationData } from "@/lib/demonstration";
 
 export const metadata: Metadata = {
   title: siteTitle(),
@@ -38,6 +39,11 @@ export default async function RootLayout({
   // which is a client component and must not be trusted to work out whether
   // the role picker is allowed.
   const demoSignOn = demoSignOnEnabled();
+  // Whether the rows this session is being shown are the demonstration's — a
+  // question about data, which is why it is answered here and not from
+  // `AUTH_MODE`. Reads a repository, so it belongs beside the theme rather
+  // than in the shell.
+  const showsDemoData = await showsDemonstrationData(actor);
 
   return (
     <html lang="en">
@@ -50,6 +56,7 @@ export default async function RootLayout({
           theme={theme}
           readOnly={readOnly}
           demoSignOn={demoSignOn}
+          showsDemoData={showsDemoData}
         >
           {children}
         </Shell>
