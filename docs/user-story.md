@@ -263,9 +263,9 @@ stateDiagram-v2
     inactive --> verified
 ```
 
-Guardian consent and under-18 PII gating are **not** in the schema — there is no guardian, date-of-birth, or age field anywhere in the model. This was previously written up as "in the schema but unreachable," which was wishful.
+Guardian consent is now **recorded** but still cannot be **required**. `ConsentRecord` exists with a `grantedBy` of `learner` or `parent_guardian`, scoped to the institution whose records it covers, and the college portal records one. What is still missing is any date of birth or age field anywhere in the model.
 
-It matters now that dual-credit high school students are in scope: nothing distinguishes a sixteen-year-old from a college sophomore, so nothing can apply the consent rules or the paid-work hour limits that follow from being a minor. See [`security-and-data.md`](security-and-data.md) §2 and §3a.
+So the platform can say a guardian consented and cannot say who needed one. That is the gap that matters now that dual-credit high school students are in scope: nothing distinguishes a sixteen-year-old from a college sophomore, so nothing can *demand* the consent before an application, or apply the paid-work hour limits that follow from being a minor. See [`security-and-data.md`](security-and-data.md) §2 and §3a.
 
 ---
 
@@ -276,7 +276,7 @@ A local business joins the market, is vetted, and posts — with college help if
 **Standard postings** carry title, description, county, term and dates, hours per week, wage, skills, credit hours, supervisor, openings.
 **Micro postings** carry project title, deliverable, estimated hours, deadline, compensation, skills.
 
-**[Q1]** Does Admin or the college review postings before publication? Given the college is the local operator, college review seems more natural than admin review — and it pairs with the assistance flow.
+**[Q1 — settled]** The college reviews postings before publication, which is what the build does: its portal holds the review queue, **Publish** and **Request changes**, and the administrator has no posting review. It falls out the way the open question guessed it would — the college is the local operator, and review pairs with the assistance flow.
 
 **Mentorship offers** carry a format, the named person a student would actually meet and their role, topics, and how many students at once. They go live without college review, because review is what makes a posting credit-bearing and there is no academic claim here to underwrite — but vetting still gates them, and gates them harder: mentorship is the one form with no supervisor, no timesheet, and no board interview standing between an adult and a student.
 
@@ -358,7 +358,7 @@ stateDiagram-v2
 
 The college reviews the evidence — hours and evaluation for standard, accepted deliverable for micro — and grants credit. The award writes back to the student's profile as **verified completed experience**, attested by both a college and a state agency.
 
-**[Q15]** Do micro-internships stack toward more credit? Three 1-credit projects making 3 credits is the first thing a student will ask.
+**[Q15 — settled]** Micro-internships stack. An award names several applications and carries its unspent hours forward, and the learner sees a credit bank filling toward the threshold rather than a project that fell short.
 
 ---
 
@@ -378,6 +378,48 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 ---
 
+## Where the product and this story diverge
+
+From walking all five portals in the running application, September 2026. Recorded here rather than as five per-role lists, because almost every gap below spans portals: the micro track is missing a step on the learner's side *and* the matching step on the employer's, and either one alone is half a feature. Read them whole.
+
+### Nobody can get in
+
+Phase 1 opens "students self-activate once their market is live" and Phase 2 with "a local business joins the market." Neither has a door. There is no registration route, no join form, and no self-service anything — a learner exists because the seed made one, and so does a business. `StudentStatus` carries `registered`, `profile_complete` and `pending_verification`, and no screen in the application can put a learner into any of the three; the product only ever sees `verified`.
+
+What *is* built is everything downstream of the door. The college has a verification queue with **Verify** and **Reject verification**, the administrator has vetting with **Begin vetting**, **Request more information**, **Information received**, **Approve** and **Reject**, and both work. The only way into the system is the administrator's **Add somebody to an organization**. Two reviewers, both waiting on a queue nothing can fill.
+
+### The micro track cannot be completed
+
+Phase 5 says the student submits the deliverable and the business accepts it or requests a revision, and that acceptance *is* the evaluation. `Application` carries `deliverableSubmitted` and `deliverableAccepted`, and **both are written only by the seed**. The learner's **Submit for credit** is a status transition that records no deliverable; the employer's portal offers **Assign project**, **Mark filled** and **End placement early**, and nothing that accepts one.
+
+The file machinery for it already exists and is reachable from nowhere: `UPLOAD_PURPOSES` in `src/services/uploads/validation.ts` declares exactly two purposes, `resume` and `deliverable`, with magic-byte checking, size caps, a Postgres store, a retrieval route and access rules. The design system has a `FileUpload` component. The only screen that renders it is the design gallery. So the resume the master profile is supposed to carry, and the deliverable the micro track turns on, are the same missing wiring twice.
+
+### No one can raise a problem
+
+Phase 5 ends "an escalation path exists on both tracks — any party raises a problem, it routes to Admin." No portal has that action, and nothing in the codebase implements it. The administrator's **What's stuck** is derived from dwell time — real, and load-bearing, and only able to see a placement that has gone quiet. A placement going wrong loudly, where somebody knows and wants to say so, has nowhere to be said.
+
+### A minor still cannot be recognised
+
+Stated under Phase 1 and repeated here because it crosses every role: consent can be recorded, with `parent_guardian` as a grantor, and the college portal records it. No date of birth or age exists anywhere in the model, so nothing can require that consent before an application, gate a field, or cap hours. The reviewer sees consent when it is offered and cannot be told when it is owed.
+
+### What the walk found working
+
+Phase 4 runs end to end and is the best-built thing here: the learner picks a time inline, confirms in a dialog naming the officer and the duration, and the card becomes **Interview booked** with a **Release slot and rebook** the story never asked for. The board's side matches — **Publish slots**, **Record interview outcome**, **Determine participant eligible**, **Authorize funding**, each with its refusal.
+
+Outcome collection is built as Q23a resolved it, across four portals: the learner's **Tell us where you are**, the college's **Record outcome**, the employer's **Did you keep them on?**, and the administrator's chase queue with **Ask the employer** and **Ask the learner** kept apart. Credit banking works as Q21 now says. The verification gate is enforced where it counts — `submitApplication` refuses an unverified learner rather than the portal merely declining to draw the button.
+
+### Questions the build has answered without this document noticing
+
+**Q1 — who reviews postings before publication?** The college does. Its portal has **Postings awaiting review**, **Publish** and **Request changes**; the administrator has no posting review at all. Built, shipped, and still listed open below.
+
+**Q3 — does the business attend the board interview?** Answered by omission rather than decided: the employer's portal has no interview affordance of any kind, so it is student-only in practice. That is the answer the question expected, reached without anybody choosing it, which is worth knowing before a board asks to sit in.
+
+### Phase 7 is larger than this document describes
+
+The administrator's console also holds second-factor enrolment, region boundaries, the retention schedule with identities due for removal, and the access panel that moves a work address or adds a person to an organization. None of that appears in Phase 7 above, which still lists only pipeline, exceptions, budget, reporting, intervention and audit. The product is ahead of the story here rather than behind it.
+
+---
+
 ## Open questions
 
 ### New, from the market and subsidy model
@@ -387,7 +429,7 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q18** | Is the program open to all students with subsidy for those who qualify, or only to eligible students? | If subsidy is scarce or restricted, unsubsidized placements need a real path, not a dead end |
 | **Q20** | Does the board have a fixed annual budget the program draws down? | If yes, the market has capacity limits and Admin's job includes allocating scarce subsidy |
 | **Q16** | Naming for the market entity; one board to many colleges? | Model root; WIOA areas and college service areas don't align cleanly |
-| **Q21** | **How does a 5–40 hour micro-internship earn 1 credit?** Stack them, enlarge the track, or drop credit from it | A single micro-internship falls short of the ~45-hour credit threshold. If they stack, `CreditAward` is many-to-many with placements from day one |
+| **Q21** | ~~**How does a 5–40 hour micro-internship earn 1 credit?**~~ **Answered — they stack.** `CreditAward.applicationIds` is a list rather than a single placement, and `carriedHours` carries the surplus into the next award, because micro projects are indivisible and covering 90 hours can take 120. The learner's portal shows it as a credit bank filling toward the threshold | It was many-to-many from day one, as the open question predicted it would have to be. What the build does **not** settle is whose threshold: `hoursPerCredit` is one number, and Q11 — institution-configurable minimum hours per credit — is still open behind it |
 | **Q22** | **Who initiates a mentorship pairing — the student, or the college?** | Decides whether a pairing record exists at all. Without one, declared capacity is a claim nobody reconciles, and mentorship contributes nothing to the employment outcome the platform measures |
 | **Q25** | **Which fields has each college designated as directory information?** The platform gates the same fields for every institution | FERPA lets directory information be disclosed without consent, but only where the institution designated it, gave public notice and offered an opt-out — and each college's designation differs. Gating uniformly is the safe reading and is almost certainly stricter than some partners need; loosening it per college needs a registrar to say what theirs covers |
 | **Q24** | **What happens to a fund at program-year rollover?** An unspent allocation, a commitment that crosses the boundary, and whether next year is a new row or the same one re-allocated | A board and a foundation answer this differently — public money often does not carry over and philanthropic money usually does — so one rule would be wrong for one of them. Until it is decided, a fund's `programYear` is a label rather than a boundary anything enforces |
@@ -398,8 +440,8 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 | # | Question | Status |
 |---|---|---|
-| **Q1** | Who reviews postings before publication? | Open — college review now looks more natural than admin |
-| **Q3** | Does the business attend the board interview? | Open — student-only fits an eligibility determination |
+| **Q1** | Who reviews postings before publication? | **Answered by the build — the college does.** Its portal reviews, publishes and requests changes; the administrator has no posting review |
+| **Q3** | Does the business attend the board interview? | **Answered by omission** — the employer's portal has no interview affordance, so it is student-only in practice. Worth deciding on purpose before a board asks to sit in |
 | **Q5** | Formal midpoint check-in on standard placements? | Open |
 | **Q6** | Skills taxonomy — O\*NET or custom? | Open |
 | **Q9** | Can one posting produce multiple placements? | Open. Near-certainly yes for micro |
@@ -407,7 +449,7 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 | **Q11** | Institution-configurable minimum hours per credit | Open |
 | **Q12** | How long does participant eligibility last? | **Moot** under per-job clearance |
 | **Q14** | Per-project or blanket institutional approval for micro? | Open |
-| **Q15** | Do micro-internships stack toward credit? | **Superseded by Q21** — stacking is likely required, not optional |
+| **Q15** | Do micro-internships stack toward credit? | **Answered with Q21** — they stack, and the surplus carries |
 
 ### Resolved
 
