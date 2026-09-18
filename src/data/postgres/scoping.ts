@@ -10,6 +10,7 @@
  * text, which is how a missing predicate gets caught without a database.
  */
 
+import { viewsDemoData } from "@/domain/identity";
 import type { ActorContext } from "@/domain/types";
 import { joinSql, sql, type Sql } from "./client";
 
@@ -21,7 +22,20 @@ import { joinSql, sql, type Sql } from "./client";
  * cross-tenant leak, so it is written once and never inlined.
  */
 export function marketScope(actor: ActorContext, table: string): Sql {
-  if (actor.membership.role === "admin") return sql`TRUE`;
+  if (actor.membership.role === "admin") {
+    // Cross-market, but not across both worlds. This used to be `TRUE`, which
+    // is right about tenancy and wrong about truth: the administrator's console
+    // sums every market it can see, so a deployment holding the demonstration
+    // beside a real programme would report invented placements and invented
+    // money inside a figure somebody takes to a funder.
+    //
+    // A subquery rather than a join, because this fragment is composed into
+    // queries that already join what they need and cannot have a table added
+    // underneath them.
+    return sql`${raw(table)}.market_id IN (
+      SELECT id FROM markets WHERE is_demo_data = ${viewsDemoData(actor)}
+    )`;
+  }
   return sql`${raw(table)}.market_id = ${actor.membership.marketId}`;
 }
 
@@ -35,7 +49,11 @@ export function marketScope(actor: ActorContext, table: string): Sql {
  * database while passing every test that only inspected the generated text.
  */
 export function ownMarketScope(actor: ActorContext): Sql {
-  if (actor.membership.role === "admin") return sql`TRUE`;
+  // The `markets` table answers it directly rather than through a subquery
+  // against itself.
+  if (actor.membership.role === "admin") {
+    return sql`markets.is_demo_data = ${viewsDemoData(actor)}`;
+  }
   return sql`markets.id = ${actor.membership.marketId}`;
 }
 

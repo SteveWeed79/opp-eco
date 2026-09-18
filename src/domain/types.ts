@@ -47,6 +47,23 @@ export interface ActorContext {
    * password to owe a change on.
    */
   passwordChangeOwed?: boolean;
+  /**
+   * Which world a cross-market administrator is looking at.
+   *
+   * Only an administrator has the question to answer. Every other role is
+   * anchored to one market by their membership, so whether that market is the
+   * demonstration is already decided for them and `marketScope` never consults
+   * this.
+   *
+   * A switch rather than a filter that adds: the administrator is looking at
+   * the demonstration *or* at real programmes, never both at once. Mixing them
+   * is the bug this exists to prevent — a subsidy tile summing invented money
+   * into a figure a funder is shown.
+   *
+   * Absent means real, matching the column's own default. Forgetting it shows
+   * an empty console rather than somebody's learners.
+   */
+  viewingDemoData?: boolean;
 }
 
 // ---------------------------------------------------------------------------

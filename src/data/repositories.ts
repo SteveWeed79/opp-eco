@@ -12,6 +12,8 @@
  * read another market's roster no matter what a page asks for.
  */
 
+import { viewsDemoData } from "@/domain/identity";
+import * as seed from "./seed";
 import type {
   ActorContext,
   Application,
@@ -287,11 +289,30 @@ export interface Repositories {
  * Admin is the only cross-market role, which is deliberate and audited.
  * Everyone else sees exactly one market.
  */
+/**
+ * Which markets the fixtures flag as the demonstration.
+ *
+ * The in-memory layer *is* the fixtures, so this is derived from them rather
+ * than asserted — a fifth market added unflagged would be treated as real
+ * here, which is the same answer Postgres gives for an unflagged row. The two
+ * layers must agree, and `integration.test.ts` fails if they stop.
+ */
+const DEMO_MARKET_IDS = new Set(
+  seed.markets.filter((m) => m.isDemoData).map((m) => m.id),
+);
+
+/** Whether a market belongs to the world this actor asked for. */
+function marketMatchesWorld(actor: ActorContext, marketId: string): boolean {
+  return DEMO_MARKET_IDS.has(marketId) === viewsDemoData(actor);
+}
+
 export function visibleMarketIds(
   actor: ActorContext,
   allMarketIds: string[],
 ): string[] {
-  if (actor.membership.role === "admin") return allMarketIds;
+  if (actor.membership.role === "admin") {
+    return allMarketIds.filter((id) => marketMatchesWorld(actor, id));
+  }
   return actor.membership.marketId ? [actor.membership.marketId] : [];
 }
 
@@ -299,7 +320,11 @@ export function inScope<T extends { marketId: string }>(
   actor: ActorContext,
   rows: T[],
 ): T[] {
-  if (actor.membership.role === "admin") return rows;
+  // Cross-market, but not across both worlds — the mirror of `marketScope`'s
+  // admin branch, and the reason that one stopped being `TRUE`.
+  if (actor.membership.role === "admin") {
+    return rows.filter((r) => marketMatchesWorld(actor, r.marketId));
+  }
   return rows.filter((r) => r.marketId === actor.membership.marketId);
 }
 

@@ -35,6 +35,7 @@ import { byOfferOrder } from "@/domain/offer";
 import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
+import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
 import * as seed from "./seed";
 import { DEMO_NOW } from "./seed";
@@ -268,14 +269,18 @@ export const repositories: Repositories = {
     // had two shapes depending on which accessor answered.
     list: async (actor) =>
       actor.membership.role === "admin"
-        ? seed.markets
+        ? // The market's own flag answers directly — the mirror of
+          // `ownMarketScope`, which reads the column rather than a subquery
+          // against the table it is already selecting from.
+          seed.markets.filter((m) => m.isDemoData === viewsDemoData(actor))
         : seed.markets.filter((m) => m.id === actor.membership.marketId),
     find: async (actor, id) => {
       const market = seed.markets.find((m) => m.id === id);
       if (!market) return null;
-      if (actor.membership.role !== "admin" && actor.membership.marketId !== id) {
-        return null;
+      if (actor.membership.role === "admin") {
+        return market.isDemoData === viewsDemoData(actor) ? market : null;
       }
+      if (actor.membership.marketId !== id) return null;
       return market;
     },
   },

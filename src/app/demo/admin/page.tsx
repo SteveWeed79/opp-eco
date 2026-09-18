@@ -46,6 +46,8 @@ import {
 import { actorForPortal } from "@/auth/session";
 import { healthReport } from "@/services/health";
 import { mfaStatus } from "@/services/mfa";
+import { demoSignOnEnabled } from "@/auth/config";
+import { setDemoView } from "./actions";
 import { SecondFactor } from "./SecondFactor";
 import { Access } from "./Access";
 import {
@@ -270,6 +272,55 @@ export default async function AdminPage() {
         title="Network Operations"
         subtitle={`${liveMarkets.length} live ${liveMarkets.length === 1 ? "market" : "markets"} · ${health.length - liveMarkets.length} in the launch pipeline`}
       />
+
+      {/* Which world every figure below is counted from — under real sign-on
+          only. The role picker's session *is* the demonstration and `getActor`
+          will not let a cookie take it to a world it holds no rows in, so the
+          control would be one that does nothing; the chrome's banner already
+          says what that session is looking at.
+
+          Which world every figure below is counted from.
+          A switch rather than a checkbox that adds: the demonstration and real
+          programmes can live in one database, and a subsidy total summing
+          invented money into real money is the mistake worth a control of its
+          own. Stated even when it is off, because a reader cannot tell which
+          world they are looking at from the numbers — which is the whole
+          problem. */}
+      {!demoSignOnEnabled() && (
+      <form action={setDemoView.bind(null, !admin.viewingDemoData)}>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-panel border px-5 py-3.5 ${
+            admin.viewingDemoData
+              ? "border-micro-600/40 bg-micro-600/5"
+              : "border-line bg-surface"
+          }`}
+        >
+          <p className="text-sm text-ink-700">
+            {admin.viewingDemoData ? (
+              <>
+                <span className="font-bold text-ink-950">
+                  Counting the demonstration.
+                </span>{" "}
+                Every figure below is invented.
+              </>
+            ) : (
+              <>
+                <span className="font-bold text-ink-950">
+                  Counting real programmes.
+                </span>{" "}
+                Demonstration markets are excluded.
+              </>
+            )}
+          </p>
+          <button
+            type="submit"
+            className="shrink-0 bg-surface border border-line-strong text-ink-700 px-4 py-2 rounded-card font-semibold text-sm shadow-e1 hover:bg-canvas hover:border-ink-400 active:translate-y-px transition-all"
+          >
+            {admin.viewingDemoData ? "Show real programmes" : "Show the demonstration"}
+          </button>
+        </div>
+      </form>
+      )}
 
       {/* Exception-first: the numbers that mean someone has to do something */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

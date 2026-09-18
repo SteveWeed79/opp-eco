@@ -8,6 +8,10 @@ import { closeIntroduction, makeIntroduction } from "@/app/_actions/mentorship";
 import { nudgeForFollowUp } from "@/app/_actions/outreach";
 import { redefineMarketRegion } from "@/app/_actions/region";
 import { overrideInput, validate } from "@/services/validation";
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { DEMO_VIEW_COOKIE } from "@/auth/session";
+import { DEMO_ROOT } from "@/routes";
 
 /**
  * Administrator override.
@@ -167,4 +171,31 @@ export async function adminRedefineRegion(
   source: unknown,
 ): Promise<ActionResult> {
   return redefineMarketRegion(marketId, state, counties, effectiveFrom, source);
+}
+
+/**
+ * Switch the console between the demonstration and real programmes.
+ *
+ * A switch, not a filter that adds: the administrator is looking at one world
+ * or the other, never both summed together. Both worlds can exist in one
+ * database — the demonstration is `markets.is_demo_data`, not a separate
+ * deployment — and a subsidy tile adding invented money to real money is the
+ * failure this exists to prevent.
+ *
+ * Stored in a cookie rather than against the account, because it is a view
+ * preference and not a permission. It decides what a console shows and never
+ * what anybody may do; the scope it feeds narrows to one world, so a forged
+ * value can only ever show the demonstration, which is public at `/demo`.
+ */
+export async function setDemoView(next: boolean): Promise<void> {
+  const store = await cookies();
+  store.set(DEMO_VIEW_COOKIE, next ? "1" : "0", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+  // Every figure on the console is derived from the scope this changes, so the
+  // cached render is wrong the moment it flips.
+  revalidatePath(DEMO_ROOT, "layout");
 }

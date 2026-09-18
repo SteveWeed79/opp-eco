@@ -116,7 +116,11 @@ export const demoAccounts: DemoAccount[] = ACCOUNTS.map((account) => {
 export function contextFor(role: ActorRole): ActorContext {
   const account = ACCOUNTS.find((a) => a.role === role) ?? ACCOUNTS[0];
   const user = seed.users.find((u) => u.id === account.membership.userId)!;
-  return { user, membership: account.membership };
+  // These are the demonstration's own accounts, so an administrator minted
+  // here is looking at the demonstration. Without this the role picker's admin
+  // console renders empty against fixtures flagged `is_demo_data`, which is the
+  // correct default for a real deployment and the wrong one for the demo.
+  return { user, membership: account.membership, viewingDemoData: true };
 }
 
 /**

@@ -1697,3 +1697,67 @@ withDatabase("re-seeding a database somebody is already using", () => {
     expect(outcome.preserved).toEqual([]);
   });
 });
+
+/**
+ * The administrator sees one world at a time.
+ *
+ * `marketScope` returned `TRUE` for an administrator, which is right about
+ * tenancy and wrong about truth: the console sums every market it can see, so
+ * a deployment holding the demonstration beside a real programme reported
+ * invented placements and invented money inside figures somebody takes to a
+ * funder.
+ *
+ * Asserted here rather than only against generated text, because this is the
+ * assertion a recording client cannot make: whether Postgres agrees that the
+ * subquery excludes what it claims to.
+ */
+withDatabase("an administrator's world", () => {
+  const admin = contextFor("admin");
+  const viewingReal = { ...admin, viewingDemoData: false };
+
+  beforeEach(async () => {
+    await reseed();
+  });
+
+  it("sees the demonstration's markets when asking for the demonstration", async () => {
+    const markets = await postgresRepositories(client).markets.list(admin);
+    expect(markets.length).toBeGreaterThan(0);
+    expect(markets.every((m) => m.isDemoData)).toBe(true);
+  });
+
+  it("sees nothing when asking for real programmes, because there are none", async () => {
+    // Every seeded market is the demonstration, so this is the whole fixture
+    // set correctly withheld. The number that matters is zero.
+    const repositories = postgresRepositories(client);
+    expect(await repositories.markets.list(viewingReal)).toEqual([]);
+    expect(await repositories.organizations.list(viewingReal)).toEqual([]);
+    expect(await repositories.students.list(viewingReal)).toEqual([]);
+    expect(await repositories.applications.list(viewingReal)).toEqual([]);
+    expect(await repositories.fundingSources.list(viewingReal)).toEqual([]);
+  });
+
+  it("agrees with the in-memory layer about both worlds", async () => {
+    // Parity is the assertion everywhere else in this file, and it has to hold
+    // for the new predicate too — the two layers disagreeing about which rows
+    // are fictional is exactly how an invented figure reaches a real report.
+    const pg = postgresRepositories(client);
+    for (const actor of [admin, viewingReal]) {
+      const fromSql = await pg.markets.list(actor);
+      const fromMemory = await memoryRepositories.markets.list(actor);
+      expect(fromSql.map((m) => m.id).sort()).toEqual(
+        fromMemory.map((m) => m.id).sort(),
+      );
+    }
+  });
+
+  it("does not consult the flag for a role anchored to one market", async () => {
+    // Every other role is pinned by their membership, so the question is
+    // already answered for them. Flipping the field must change nothing.
+    const college = contextFor("college");
+    const pg = postgresRepositories(client);
+    const asIs = await pg.students.list(college);
+    const flipped = await pg.students.list({ ...college, viewingDemoData: false });
+    expect(flipped.map((s) => s.id)).toEqual(asIs.map((s) => s.id));
+    expect(asIs.length).toBeGreaterThan(0);
+  });
+});

@@ -100,6 +100,19 @@ export function isPrivileged(role: ActorRole): boolean {
 }
 
 /**
+ * Whether this actor's reads should see the demonstration instead of real
+ * programmes.
+ *
+ * One definition, imported by both data layers, because the two scoping
+ * implementations disagreeing about it is precisely how invented figures reach
+ * a real report. The default is `false` in the one place it is written, so a
+ * caller that never sets the field cannot accidentally be shown fixtures.
+ */
+export function viewsDemoData(actor: { viewingDemoData?: boolean }): boolean {
+  return actor.viewingDemoData === true;
+}
+
+/**
  * Who a second factor is expected of.
  *
  * The administrator, and only the administrator. Not because the others do not

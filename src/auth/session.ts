@@ -33,6 +33,17 @@ export const SESSION_COOKIE = "oe_demo_role";
 export const AUTH_COOKIE = "oe_session";
 
 /**
+ * Which world the administrator asked to look at.
+ *
+ * A view preference rather than a credential, so it lives in its own cookie
+ * and not in the session: it decides what a console shows, never what anybody
+ * is allowed to do. Forging it buys sight of the demonstration, which is
+ * public at `/demo` anyway — and it cannot buy the reverse, because the
+ * predicate it feeds narrows to one world rather than widening to both.
+ */
+export const DEMO_VIEW_COOKIE = "oe_demo_view";
+
+/**
  * Somebody between the two factors.
  *
  * A different name from the session cookie on purpose, and holding a value that
@@ -114,9 +125,24 @@ export function currentProvider(): SessionProvider {
  * question. React's `cache` is scoped to the request, so signing in during one
  * and reading in the next still sees the new session.
  */
-export const getActor = cache(
-  async (): Promise<ActorContext | null> => currentProvider().resolve(),
-);
+export const getActor = cache(async (): Promise<ActorContext | null> => {
+  const actor = await currentProvider().resolve();
+  // Only an administrator has the question to answer: every other role is
+  // pinned to one market by their membership, so whether that market is the
+  // demonstration is already decided and no scope consults the field.
+  if (!actor || actor.membership.role !== "admin") return actor;
+
+  // Already true for a context the role picker minted — that session *is* the
+  // demonstration, and a cookie must not be able to take it back to a real
+  // world it has no rows in.
+  if (actor.viewingDemoData) return actor;
+
+  const store = await cookies();
+  return {
+    ...actor,
+    viewingDemoData: store.get(DEMO_VIEW_COOKIE)?.value === "1",
+  };
+});
 
 /**
  * The actor for a portal page.
