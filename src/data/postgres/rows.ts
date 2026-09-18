@@ -31,6 +31,8 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Deliverable,
+  Escalation,
   InterviewSlot,
   MarketStage,
   MatchFactor,
@@ -317,6 +319,47 @@ export function toConsentRecord(row: Row): ConsentRecord {
     status: text(row.status) as ConsentRecord["status"],
     recordedByUserId: text(row.recorded_by),
     note: optionalText(row.note),
+    version: number(row.version),
+  };
+}
+
+export function toDeliverable(row: Row): Deliverable {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    applicationId: text(row.application_id),
+    studentId: text(row.student_id),
+    summary: text(row.summary),
+    // Nullable rather than optional: "no file, this is a link or a brief" is a
+    // real and common answer, not a field somebody forgot.
+    fileKey: nullableText(row.file_key),
+    submittedOn: timestamp(row.submitted_on),
+    status: text(row.status) as Deliverable["status"],
+    response: optionalText(row.response),
+    respondedOn: nullableTimestamp(row.responded_on),
+    respondedByUserId: nullableText(row.responded_by),
+    round: number(row.round),
+    version: number(row.version),
+  };
+}
+
+export function toEscalation(row: Row): Escalation {
+  return {
+    id: text(row.id),
+    marketId: text(row.market_id),
+    applicationId: text(row.application_id),
+    raisedByUserId: text(row.raised_by),
+    raisedByRole: text(row.raised_by_role) as Escalation["raisedByRole"],
+    kind: text(row.kind) as Escalation["kind"],
+    summary: text(row.summary),
+    raisedOn: timestamp(row.raised_on),
+    status: text(row.status) as Escalation["status"],
+    // Nullable rather than optional on both: "nobody has picked this up" is a
+    // state the administrator's queue reads, not a field somebody forgot.
+    acknowledgedOn: nullableTimestamp(row.acknowledged_on),
+    acknowledgedByUserId: nullableText(row.acknowledged_by),
+    resolution: optionalText(row.resolution),
+    resolvedOn: nullableTimestamp(row.resolved_on),
     version: number(row.version),
   };
 }

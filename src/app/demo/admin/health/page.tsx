@@ -7,7 +7,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Card,
   CardHeader,
@@ -129,14 +128,6 @@ export default async function HealthPage() {
         </ul>
       </Card>
 
-      <Assumption>
-        This page and <code className="font-mono">/api/health</code> read the same
-        checks, and neither can name a person — a health report is meant to be read
-        by a monitor, a status page and whoever is on call, none of which have the
-        access controls the database has. The endpoint tells an anonymous caller the
-        verdict and nothing more, because &ldquo;Postgres is not answering&rdquo; is
-        written for an operator and is a gift to anybody else.
-      </Assumption>
     </div>
   );
 }

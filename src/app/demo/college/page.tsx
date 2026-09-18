@@ -9,7 +9,6 @@ import {
   UserCheck,
 } from "lucide-react";
 import {
-  Assumption,
   Badge,
   Button,
   Card,
@@ -38,7 +37,7 @@ import { mentorshipFormatLabel, placesLeft } from "@/domain/mentorship";
 import { OUTCOME_KINDS } from "@/domain/outcome";
 import { CONSENT_GRANTORS, CONSENT_SCOPES, hasConsent } from "@/domain/consent";
 import { RecordConsent } from "@/components/RecordConsent";
-import { DEMO_NOW } from "@/data/seed";
+import { asOf } from "@/lib/clock";
 import { IntroduceStudent } from "@/components/IntroduceStudent";
 import { IntroductionOutcome } from "@/components/IntroductionOutcome";
 import { RecordOutcome } from "@/components/RecordOutcome";
@@ -47,6 +46,7 @@ import {
   studentLifecycle,
 } from "@/app/_actions/lifecycle";
 import { postingTotalHours, type MentorshipPairing, type Posting } from "@/domain/types";
+import { RaiseProblem } from "@/components/RaiseProblem";
 import {
   TransitionActions,
   POSTING_CONFIRM,
@@ -58,6 +58,7 @@ import {
   collegeIntroduceStudent,
   collegeRecordConsent,
   collegeRecordOutcome,
+  collegeRaiseProblem,
   collegeTransition,
 } from "./actions";
 import { ThemeChecker } from "./ThemeChecker";
@@ -66,6 +67,8 @@ import { opportunityPath } from "@/routes";
 
 export default async function CollegePage() {
   const actor = await actorForPortal("college");
+  // Frozen for the demonstration, real for a real programme — see `asOf`.
+  const now = await asOf(actor);
   const { organizationName } = await nameLookups(actor);
   // Whether there is a real session, as opposed to the signed-out demo
   // fallback this portal renders under. Only affects what is linkable.
@@ -79,7 +82,7 @@ export default async function CollegePage() {
   const region = currentRegion(
     await repositories.regionDefinitions.forMarket(actor, market.id),
     market.id,
-    DEMO_NOW,
+    now,
   );
   // Part of the transition context. No college transition is budget-guarded,
   // but the state machine takes one context shape for every caller.
@@ -128,7 +131,7 @@ export default async function CollegePage() {
           sourceOrgId: college.id,
           scope: "education_record",
         },
-        DEMO_NOW,
+        now,
       ),
   );
 
@@ -563,6 +566,16 @@ export default async function CollegePage() {
                                   unreviewedWeeks: unreviewedWeeks.get(application.id) ?? 0,
                                 }).map((t) => ({ to: t.to, label: t.label }))}
                               />
+                              {/* The college is an intermediary rather than a
+                                  party to the placement, and hears about
+                                  trouble from both sides. Its report is its
+                                  own — the learner's and the employer's stay
+                                  invisible to it, as its own is to them. */}
+                              <RaiseProblem
+                                applicationId={application.id}
+                                placementTitle={`${student.name} — ${posting.title}`}
+                                action={collegeRaiseProblem}
+                              />
                             </span>
                           </li>
                         );
@@ -601,11 +614,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            {hoursPerCredit} hours per credit is your institution&rsquo;s configurable
-            policy (Q11), enforced when a posting is published rather than discovered
-            after the work is done.
-          </Assumption>
         </div>
       </Card>
 
@@ -666,13 +674,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Who had to sign is recorded rather than worked out. FERPA rights
-            transfer at 18 or on enrolment at the college at any age, so a
-            dual-credit learner may consent for themselves here while a parent
-            still holds what their school knows — and no field on this screen
-            can tell which applies.
-          </Assumption>
         </div>
       </Card>
 
@@ -742,9 +743,6 @@ export default async function CollegePage() {
           </ul>
         )}
         <div className="px-6 pb-5">
-          <Assumption>
-            Asked on a clock rather than whenever somebody gets round to it: the 2nd and 4th calendar quarter after the placement ended, which is the shape workforce reporting uses. A learner records their own and an employer answers what it decided; what is still open is nothing about who, and everything about what happens to a window that closes unanswered — it stays unanswered (Q23b).
-          </Assumption>
         </div>
       </Card>
 
@@ -859,12 +857,6 @@ export default async function CollegePage() {
           )}
 
           <div className="px-6 pb-5">
-            <Assumption>
-              The college and an administrator make introductions; a student cannot
-              ask a mentor directly, because nothing else stands between an adult
-              and a student here (Q22). Closing one records whether it happened and
-              gives the mentor their place back.
-            </Assumption>
           </div>
         </Card>
       </PageSection>

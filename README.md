@@ -10,7 +10,22 @@ The program launches city by city: the administrator secures a local workforce b
 
 `/` is the **venture**: what this organization is, who it serves, what a partnership includes, and what has actually been tested. Indexed, and every figure on it is real.
 
-`/demo` is the **prototype**: five portals over one workflow, running on invented organizations, carrying a demonstration banner and `noindex` on every page.
+`/demo` is the **prototype**: five portals over one workflow, running on invented organizations, `noindex` on every page, and carrying a demonstration banner for everyone except a real person signed in with a real account.
+
+That exception is the whole difficulty in one line. The portals are not a copy of the product — they *are* the product, pointed at invented rows. So a college coordinator signing in to verify a real learner arrives at the same URL a visitor browses, and used to be met with a banner reading "every organization, student, and figure shown is fictional" above a switcher offering one-click entry to four portals she does not hold. The chrome now asks whether this is a real person working in the product — signed in **and** on a deployment that authenticates — and stands down when it is. A visitor handed an account by the role picker keeps the banner, because that is the demonstration doing exactly what it exists for.
+
+`/` also carries a **sign-in button** next to the prototype link, which it did not for some time: the only route to the login form was knowing the URL.
+
+### Which rows are the demonstration
+
+The banner is a claim about **rows**, and until recently it was decided by `AUTH_MODE` — a property of the process, which cannot know whether the claim is true. A deployment running real sign-on over seeded fixtures is telling the truth when it says they are invented, and had no way to say so.
+
+So markets carry `is_demo_data`, and nothing else needs to: every other table in the schema has `market_id`, so one flag answers "is this fictional" for a posting, a learner, a placement and a dollar figure alike.
+
+Two things about its shape are load-bearing and neither is incidental:
+
+- **The fake is flagged, not the real**, defaulting to `false`. A market is real because nobody did anything to it, so forgetting the flag hides the demonstration rather than serving a learner's record to an anonymous visitor. The other polarity fails the other way, and silently.
+- **Nothing in the application can write it**, because `markets` has no write path at all — no `INSERT`, no `UPDATE`, no unit-of-work entry, anywhere outside the operator scripts. Every market in existence came from `db:seed`. That was true by accident and is now checked: [`markets.test.ts`](src/data/postgres/markets.test.ts) fails if a market write appears in application source, so whoever adds the market-creation path this codebase still lacks has to decide deliberately what happens to the flag.
 
 They used to be the same page, and that page had to be honest and impressive at once. It opened with a program pitch and four statistics computed from seeded fixtures, under a black bar explaining that every figure above it was fictional — so a reader had to hold two contradictory frames simultaneously, and a funder given the address had nowhere to land. Splitting them is what lets the demonstration labelling stay loud without it being the first thing anybody reads.
 
@@ -47,6 +62,30 @@ reader user can actually complete a booking. That still needs a person.
 One caveat worth knowing before you run them: the demo store lives in the
 server process, so `e2e/booking.spec.ts` permanently books the seed's only
 bookable application. Restart the server to reseed.
+
+A second, if you have been running real sign-on: the suite starts `next start`,
+which loads `.env.local`, and `AUTH_ECHO_CODES=true` is **refused in a
+production build** — so a `.env.local` left in code mode makes every page throw
+`AuthConfigError` at boot and Playwright sits for two minutes before reporting
+a web-server timeout rather than the reason. CI never sees this, having no
+`.env.local`. Override for the run:
+
+```bash
+AUTH_MODE=demo DATABASE_URL= DATABASE_READ_ONLY= AUTH_ECHO_CODES= npm run test:e2e
+```
+
+Watch for the inverse, too: `reuseExistingServer` is on outside CI, so a dev
+server left on port 3000 is silently reused and the suite runs against `next
+dev` while appearing to test the production build. The tell is the wall clock —
+the suite takes about half as long against `next start`.
+
+A third, if you are testing file attachments: `UPLOAD_URL_SECRET` must be set
+to 32 characters or more for a production build to issue a download link at
+all, and **a file uploaded on the fixtures cannot be served back** — it is
+written by a Server Action and read by the route handler at
+`/api/files/[key]`, and in a production build those do not share the in-memory
+store. `next dev` does share it, so the same click works there. A deployment
+with a database reads both sides from the same table and has no such seam.
 
 ### Trying real sign-on
 
@@ -94,24 +133,36 @@ Run with no arguments, `npm run db:admin` reports who the administrators are
 and whether each of them can actually get in — an account with no password and
 no authenticator is a row, not a way in.
 
-Re-running `npm run db:seed` later does **not** cost you that account. The seed
-truncates, so it used to: an administrator cannot be created through the product
-and a refreshed set of fixtures would take the only way back into the deployment
-with it. It now carries administrators through the truncate with their passwords
-and authenticators — their sessions are dropped, so you sign in again — and
-**refuses outright** when it finds anything else it did not write, naming the
-tables rather than destroying them:
+Re-running `npm run db:seed` later does **not** cost you that account, and does
+not cost you anything else real either. The seed used to truncate, so it took
+everything; it now clears only the markets `is_demo_data` flags and rebuilds
+those. An administrator, a real market, its learners and its money are not
+"preserved" from it — no statement it runs names them. It reports both halves:
 
 ```
-Refused: the database holds rows these fixtures did not create:
+Cleared from the demonstration's markets:
+     27  applications
+     12  postings
 
+Left alone — not the demonstration's:
       1  users
-      1  region_definitions
 ```
 
-`--force` proceeds anyway and reports what it destroyed; `--replace-admins`
-drops the administrators too. Neither is needed for the ordinary case of
-refreshing the demo data on a database that holds only demo data.
+`--replace-admins` is the one flag, and it takes away everything an
+administrator could sign in with. There is no `--force` any more, because there
+is nothing left to force past.
+
+`audit_events` is append-only, enforced by a trigger that raises — which is
+why the old `TRUNCATE` was a problem rather than a convenience: truncation does
+not fire row triggers, so the seed had been going *around* the guard rather
+than respecting it. Migration `0019` grants one exemption, and where it is
+keyed is the whole of its safety: a `DELETE` only, of a row whose market is
+flagged `is_demo_data`. A real programme's audit trail is exactly as immutable
+as it was, an `UPDATE` is still refused on every row in the table, and the
+application cannot reach the exemption because it cannot write `markets`.
+
+`markets` and `users` themselves still cannot be deleted — audit rows reference
+both `ON DELETE RESTRICT` — so the fixtures upsert them in place.
 
 The password it prints is spent the first time it is used. Signing in with it
 produces a real session that may do exactly one thing: replace it. Typing a
@@ -830,10 +881,13 @@ and reveals nothing about which of its officers have accounts. Anything else
 answers `password`, which is the majority case and the one that fails generically
 a step later.
 
-**Passwords are scrypt, not a hash function.** `N=65536, r=8, p=1`, a 16-byte
+**Passwords are scrypt, not a hash function.** `N=131072, r=8, p=1`, a 16-byte
 random salt and a 32-byte key, stored as `scrypt$N$r$p$salt$key` so the
 parameters travel with the hash and raising the cost is a rehash on the next
 successful sign-in rather than a migration that locks everybody out at once.
+That mechanism has already been used once: `N` was `65536` and moved to OWASP's
+2¹⁷ baseline without anybody being locked out, which is the whole argument for
+storing the parameters alongside the key.
 scrypt rather than Argon2id for one deployment reason, stated plainly: it is in
 `node:crypto`, so there is no native module to fail to build on a platform
 nobody tested. Policy is NIST 800-63B's: at least twelve characters, no
@@ -1317,14 +1371,12 @@ doing after any change to the data layer:
 export DATABASE_URL=postgresql://you@localhost:5432/oppeco
 export DATABASE_READ_ONLY=false
 export AUTH_DEMO_WRITABLE_DB=i-am-a-test-database
-npm run db:seed -- --force && npm run build && npm run test:e2e
+npm run db:seed && npm run build && npm run test:e2e
 ```
 
-`--force` because the previous run left rows behind: the suite drives the real
-application, so it creates postings and applications the fixtures never wrote,
-and a second `db:seed` would otherwise refuse to destroy them. On this database
-that refusal is noise — the variable above has already declared it disposable —
-and everywhere else it is the point.
+The previous run's rows go without asking: the suite drives the real application
+against the demonstration's markets, so everything it creates is inside them and
+the seed clears them along with the fixtures.
 
 Every flow the demo has passes on either backend, and the sign-on suites below
 are run against both as well — the in-memory store and Postgres each hold
@@ -1384,6 +1436,35 @@ fixed the rows landed in `notification_outbox` and were never sent: the audit
 log said the board was told, the outbox screen said nothing had been sent, and
 both were right. The queue is now a seam on the backend, and the dispatcher
 drains whichever one the data layer filled.
+
+### The visitor suite
+
+`e2e/zzzzzzzzzzzzzz-visitor.spec.ts` is the third thing that runs on its own,
+and it is the only one needing real sign-on *and* a database at once — because
+the thing it is about only exists where both are true: a deployment that
+authenticates, a visitor who has not, and a demonstration they can still click
+through.
+
+```bash
+DATABASE_URL=postgresql://you@localhost:5432/oppeco DATABASE_READ_ONLY=false \
+  AUTH_MODE=code AUTH_ECHO_CODES=true npm run dev &
+AUTH_MODE=code npx playwright test e2e/zzzzzzzzzzzzzz-visitor.spec.ts
+```
+
+The database has to be seeded, because the demonstration's account is handed to
+a signed-out caller only where the market it is pinned to says `is_demo_data` —
+an unseeded database has no demonstration to show, and the suite would have
+nothing to walk. It skips itself without `AUTH_MODE=code`, so `npm run test:e2e`
+passes straight over it.
+
+The assertion it exists for is the last one, and it is the only one a screen
+cannot make: a second browser context meets the demonstration exactly as seeded
+after the first has clicked **Apply**. Had that click reached the shared
+database rather than the clicking visitor's own cookie, the second context would
+be short by one — which is precisely what happened before `isDemonstrationVisitor`
+was derived from the request instead of remembered about it, while the interface
+said exactly what it says now. Running the suite leaves the row counts where it
+found them, which is the same claim stated from the other side.
 
 ## Email
 

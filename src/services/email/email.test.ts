@@ -3,7 +3,9 @@ import { emailConfig, isUndeliverableDomain, resolveRecipient } from "./config";
 import { renderEmail } from "./render";
 import { resendChannel } from "./resend";
 import { templateFor, knownKinds } from "../templates";
-import { partiesNotifiedOn, policyKinds } from "../notification-policy";
+import { notificationsFor, partiesNotifiedOn, policyKinds } from "../notification-policy";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ApplicationStatus } from "@/domain/types";
 
 describe("email configuration fails safe", () => {
@@ -242,7 +244,7 @@ describe("policy and templates agree", () => {
     // an entity the application policy does not govern. Written as a list this
     // grew by one line per feature, which is how an orphaned template
     // eventually gets waved through by someone adding to it out of habit.
-    const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship)\./;
+    const OTHER_LIFECYCLES = /^(posting|student|organization|hours|mentorship|escalation|deliverable)\./;
     // The genuine exception to the rule, and it is a category rather than a
     // list of favours: a message sent because somebody decided to ask, not
     // because something changed. No status can own one — `application.stalled`
@@ -288,6 +290,9 @@ describe("policy and templates agree", () => {
       "hours.submitted",
       "hours.approved",
       "hours.rejected",
+      "escalation.raised",
+      "deliverable.submitted",
+      "deliverable.revision_requested",
     ].filter((kind) => !templates.has(kind));
 
     expect(missing).toEqual([]);
@@ -309,5 +314,68 @@ describe("policy and templates agree", () => {
     ] as ApplicationStatus[]) {
       expect(partiesNotifiedOn(status)).toContain("student");
     }
+  });
+});
+
+/**
+ * The administrator is a party with no market, which the rest of this table
+ * does not have to think about.
+ *
+ * These exist because the shape was wrong in a way that could not fail: the
+ * addressee resolved `admin` to the literal string `"u-admin"` — a seed fixture
+ * inside a service — and returned exactly one recipient. Nothing caught it,
+ * because no entry in the policy used the party, so the first row anybody added
+ * would have mailed an id that resolves to nothing on a real deployment and
+ * been dropped into the outbox, which is the place nobody looks.
+ */
+describe("messages addressed to the administrator", () => {
+  const context = (administrators: { id: string }[]) =>
+    ({
+      application: { track: "standard", fundingAuthorizedRate: null },
+      posting: { title: "Web Developer Trainee", creditHours: 3, deliverable: null },
+      student: { userId: "u-someone", name: "Someone" },
+      market: { name: "Southeast Kansas" },
+      college: null,
+      employer: null,
+      board: null,
+      administrators,
+      wageRatePerHour: 20,
+    }) as unknown as Parameters<typeof notificationsFor>[1];
+
+  it("reaches every administrator rather than one of them", () => {
+    const intents = notificationsFor("terminated_early", context([
+      { id: "u-admin" },
+      { id: "u-second-admin" },
+    ]));
+    const admins = intents.filter((i) => i.kind === "placement.terminated.admin");
+    expect(admins.map((i) => i.recipientUserId).sort()).toEqual([
+      "u-admin",
+      "u-second-admin",
+    ]);
+  });
+
+  it("sends nothing at all when there is no administrator yet", () => {
+    // A real state rather than an error — a deployment nobody has been added
+    // to. No message beats a message addressed to nobody, which is what the
+    // hardcoded id produced.
+    const intents = notificationsFor("terminated_early", context([]));
+    expect(intents.filter((i) => i.kind.endsWith(".admin"))).toEqual([]);
+  });
+
+  it("names no user id in the policy source, so no fixture can hide in it", () => {
+    // Structural, in the manner of `markets.test.ts`: the bug was not a wrong
+    // value but a value being there at all, and a test asserting the right id
+    // would have passed just as happily with the wrong one.
+    //
+    // Comments are stripped first, because the docstring above `addressees`
+    // quotes the id it used to return and that account of the bug is worth
+    // keeping — a guard that forces the explanation out of the file is a guard
+    // that makes the code worse.
+    const source = readFileSync(
+      join(process.cwd(), "src/services/notification-policy.ts"),
+      "utf8",
+    );
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    expect(code).not.toMatch(/["']u-[a-z]+["']/);
   });
 });

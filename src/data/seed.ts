@@ -17,6 +17,8 @@ import type {
   AuditEvent,
   ConsentRecord,
   CreditAward,
+  Deliverable,
+  Escalation,
   FundingCommitment,
   FundingSource,
   InterviewSlot,
@@ -1367,12 +1369,38 @@ const appSeeds: AppSeed[] = [
     deliverableSubmitted: false,
   },
   {
+    // Apex's other micro candidate, waiting to be assigned the project.
+    //
+    // Added when `app-15` moved to `placement_active` so the demonstration's
+    // learner had a running micro placement to hand work in against. That left
+    // `post-apex-qa` with no candidate at mutual interest, and the employer's
+    // *Assign project* — the step that starts a micro placement at all — with
+    // nothing to act on. `writes.spec.ts` caught it, which is what that suite
+    // is for.
+    id: "app-28",
+    postingId: "post-apex-qa",
+    studentId: "stu-nina",
+    status: "mutual_interest",
+    submittedDaysAgo: 4,
+    statusSinceDaysAgo: 1,
+  },
+  {
+    // The demonstration's own learner, mid-revision on a micro project.
+    //
+    // Running rather than at mutual interest, because `stu-omar` is the account
+    // the learner portal signs in as and this is the only micro placement they
+    // hold — at mutual interest there was no running micro placement anywhere
+    // in the fixtures that the demo learner could hand work in against, so the
+    // track's central action had no seeded case to be walked in.
+    //
+    // Paired with `del-app-15`, which came back for revision: the interesting
+    // state, because it shows both halves of the cycle on one screen.
     id: "app-15",
     postingId: "post-apex-qa",
     studentId: "stu-omar",
-    status: "mutual_interest",
-    submittedDaysAgo: 3,
-    statusSinceDaysAgo: 1,
+    status: "placement_active",
+    submittedDaysAgo: 24,
+    statusSinceDaysAgo: 11,
   },
   {
     id: "app-16",
@@ -2316,5 +2344,203 @@ export const auditEvents: AuditEvent[] = [
     reason:
       "Board allocation exhausted for this quarter; business agreed to proceed at full cost",
     viaOverride: false,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Escalations
+// ---------------------------------------------------------------------------
+
+/**
+ * Three problems somebody raised, chosen to exercise the three things about
+ * this record that are easy to get wrong.
+ *
+ * `esc-1` is the case the feature exists for: a placement whose statuses are
+ * all healthy — `app-1` is active, on time, hours flowing — and which is going
+ * wrong anyway. Nothing derived from dwell time can see it, and it is invisible
+ * to the employer it is about, which is the only reason the learner raised it.
+ *
+ * `esc-2` is raised by an employer rather than about one, so the fixtures do
+ * not quietly teach that escalations flow in one direction.
+ *
+ * `esc-3` is closed, so the resolution path has something to render and the
+ * parity suite has a row where `resolution` and `resolvedOn` are set.
+ */
+export const escalations: Escalation[] = [
+  {
+    id: "esc-1",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-1",
+    raisedByUserId: "u-alex",
+    raisedByRole: "student",
+    kind: "supervision",
+    summary:
+      "My supervisor has been out for three weeks and nobody has given me anything to do. I have been sitting in the break room logging hours I do not think I should be logging.",
+    raisedOn: daysAgo(4),
+    status: "open",
+    acknowledgedOn: null,
+    acknowledgedByUserId: null,
+    resolvedOn: null,
+    version: 1,
+  },
+  {
+    id: "esc-2",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-2",
+    raisedByUserId: "u-dana",
+    raisedByRole: "business",
+    kind: "academic",
+    summary:
+      "Priya's lab schedule changed this term and she can only make Tuesdays now. We can work around it but the placement will not reach the hours the credit needs at this rate.",
+    raisedOn: daysAgo(9),
+    status: "acknowledged",
+    acknowledgedOn: daysAgo(7),
+    acknowledgedByUserId: "u-admin",
+    resolvedOn: null,
+    version: 1,
+  },
+  {
+    id: "esc-3",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-14",
+    raisedByUserId: "u-marcia",
+    raisedByRole: "board",
+    kind: "pay",
+    summary:
+      "Reimbursement claim for April has been sitting with no timesheet attached and the employer says they submitted one.",
+    raisedOn: daysAgo(26),
+    status: "resolved",
+    acknowledgedOn: daysAgo(25),
+    acknowledgedByUserId: "u-admin",
+    resolution:
+      "The timesheet was submitted against the wrong placement. Re-filed against this one and the claim went through on the May run.",
+    resolvedOn: daysAgo(21),
+    version: 1,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Deliverables
+// ---------------------------------------------------------------------------
+
+/**
+ * One per micro application that has already been handed in, plus one that came
+ * back for revision.
+ *
+ * These have to agree with the two booleans on the applications above, because
+ * those are what the state machine and the credit calculation read:
+ * `deliverableSubmitted` is true exactly where a deliverable is waiting or
+ * accepted, and `deliverableAccepted` is true exactly where one is accepted.
+ * `deliverables.test.ts` asserts that agreement rather than trusting it, since
+ * a fixture drifting out of step would make the micro track behave differently
+ * on the two backends for no visible reason.
+ *
+ * `del-revision` is the case the booleans cannot express and the record exists
+ * for: work that came back with an instruction. Its application's
+ * `deliverableSubmitted` is false, which is what puts the ball back in the
+ * learner's court and takes the employer's Accept button away again.
+ */
+export const deliverables: Deliverable[] = [
+  {
+    id: "del-app-13",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-13",
+    studentId: "stu-jordan",
+    summary:
+      "Competitor landscape brief — eleven regional firms, pricing and service mix, with the three we are not currently losing to flagged.",
+    fileKey: null,
+    submittedOn: daysAgo(34),
+    status: "accepted",
+    response:
+      "Better than we asked for. The pricing table went straight into the board pack, and the three you flagged were the right three.",
+    respondedOn: daysAgo(31),
+    respondedByUserId: "u-dana",
+    round: 1,
+    version: 1,
+  },
+  {
+    // Two rounds, which is why this one is worth seeding: the college reading
+    // it later can see the work came back once and what was asked for.
+    id: "del-app-17",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-17",
+    studentId: "stu-hana",
+    summary:
+      "Second pass at the competitor brief with the two co-operatives added and the sourcing notes you asked for.",
+    fileKey: null,
+    submittedOn: daysAgo(48),
+    status: "accepted",
+    response:
+      "That is the one. Sourcing notes make it something we can hand to someone else without explaining it.",
+    respondedOn: daysAgo(45),
+    respondedByUserId: "u-dana",
+    round: 2,
+    version: 1,
+  },
+  {
+    id: "del-app-18",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-18",
+    studentId: "stu-hana",
+    summary:
+      "Utility billing reconciliation — three years of meter reads against invoices, with the 41 accounts that never reconcile listed separately.",
+    fileKey: null,
+    submittedOn: daysAgo(20),
+    status: "accepted",
+    response:
+      "The 41 accounts are worth more to us than the reconciliation itself. We have been arguing about that number for two years.",
+    respondedOn: daysAgo(18),
+    respondedByUserId: "u-dana",
+    round: 1,
+    version: 1,
+  },
+  {
+    id: "del-app-24",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-24",
+    studentId: "stu-omar",
+    summary: "Automated test suite audit — coverage by module, with the untested payment paths called out.",
+    fileKey: null,
+    submittedOn: daysAgo(27),
+    status: "accepted",
+    response: "Clear and actionable. We have already closed two of the payment gaps you found.",
+    respondedOn: daysAgo(24),
+    respondedByUserId: "u-dana",
+    round: 1,
+    version: 1,
+  },
+  {
+    id: "del-app-25",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-25",
+    studentId: "stu-omar",
+    summary: "Brand refresh moodboard — three directions with type and colour, and a one-page rationale for each.",
+    fileKey: null,
+    submittedOn: daysAgo(15),
+    status: "accepted",
+    response: "We went with the second direction. The rationale is what sold it internally.",
+    respondedOn: daysAgo(13),
+    respondedByUserId: "u-dana",
+    round: 1,
+    version: 1,
+  },
+  {
+    // The revision case. `app-15` has `deliverableSubmitted: false`, which is
+    // exactly what a revision request leaves behind — the employer's Accept is
+    // guarded off again and the learner is the one who has to act.
+    id: "del-app-15",
+    marketId: "mkt-pittsburg",
+    applicationId: "app-15",
+    studentId: "stu-omar",
+    summary: "First pass at the test suite audit — coverage numbers by module.",
+    fileKey: null,
+    submittedOn: daysAgo(6),
+    status: "revision_requested",
+    response:
+      "Coverage numbers on their own do not tell us where to spend the time. Can you rank the gaps by what they would cost us if they broke?",
+    respondedOn: daysAgo(4),
+    respondedByUserId: "u-dana",
+    round: 1,
+    version: 1,
   },
 ];

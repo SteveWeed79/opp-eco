@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { ReadOnlyError, readOnlyStore } from "./backend";
+import { ReadOnlyError, VisitorError, readOnlyStore } from "./backend";
 import { attemptWrite } from "@/app/_actions/transition";
 
 describe("a read-only deployment", () => {
@@ -48,5 +48,16 @@ describe("a read-only deployment", () => {
         throw new TypeError("column does not exist");
       }),
     ).rejects.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("a visitor cannot write", () => {
+  it("says something true of the visitor, not of the deployment", () => {
+    // `ReadOnlyError` says the database refuses writes, which is false here —
+    // the deployment is writable, this caller simply is not authenticated. The
+    // refusal itself is asserted in `visitor-guard.test.ts`, which has to mock
+    // the request-scoped flag that makes it possible.
+    expect(new VisitorError().message).toMatch(/Sign in/);
+    expect(new VisitorError().message).not.toMatch(/read-only/);
   });
 });

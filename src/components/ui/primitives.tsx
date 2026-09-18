@@ -630,21 +630,6 @@ export function Empty({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * A visible marker for a design decision standing in for an unanswered
- * question. Cheap to find, cheap to reverse.
- */
-export function Assumption({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-xs text-ink-600 border-l-2 border-warn-600 bg-warn-50/50 rounded-r-card pl-3.5 pr-4 py-2.5 text-pretty">
-      <span className="font-bold text-warn-700 uppercase tracking-wider">
-        Assumption
-      </span>{" "}
-      {children}
-    </p>
-  );
-}
-
 export function Money({ value }: { value: number }) {
   return <span className="tabular">${value.toLocaleString("en-US")}</span>;
 }

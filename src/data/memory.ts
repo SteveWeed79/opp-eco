@@ -11,6 +11,8 @@ import type {
   ActorContext,
   Application,
   ConsentRecord,
+  Deliverable,
+  Escalation,
   FundingCommitment,
   MentorshipOffer,
   HostOffer,
@@ -35,9 +37,12 @@ import { byOfferOrder } from "@/domain/offer";
 import { byEffectiveDescending } from "@/domain/region";
 import { byCommitmentOrder, byFundOrder } from "@/domain/funding";
 import { byConsentOrder, disclosureBlockReason } from "@/domain/consent";
+import { byEscalationOrder, isLive } from "@/domain/escalation";
+import { awaitsEmployer, byDeliverableOrder } from "@/domain/deliverable";
+import { viewsDemoData } from "@/domain/identity";
 import { inScope, ownedByActor, type Repositories } from "./repositories";
+import { administratorUserIds } from "./session";
 import * as seed from "./seed";
-import { DEMO_NOW } from "./seed";
 
 /** Postings an organization owns, for narrowing application access. */
 function postingIdsOwnedBy(organizationId: string | null): Set<string> {
@@ -118,6 +123,48 @@ function visibleMentorshipPairings(actor: ActorContext): MentorshipPairing[] {
  * agreement, and what consent buys it is a wider view of the learner, not sight
  * of the paperwork.
  */
+/**
+ * Escalations this actor may read: their own, or every one in the market if
+ * they are the administrator.
+ *
+ * **Not the parties the problem is about**, which is the whole design and not a
+ * narrowing bolted on afterwards — see `EscalationRepository`. An employer
+ * asking for its own placement's escalations gets an empty list, and that is
+ * the correct answer rather than a missing case.
+ *
+ * Matched clause for clause by `escalationScope` on the SQL side.
+ */
+/**
+ * Hand-ins this actor may read. Matched clause for clause by `deliverableScope`.
+ *
+ * The board sees none: micro-internships carry no public money, so there is no
+ * workflow reason for it to read a learner's work.
+ */
+function visibleDeliverables(actor: ActorContext): Deliverable[] {
+  const { role, organizationId } = actor.membership;
+  if (role === "board") return [];
+
+  const rows = inScope(actor, seed.deliverables);
+  if (role === "student") {
+    const self = seed.students.find((s) => s.userId === actor.user.id);
+    return self ? rows.filter((d) => d.studentId === self.id) : [];
+  }
+  if (role === "business") {
+    const owned = postingIdsOwnedBy(organizationId);
+    const mine = new Set(
+      seed.applications.filter((a) => owned.has(a.postingId)).map((a) => a.id),
+    );
+    return rows.filter((d) => mine.has(d.applicationId));
+  }
+  return rows;
+}
+
+function visibleEscalations(actor: ActorContext): Escalation[] {
+  const rows = inScope(actor, seed.escalations);
+  if (actor.membership.role === "admin") return rows;
+  return rows.filter((e) => e.raisedByUserId === actor.user.id);
+}
+
 function visibleConsents(actor: ActorContext): ConsentRecord[] {
   const { role, organizationId } = actor.membership;
   if (role === "business") return [];
@@ -268,14 +315,21 @@ export const repositories: Repositories = {
     // had two shapes depending on which accessor answered.
     list: async (actor) =>
       actor.membership.role === "admin"
-        ? seed.markets
+        ? actor.systemWide
+          ? seed.markets
+          : // The market's own flag answers directly — the mirror of
+          // `ownMarketScope`, which reads the column rather than a subquery
+          // against the table it is already selecting from.
+          seed.markets.filter((m) => m.isDemoData === viewsDemoData(actor))
         : seed.markets.filter((m) => m.id === actor.membership.marketId),
     find: async (actor, id) => {
       const market = seed.markets.find((m) => m.id === id);
       if (!market) return null;
-      if (actor.membership.role !== "admin" && actor.membership.marketId !== id) {
-        return null;
+      if (actor.membership.role === "admin") {
+        if (actor.systemWide) return market;
+        return market.isDemoData === viewsDemoData(actor) ? market : null;
       }
+      if (actor.membership.marketId !== id) return null;
       return market;
     },
   },
@@ -324,7 +378,14 @@ export const repositories: Repositories = {
       const blocked = disclosureBlockReason(
         seed.consents,
         { studentId: student.id, sourceOrgId: student.collegeId },
-        DEMO_NOW,
+        // Real time, not the demo's frozen anchor, because the SQL layer asks
+        // `consents.expires_on > now()` and the two must reach the same answer.
+        // They could differ: a consent expiring between process start and the
+        // request read as valid here and expired there — with this layer the
+        // permissive one, on whether an employer may have a learner's contact
+        // details. Expiry is a cliff rather than a creeping figure, so the
+        // demonstration's numbers do not move for using the real clock.
+        new Date(),
       );
       const level = blocked ? "summary" : disclosureFor(application);
       return redactStudent(student, level);
@@ -433,6 +494,25 @@ export const repositories: Repositories = {
         .sort(byConsentOrder),
   },
 
+  deliverables: {
+    list: async (actor) => visibleDeliverables(actor).slice().sort(byDeliverableOrder),
+    find: async (actor, id) => visibleDeliverables(actor).find((d) => d.id === id) ?? null,
+    forApplication: async (actor, applicationId) =>
+      visibleDeliverables(actor).find((d) => d.applicationId === applicationId) ?? null,
+    awaitingResponse: async (actor) =>
+      visibleDeliverables(actor).filter(awaitsEmployer).sort(byDeliverableOrder),
+  },
+
+  escalations: {
+    list: async (actor) => visibleEscalations(actor).slice().sort(byEscalationOrder),
+    find: async (actor, id) => visibleEscalations(actor).find((e) => e.id === id) ?? null,
+    forApplication: async (actor, applicationId) =>
+      visibleEscalations(actor)
+        .filter((e) => e.applicationId === applicationId)
+        .sort(byEscalationOrder),
+    live: async (actor) => visibleEscalations(actor).filter(isLive).sort(byEscalationOrder),
+  },
+
   fundingSources: {
     list: async (actor) => inScope(actor, seed.fundingSources).slice().sort(byFundOrder),
     find: async (actor, id) =>
@@ -501,6 +581,11 @@ export const repositories: Repositories = {
 
   users: {
     find: async (id) => seed.users.find((u) => u.id === id) ?? null,
+    administrators: async () => {
+      const ids = new Set(administratorUserIds());
+      // Sorted by id to match the SQL layer, which the parity suite compares.
+      return seed.users.filter((u) => ids.has(u.id)).sort((a, b) => a.id.localeCompare(b.id));
+    },
   },
 };
 

@@ -18,6 +18,17 @@ import { FileText, Paperclip, X } from "lucide-react";
 export interface AttachedFile {
   name: string;
   size: number;
+  /**
+   * The bytes, when the browser actually handed them over.
+   *
+   * Absent until this was wired to anything: the control tracked a name and a
+   * size, which is enough to draw a chip and not enough to upload, and the only
+   * screen rendering it was the design gallery. Optional rather than required
+   * because a caller re-rendering something already stored has a name and a
+   * size and no `File` — an attachment on a hand-in that came back for
+   * revision, say.
+   */
+  file?: File;
 }
 
 export function FileUpload({
@@ -51,7 +62,7 @@ export function FileUpload({
         );
         continue;
       }
-      next.push({ name: file.name, size: file.size });
+      next.push({ name: file.name, size: file.size, file });
     }
     if (next.length === 0) return;
     setError(null);

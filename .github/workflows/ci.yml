@@ -197,6 +197,15 @@ jobs:
 
       - name: Run end-to-end and accessibility tests
         run: npm run test:e2e
+        env:
+          # The suite runs a production build, where `signDownloadUrl` refuses
+          # to fall back to a predictable secret — a forgeable signature is the
+          # failure that guard exists to prevent. Without this the deliverable
+          # suite exercises the degraded path (a file received, no link issued)
+          # rather than the real one. Test-only and committed on purpose: it
+          # signs links to fixtures on a throwaway runner, and a repository
+          # secret here would make the suite unrunnable on a fork.
+          UPLOAD_URL_SECRET: end-to-end-suite-signing-key-not-a-real-secret
 
       # Traces and screenshots are only written for failures, so this uploads
       # nothing on a green run.

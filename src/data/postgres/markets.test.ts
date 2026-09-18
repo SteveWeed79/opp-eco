@@ -96,6 +96,30 @@ describe("markets are operator territory", () => {
   });
 });
 
+describe("the cross-world escape hatch", () => {
+  it("is set in exactly one file", () => {
+    // `systemWide` reopens the unrestricted cross-market read that `marketScope`
+    // otherwise no longer has. Where it can be set is the whole of its safety,
+    // so it is set by `systemContext()` and nothing else — and a page that
+    // spread one onto an actor would be handing a viewer both worlds to sum.
+    const setters = FILES.filter((f) => /systemWide\s*:\s*true/.test(f.text));
+    expect(setters.map((f) => f.path)).toEqual([join("auth", "system.ts")]);
+  });
+
+  it("is read only where scoping is decided", () => {
+    // Reading it anywhere else means a second definition of "may see both
+    // worlds", which is how the two data layers come to disagree.
+    const readers = FILES.filter((f) => /\.systemWide\b/.test(f.text)).map((f) => f.path);
+    expect(readers.sort()).toEqual(
+      [
+        join("data", "memory.ts"),
+        join("data", "postgres", "scoping.ts"),
+        join("data", "repositories.ts"),
+      ].sort(),
+    );
+  });
+});
+
 describe("the fixtures say what they are", () => {
   it("flags every seeded market as the demonstration", () => {
     // The seed's markets are invented. A fixture market that arrived unflagged

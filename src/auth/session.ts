@@ -33,6 +33,17 @@ export const SESSION_COOKIE = "oe_demo_role";
 export const AUTH_COOKIE = "oe_session";
 
 /**
+ * Which world the administrator asked to look at.
+ *
+ * A view preference rather than a credential, so it lives in its own cookie
+ * and not in the session: it decides what a console shows, never what anybody
+ * is allowed to do. Forging it buys sight of the demonstration, which is
+ * public at `/demo` anyway — and it cannot buy the reverse, because the
+ * predicate it feeds narrows to one world rather than widening to both.
+ */
+export const DEMO_VIEW_COOKIE = "oe_demo_view";
+
+/**
  * Somebody between the two factors.
  *
  * A different name from the session cookie on purpose, and holding a value that
@@ -114,9 +125,24 @@ export function currentProvider(): SessionProvider {
  * question. React's `cache` is scoped to the request, so signing in during one
  * and reading in the next still sees the new session.
  */
-export const getActor = cache(
-  async (): Promise<ActorContext | null> => currentProvider().resolve(),
-);
+export const getActor = cache(async (): Promise<ActorContext | null> => {
+  const actor = await currentProvider().resolve();
+  // Only an administrator has the question to answer: every other role is
+  // pinned to one market by their membership, so whether that market is the
+  // demonstration is already decided and no scope consults the field.
+  if (!actor || actor.membership.role !== "admin") return actor;
+
+  // Already true for a context the role picker minted — that session *is* the
+  // demonstration, and a cookie must not be able to take it back to a real
+  // world it has no rows in.
+  if (actor.viewingDemoData) return actor;
+
+  const store = await cookies();
+  return {
+    ...actor,
+    viewingDemoData: store.get(DEMO_VIEW_COOKIE)?.value === "1",
+  };
+});
 
 /**
  * The actor for a portal page.
@@ -160,8 +186,63 @@ export async function actorForPortal(portal: ActorRole): Promise<ActorContext> {
     // crash it replaces.
     redirect(PORTAL_PATH[session.membership.role]);
   }
-  if (!anonymousFallbackAllowed()) redirect(SIGN_IN_PATH);
-  return contextFor(portal);
+  const fallback = await demonstrationFallback(portal);
+  if (!fallback) redirect(SIGN_IN_PATH);
+  return fallback;
+}
+
+/**
+ * The demonstration's own account for a portal — but only where this database
+ * actually holds the demonstration.
+ *
+ * This is the guard whose old docstring called the alternative *"the
+ * authentication bypass"*, and that wording was right about what it protects
+ * against and wrong about what makes it safe. It was keyed on `AUTH_MODE`: a
+ * deployment that authenticates handed nobody an account, full stop, so the
+ * prototype stopped being browsable the moment real sign-on was switched on.
+ *
+ * What actually makes the fallback safe is not the mode. It is that the actor
+ * it mints is a **fixture account pinned to a fixture market**, and
+ * `marketScope` narrows every read to that market. A visitor handed this
+ * context cannot read a real programme's rows — not "is prevented from", but
+ * has no query that would return them. The mode was standing in for a property
+ * of the data, exactly as the banner was.
+ *
+ * So the question moves to the data, and is asked strictly: the market must
+ * exist and must say it is the demonstration. A database that was never seeded
+ * has no demonstration to show, and the answer there is the sign-in page rather
+ * than a portal rendering somebody's real market empty.
+ *
+ * **What this does not decide is writing.** The context it returns is a real
+ * actor, and on a deployment with writes enabled an anonymous visitor can act
+ * as it — inside the demonstration's market, which is what a demonstration is
+ * for, and which is also anonymous writes to a production database. That is a
+ * product decision rather than a security one and is deliberately left where it
+ * can be seen.
+ */
+async function demonstrationFallback(
+  role: ActorRole,
+): Promise<ActorContext | null> {
+  const candidate = contextFor(role);
+
+  // The deployment *is* the demonstration: its own database, disposable, and
+  // clicking through it is the entire point. Writes stay open — `writes.spec.ts`
+  // applies to a posting from a bare link without signing on, and a prototype
+  // you cannot click is a screenshot.
+  if (anonymousFallbackAllowed()) return candidate;
+
+  // Real sign-on. The same account, and now reads only — `isDemonstrationVisitor`
+  // derives that from the request rather than being told it here, because a
+  // Server Action is a different request from the render that handed this out.
+  const marketId = candidate.membership.marketId;
+  if (!marketId) return null;
+
+  // Imported here rather than at module scope for the reason the code provider
+  // below does the same: this module is on the path of every request and must
+  // not pull a data layer in behind it.
+  const { repositories } = await import("@/data/backend");
+  const market = await repositories.markets.find(candidate, marketId);
+  return market?.isDemoData === true ? candidate : null;
 }
 
 /**
@@ -183,8 +264,9 @@ export async function viewerActor(): Promise<ActorContext> {
     if (session.passwordChangeOwed) redirect(SIGN_IN_PATH);
     return session;
   }
-  if (!anonymousFallbackAllowed()) redirect(SIGN_IN_PATH);
-  return contextFor("student");
+  const fallback = await demonstrationFallback("student");
+  if (!fallback) redirect(SIGN_IN_PATH);
+  return fallback;
 }
 
 /**

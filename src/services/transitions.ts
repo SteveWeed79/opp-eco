@@ -203,14 +203,18 @@ export async function executeTransition(
   // and hold a connection open on a network round trip — which means every
   // read a notification needs has to already be in hand. Fetched together
   // because they are independent.
-  const [college, employer, board] = await Promise.all([
+  const [college, employer, board, administrators] = await Promise.all([
     await repositories.organizations.find(actor, student.collegeId),
     await repositories.organizations.find(actor, posting.businessId),
     market.boardId
       ? await repositories.organizations.find(actor, market.boardId)
       : Promise.resolve(null),
+    // Plural, and read for the same reason the three above are: an entry
+    // addressed to the administrator fans out to all of them, and the unit of
+    // work cannot await.
+    repositories.users.administrators(),
   ]);
-  const parties = { college, employer, board };
+  const parties = { college, employer, board, administrators };
 
   try {
     await deps.store.transaction((uow) => {
@@ -248,6 +252,7 @@ export async function executeTransition(
             college: parties.college,
             employer: parties.employer,
             board: parties.board,
+            administrators: parties.administrators,
             wageRatePerHour: funding.wage?.source.ratePerHour ?? 0,
           });
 
