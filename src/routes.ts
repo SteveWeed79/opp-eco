@@ -52,6 +52,16 @@ export function demoPath(path: string): string {
 export const SIGN_IN_PATH = "/sign-in";
 
 /**
+ * Self-registration, for learners whose market is open.
+ *
+ * Public, and deliberately not under `/demo`: it writes real accounts into
+ * real markets, and the demonstration's own markets are excluded from it —
+ * see `domain/registration.ts` for why a real name in a row flagged
+ * `is_demo_data` is the one outcome worth refusing outright.
+ */
+export const REGISTER_PATH = "/register";
+
+/**
  * The sign-on screen, which gets neither chrome.
  *
  * Not the venture header — somebody signing in is not browsing the pitch, and

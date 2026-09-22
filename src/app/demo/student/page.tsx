@@ -33,11 +33,13 @@ import { asOf } from "@/lib/clock";
 import { LogHours } from "./LogHours";
 import { followUpQueue, marketFunding, studentCreditProgress } from "@/lib/queries";
 import { availableTransitions, daysInStatus, isTerminal } from "@/domain/workflow";
+import { studentMachine } from "@/domain/lifecycle";
+import { studentOwnLifecycle } from "@/app/_actions/lifecycle";
 import { explainScore, scoreMatch } from "@/domain/matching";
 import { mentorshipFormatLabel } from "@/domain/mentorship";
 import { postingTotalHours } from "@/domain/types";
 import { BookInterview } from "./BookInterview";
-import { TransitionActions } from "@/components/TransitionActions";
+import { TransitionActions, STUDENT_CONFIRM } from "@/components/TransitionActions";
 import { ApplyButton } from "./ApplyButton";
 import {
   saveProfile,
@@ -88,6 +90,11 @@ export default async function StudentPage() {
   // Asked once, on the server, so the dialog can say why rather than letting a
   // learner pick a file and discover it afterwards.
   const uploadsRefused = uploadRefusalReason();
+
+  // The learner's own next step, when they have one. Empty for a verified
+  // learner — which is everybody the seed makes — so this renders for exactly
+  // the people self-registration creates.
+  const ownNextSteps = studentMachine.available(actor, { student });
   // The vocabulary this market's employers already use, offered when a learner
   // edits their own tags. Free text sprawls into "JS", "Javascript" and
   // "JavaScript", and match scoring compares them literally — so the fix is the
@@ -228,6 +235,44 @@ export default async function StudentPage() {
           </Badge>
         )}
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Getting verified — the only thing that matters until it is done     */}
+      {/*                                                                     */}
+      {/* Rendered only while it applies, which is exactly for the people     */}
+      {/* self-registration creates: everybody the seed makes is verified     */}
+      {/* already. `registered` is the one status nobody else can move a      */}
+      {/* learner out of — completing a profile is theirs alone, by the       */}
+      {/* machine — so without this the new front door leads into a room      */}
+      {/* with no exit.                                                       */}
+      {/* ------------------------------------------------------------------ */}
+      {ownNextSteps.length > 0 && (
+        <ToneCard tone="warn" elevation="floating">
+          <CardHeader
+            level={3}
+            icon={<BadgeCheck className="w-5 h-5 text-warn-600" />}
+            title={
+              student.status === "registered"
+                ? "Finish your profile"
+                : "Ask your college to confirm you"
+            }
+            subtitle={
+              student.status === "registered"
+                ? "A programme of study and at least one skill. Employers match on both, and your college checks them before you can apply."
+                : `${organizationName(student.collegeId)} confirms you are their learner. You can apply the moment they do.`
+            }
+          />
+          <div className="px-6 py-5">
+            <TransitionActions
+              id={student.id}
+              action={studentOwnLifecycle}
+              subject={student.name}
+              confirm={STUDENT_CONFIRM}
+              transitions={ownNextSteps.map((t) => ({ to: t.to, label: t.label }))}
+            />
+          </div>
+        </ToneCard>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Where you went                                                      */}

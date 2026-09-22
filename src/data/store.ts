@@ -140,6 +140,16 @@ export interface UnitOfWork {
    * needs; a stale verifier on a rejected record is the same auditor's finding
    * as a stale verification date.
    */
+  /**
+   * Insert a learner who has just registered themselves.
+   *
+   * Separate from `saveStudent` for the reason every other create here is
+   * separate from its save: the preconditions are opposites, and collapsing
+   * them would let a stale read quietly become an insert. No `verifiedBy`,
+   * because a learner who has just arrived is by definition unverified — that
+   * is the college's decision and this is the queue it lands in.
+   */
+  createStudent(student: Student): void;
   saveStudent(student: Student, verifiedBy: string | null): void;
   /**
    * Record an introduction, and close one.

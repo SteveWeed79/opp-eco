@@ -213,6 +213,20 @@ class PostgresUnitOfWork implements UnitOfWork {
    * `COALESCE` makes null mean "leave it as it was", which is what the
    * parameter always meant and what the other layer already did.
    */
+  createStudent(student: Student) {
+    this.add(sql`
+      INSERT INTO students (
+        id, market_id, user_id, college_id, program_of_study, class_standing,
+        expected_graduation, skills, interests, available_hours_per_week,
+        status, eligibility
+      ) VALUES (
+        ${student.id}, ${student.marketId}, ${student.userId}, ${student.collegeId},
+        ${student.programOfStudy}, ${student.classStanding},
+        ${student.expectedGraduation}, ${student.skills}, ${student.interests},
+        ${student.availableHoursPerWeek}, ${student.status}, ${student.eligibility}
+      )`);
+  }
+
   saveStudent(student: Student, verifiedBy: string | null) {
     this.add(sql`
       UPDATE students SET

@@ -469,3 +469,16 @@ export const answerDeliverableInput = z.object({
   deliverableId: id,
   response: reason,
 });
+
+/**
+ * A learner registering themselves.
+ *
+ * No role and no status: both are what `registerLearner` is, not what a caller
+ * says. The address is checked against the chosen college's domains in the
+ * domain layer, which is where the rule that makes this safe already lives.
+ */
+export const registerLearnerInput = z.object({
+  name: shortText,
+  email: z.string().trim().min(3).max(320),
+  collegeId: id,
+});
