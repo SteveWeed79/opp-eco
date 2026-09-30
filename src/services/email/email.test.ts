@@ -279,6 +279,7 @@ describe("policy and templates agree", () => {
     const missing = [
       "student.verified",
       "student.rejected",
+      "student.registered",
       "organization.approved",
       "organization.info_requested",
       "organization.rejected",

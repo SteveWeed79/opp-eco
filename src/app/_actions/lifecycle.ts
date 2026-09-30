@@ -121,6 +121,26 @@ export async function studentLifecycle(
   return move("student", "college", { id, to, reason });
 }
 
+/**
+ * The learner moves their **own** record forward.
+ *
+ * Two steps and only two, both guarded by the machine: completing a profile
+ * (which needs a programme and at least one skill) and asking to be checked.
+ * Verifying is the college's and stays the college's — the role is hardcoded
+ * here, so a learner posting directly at this action is still a learner.
+ *
+ * It exists because self-registration does: a learner who registers lands in
+ * `registered`, and that is the one status nobody else can move them out of,
+ * so without this the new door leads into a room with no exit.
+ */
+export async function studentOwnLifecycle(
+  id: unknown,
+  to: unknown,
+  reason?: unknown,
+): Promise<ActionResult> {
+  return move("student", "student", { id, to, reason });
+}
+
 /** The college reviews, publishes, or sends back a posting. */
 export async function postingLifecycleAsCollege(
   id: unknown,

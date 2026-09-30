@@ -211,6 +211,10 @@ export const TRANSITIONS: Transition[] = [
     roles: ["business"],
     tracks: ["standard"],
     label: "Mark placement complete",
+    // Both guards below are about quantity, and neither is an assessment — so
+    // the longer, higher-credit track hands a registrar a number while the
+    // micro track hands them the employer's written evaluation. TODO(T7),
+    // docs/todo.md.
     guard: ({ application, unreviewedWeeks }) => {
       if ((application.hoursApproved ?? 0) === 0) {
         return "No approved hours logged for this placement";

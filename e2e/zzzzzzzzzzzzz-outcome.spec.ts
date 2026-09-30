@@ -18,6 +18,9 @@ test.skip(
   "needs a dev server in code mode with AUTH_ECHO_LOG pointing at its log",
 );
 
+// Shared with the password and access suites, against a sign-in bucket of 10
+// per minute per address — comfortable alone, not reliably so together.
+// TODO(T14), docs/todo.md.
 const COLLEGE = "evance@verdigris.example.edu";
 const ADMIN = "admin@ccln.example";
 const PASSWORD = "the quiet kansas afternoon";
