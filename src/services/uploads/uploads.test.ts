@@ -430,6 +430,50 @@ describe("retrieval authorization", () => {
   });
 });
 
+/**
+ * A source-level guard, for a bug that had already happened.
+ *
+ * `sanitiseFilename` strips control characters with `/[\x00-\x1f\x7f]/`, and
+ * for some part of this file's history those three escapes were **raw bytes**
+ * instead — a literal NUL, US and DEL sitting in the source. The regex behaves
+ * identically either way, so nothing failed and no test noticed. Two things
+ * did go wrong quietly:
+ *
+ *  - `grep` and ripgrep classify a file containing a NUL as binary and skip it
+ *    by default. A search across this codebase for anything in its most
+ *    security-sensitive module returned "binary file matches", or nothing.
+ *  - The range only holds while all three bytes survive. Anything that strips
+ *    control characters from source on the way past — an editor, a formatter,
+ *    a copy through a terminal — leaves `[<US><DEL>]` behind, which no longer
+ *    covers 0x01–0x1e. The sanitiser would keep passing its own tests while
+ *    letting most control characters through.
+ *
+ * So the escaped form is the requirement, not a preference, and this asserts
+ * it rather than trusting that the next person notices a byte they cannot see.
+ */
+describe("the source of the upload modules", () => {
+  it("contains no raw control bytes", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const here = new URL(".", import.meta.url).pathname;
+
+    const offenders: string[] = [];
+    for (const name of readdirSync(here)) {
+      if (!name.endsWith(".ts")) continue;
+      const bytes = readFileSync(`${here}${name}`);
+      for (const [index, byte] of bytes.entries()) {
+        // Tab, newline and carriage return are the only control bytes that
+        // belong in source.
+        if (byte === 0x09 || byte === 0x0a || byte === 0x0d) continue;
+        if (byte < 0x20 || byte === 0x7f) {
+          offenders.push(`${name} byte ${index} is 0x${byte.toString(16)}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe("extension parsing", () => {
   it("takes the last extension, not the first", async () => {
     // "resume.pdf.exe" is .exe, whatever it hopes you read.

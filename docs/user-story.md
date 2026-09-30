@@ -386,6 +386,8 @@ The college reviews the evidence — hours and evaluation for standard, accepted
 
 From walking all five portals in the running application against Postgres, September 2026 — pressing each control and then reading the row it claimed to write, because a toast is not an effect. Recorded here rather than as five per-role lists, because almost every gap below spans portals: the micro track is missing a step on the learner's side *and* the matching step on the employer's, and either one alone is half a feature. Read them whole.
 
+This section says what the gaps **are** and why they matter to the programme. [`docs/todo.md`](todo.md) says what to **do** about them and in what order — including several that never surface as a story gap at all, because the model is finished and only a screen is missing. The two are meant to be read together; where a numbered entry there covers something below, it carries the ordering and the open decision.
+
 **Every control that exists, works.** Approving and sending back a timesheet, moving a candidate through the pipeline, verifying a learner, publishing a posting, granting credit, recording a consent, publishing interview slots, determining eligibility, authorising funding, vetting an organisation, nudging, and picking up a report each produced the row and the audit entry they claimed. Nothing lied about what it had done.
 
 Two things worth knowing that a reading of the code does not show:

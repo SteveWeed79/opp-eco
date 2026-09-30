@@ -34,7 +34,7 @@
  * right channel for a safety report at two in the morning — it queues in the
  * outbox behind "new applicant" mail and is drained by a dispatcher. Both want
  * an escalation contact per market, which is an operator's decision about who
- * is on call rather than something to invent here.
+ * is on call rather than something to invent here. TODO(T2), docs/todo.md.
  */
 
 import type { ActorContext, Escalation, EscalationKind } from "@/domain/types";

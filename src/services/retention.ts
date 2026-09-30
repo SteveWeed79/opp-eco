@@ -11,6 +11,9 @@
  * it will run against every record at once. A person pressing the button per
  * learner, against a list the console computes, is how you find out the
  * schedule is wrong while that is still cheap.
+ *
+ * That argument has an expiry date rather than being permanent — TODO(T11),
+ * docs/todo.md, which records what trips it.
  */
 
 import type { ActorContext, Student } from "@/domain/types";

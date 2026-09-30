@@ -255,6 +255,10 @@ export function postgresAuthStore(client: PostgresClient): AuthStore {
     // -- The second factor --------------------------------------------------
 
     async putTotpEnrolment(enrolment) {
+      // The secret goes in recoverable, because TOTP has no hash that would
+      // still work — argued at length in `0011_second_factor.sql`. It belongs
+      // behind encryption at rest and is not there yet: TODO(T3), docs/todo.md.
+      //
       // `WHERE confirmed_at IS NULL` on the update half is the guard: a fresh
       // enrolment may replace one somebody started and abandoned, and may not
       // replace one they are currently relying on. Re-enrolling removes the old

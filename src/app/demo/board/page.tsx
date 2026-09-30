@@ -312,7 +312,9 @@ export default async function BoardPage() {
                         a learner directly would go around the college, which
                         owns that relationship and holds the consent. Saying
                         that is more useful than a button that swallows the
-                        click. */}
+                        click. Still leaves the party best placed to notice the
+                        problem holding the one screen with no action attached —
+                        TODO(T8), docs/todo.md. */}
                     <Button
                       size="sm"
                       variant="dark"

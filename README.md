@@ -184,6 +184,7 @@ read a connection string.
 - [`docs/security-and-data.md`](docs/security-and-data.md) — which privacy regimes apply, what cookies are permitted, and the data-minimisation rules
 - [`docs/regional-report.md`](docs/regional-report.md) — the comparative report the platform's data is for: how towns are compared when every town is small, and what has to be captured now because it cannot be reconstructed later
 - [`docs/vision-alignment-review.md`](docs/vision-alignment-review.md) — where the site and the Patterson Fellows 2026 application describe different ventures, and what closing each gap looks like
+- [`docs/todo.md`](docs/todo.md) — everything known to be missing, half-built, or deferred on purpose, ordered by what stands between this and a real market. The few code sites where something looks finished and is not carry a `TODO(Tn)` pointer into it
 
 ## Decisions made so far
 
